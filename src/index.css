@@ -1,0 +1,133 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --color-theme-base: var(--bg-base);
+  --color-theme-surface: var(--bg-surface);
+  --color-theme-surface-2: var(--bg-surface-2);
+  --color-theme-border: var(--border);
+  --color-theme-primary: var(--text-primary);
+  --color-theme-secondary: var(--text-secondary);
+  --color-theme-muted: var(--text-muted);
+}
+
+/* ── CSS Variables for Dark/Light Theme ───────────────────────────────────── */
+:root {
+  --bg-base: #0f0c1b;
+  --bg-surface: rgba(255, 255, 255, 0.05);
+  --bg-surface-2: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.10);
+  --text-primary: #ffffff;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+  --glow-a: rgba(124, 58, 237, 0.15);
+  --glow-b: rgba(56, 189, 248, 0.10);
+}
+
+:root.light {
+  --bg-base: #f8fafc;
+  --bg-surface: rgba(255, 255, 255, 0.95);
+  --bg-surface-2: #ffffff;
+  --border: rgba(0, 0, 0, 0.15);
+  --text-primary: #020617;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --glow-a: rgba(124, 58, 237, 0.15);
+  --glow-b: rgba(56, 189, 248, 0.12);
+}
+
+/* ── Base Styles ──────────────────────────────────────────────────────────── */
+@layer base {
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    min-height: 100svh;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    background-image: radial-gradient(circle at top right, var(--glow-a), transparent 40%),
+      radial-gradient(circle at bottom left, var(--glow-b), transparent 40%);
+    background-attachment: fixed;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* Fix mobile keyboard pushing content up in Ask AI */
+  #ask-ai-container {
+    height: 100svh;
+  }
+}
+
+/* ── Component Utilities ──────────────────────────────────────────────────── */
+@layer components {
+  .glass-card {
+    background: var(--bg-surface);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    border-radius: 1rem;
+    transition: background 0.3s ease, border-color 0.3s ease;
+  }
+
+  .glass-button {
+    background: var(--bg-surface);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    transition: all 0.3s ease;
+  }
+
+  .glass-button:hover {
+    background: var(--bg-surface-2);
+  }
+
+  .gradient-text {
+    @apply text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400;
+  }
+
+  /* Theme-aware text helpers */
+  .text-theme-primary {
+    color: var(--text-primary);
+  }
+
+  .text-theme-secondary {
+    color: var(--text-secondary);
+  }
+
+  .text-theme-muted {
+    color: var(--text-muted);
+  }
+
+  /* Input base */
+  .theme-input {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+
+  .theme-input:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+    background: var(--bg-surface-2);
+  }
+
+  .theme-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  /* Scrollbar hide */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "PastQ",
+  "short_name": "PastQ",
+  "description": "Your ultimate study companion for university past papers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0c1b",
+  "theme_color": "#0f0c1b",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
