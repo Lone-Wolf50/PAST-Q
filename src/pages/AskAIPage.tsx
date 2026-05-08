@@ -111,14 +111,12 @@ const AskAIPage = () => {
   const initialPaperId = searchParams.get('paperId');
 
   const [activePaperId, setActivePaperId] = useState<string | null>(initialPaperId);
-  const [paperMetadata, setPaperMetadata] = useState<any>(null);
 
   useEffect(() => {
     if (initialPaperId && token) {
       const fetchPaperMeta = async () => {
         try {
           const res = await apiFetch(`/papers/${initialPaperId}`, { token });
-          setPaperMetadata(res.paper);
           setSelectedFileName(res.paper.title);
         } catch (err) {
           console.error('Failed to fetch paper context:', err);
@@ -147,9 +145,19 @@ const AskAIPage = () => {
             setActiveConversationId(null);
             setMessages(INITIAL_MESSAGES);
           });
+      } else {
+        // If there is no existing conversation for this new paper, we must reset the chat state
+        // Otherwise, it will keep the messages from the previously viewed paper!
+        setActiveConversationId(null);
+        setMessages(INITIAL_MESSAGES);
       }
     }
-  }, [initialPaperId, token]);
+  }, [initialPaperId, token, plan]);
+
+  // Keep activePaperId in sync with the URL
+  useEffect(() => {
+    setActivePaperId(initialPaperId);
+  }, [initialPaperId]);
 
   // Sync user plan on mount (to handle upgrades without re-login)
   useEffect(() => {

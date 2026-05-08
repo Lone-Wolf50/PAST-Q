@@ -75,8 +75,9 @@ process.on('unhandledRejection', (reason) => {
   console.error('💥 Unhandled Rejection:', reason);
 });
 
-app.listen(PORT, () => {
+app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`✅  PastQ API running on http://localhost:${PORT}`);
+  console.log(`📡 Network access enabled for mobile testing.`);
 });
 // ── Start Server ───────────────────────────────────────────────────────────────
 

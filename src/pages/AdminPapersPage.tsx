@@ -23,7 +23,6 @@ const AdminPapersPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [aiHealth, setAiHealth] = useState<any>({ status: 'online' });
   const [elapsedTimes, setElapsedTimes] = useState<Record<string, string>>({});
-  const [retryingId, setRetryingId] = useState<string | null>(null);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // UI States

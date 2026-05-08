@@ -303,7 +303,7 @@ const AdminDashboard = () => {
                     </Pie>
                     <Tooltip 
                       contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', border: 'none' }}
-                      formatter={(val: number) => `GH₵${val.toLocaleString()}`}
+                      formatter={(val: any) => `GH₵${val.toLocaleString()}`}
                     />
                   </PieChart>
                 </ResponsiveContainer>

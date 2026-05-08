@@ -372,13 +372,23 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       }
     }
     const userParts: any[] = [];
+    
+    let extractedText = "";
     if (activeFileData) {
-      userParts.push({
-        inlineData: {
-          data: activeFileData,
-          mimeType: activeMimeType,
-        },
-      });
+      try {
+        console.log('[AI Chat] Extracting text from PDF for AI models...');
+        const pdfBuffer = Buffer.from(activeFileData, 'base64');
+        const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
+        const pdfData = await pdfParser(pdfBuffer);
+        extractedText = pdfData.text || "";
+        console.log(`[AI Chat] Extracted ${extractedText.length} chars of text.`);
+      } catch (pdfErr: any) {
+        console.warn('[AI Chat] PDF extraction failed:', pdfErr.message);
+      }
+    }
+
+    if (extractedText) {
+      userParts.push({ text: `[Attached Document Content]\n${extractedText.substring(0, 35000)}\n\n` });
     }
     userParts.push({ text: message });
     contents.push({ role: 'user', parts: userParts });
@@ -434,21 +444,6 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
             : [];
           // Note: Puter does not accept inline file data the same way as Gemini.
           // We pass a note in the user message if a paper/file was attached.
-          // Extract text from PDF for Puter fallback if a file is present
-          let extractedText = "";
-          if (activeFileData) {
-            try {
-              console.log('[AI Chat] Extracting text for Puter fallback...');
-              const pdfBuffer = Buffer.from(activeFileData, 'base64');
-              const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
-              const pdfData = await pdfParser(pdfBuffer);
-              extractedText = pdfData.text || "";
-              console.log(`[AI Chat] Extracted ${extractedText.length} chars for Puter.`);
-            } catch (pdfErr: any) {
-              console.warn('[AI Chat] PDF extraction failed for Puter:', pdfErr.message);
-            }
-          }
-
           const userMsgForPuter = extractedText
             ? `[Note: A PDF document was attached. Here is its extracted text content for your reference:\n\n${extractedText.substring(0, 10000)}]\n\n${message}`
             : activeFileData 
@@ -557,9 +552,13 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       });
 
       const friendlyMsg =
-        `⚠️ **System Maintenance**: The AI Tutor is currently recharging and performing routine maintenance. ` +
+        `⚠️ **System Maintenance**: The AI Tutor is currently recharging its circuits.\n\n` +
         `We expect to be back online in about **${retryMins} minute${retryMins === 1 ? '' : 's'}**. ` +
-        `Please continue studying with our past papers in the meantime!`;
+        `While we recharge, we don't want your learning to stop! You can copy your question and try one of our recommended external study partners:\n\n` +
+        `* [Try ChatGPT](https://chat.openai.com)\n` +
+        `* [Try Google Gemini](https://gemini.google.com)\n` +
+        `* [Try Claude](https://claude.ai)\n\n` +
+        `*Tip: If you need help with a specific paper, you can download the PDF first and upload it to them!*`;
 
       return res.status(429).json({
         error: 'quota_exceeded',

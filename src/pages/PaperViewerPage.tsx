@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Download, Sparkles, AlertCircle, 
   BookOpen, Target, Lightbulb, ShieldAlert,
-  Loader2, GraduationCap, ChevronDown, ChevronUp
+  Loader2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
@@ -21,7 +21,6 @@ const PaperViewerPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [isInsightsOpen, setIsInsightsOpen] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   const [isRevealing, setIsRevealing] = useState(false);
   const [isRevealed, setIsRevealed] = useState(false);
@@ -58,7 +57,7 @@ const PaperViewerPage = () => {
       const res = await apiFetch(`/papers/${id}/download`, { method: 'POST', token: token! });
       window.open(res.file_url, '_blank');
     } catch (err: any) {
-      setStatusMsg(err.message || 'Download failed.');
+      alert(err.message || 'Download failed.');
     } finally {
       setDownloading(false);
     }
@@ -143,7 +142,7 @@ const PaperViewerPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0 overflow-y-auto lg:overflow-visible pb-10 lg:pb-0 scrollbar-hide">
         
         {/* ── Document Viewer ─────────────────────────────────────────────── */}
         <div className="flex-[1.5] flex flex-col min-h-[400px] lg:min-h-0 bg-theme-surface border border-theme-border rounded-[2rem] overflow-hidden shadow-xl relative group">
@@ -180,7 +179,7 @@ const PaperViewerPage = () => {
         </div>
 
         {/* ── AI Insights Sidebar ─────────────────────────────────────────── */}
-        <aside className="lg:w-[380px] flex flex-col gap-4 min-h-0">
+        <aside className="lg:w-[380px] flex flex-col gap-4 min-h-[500px] lg:min-h-0 shrink-0">
           
           {/* Insights Card */}
           <div className="flex-1 bg-theme-surface border border-theme-border rounded-[2rem] flex flex-col overflow-hidden shadow-xl">
@@ -238,20 +237,20 @@ const PaperViewerPage = () => {
                        Our AI Tutor has analyzed this paper and provided helpful study notes!
                      </p>
 
-                     <button
-                       onClick={() => {
-                         setIsRevealing(true);
-                         setTimeout(() => {
-                           setIsRevealed(true);
-                           setIsRevealing(false);
-                         }, 1200);
-                       }}
-                       disabled={isRevealing}
-                       className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-                     >
-                       {isRevealing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                       {isRevealing ? 'Fetching from DB...' : 'Generate Insight'}
-                     </button>
+                      <button
+                        onClick={() => {
+                          setIsRevealing(true);
+                          setTimeout(() => {
+                            setIsRevealed(true);
+                            setIsRevealing(false);
+                          }, 1200);
+                        }}
+                        disabled={isRevealing}
+                        className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isRevealing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                        {isRevealing ? 'Decoding Analysis...' : 'Reveal Study Insights'}
+                      </button>
                    </div>
                 ) : (
                   <AnimatePresence>

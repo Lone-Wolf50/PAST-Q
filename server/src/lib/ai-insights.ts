@@ -80,10 +80,25 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
     let quotaExhausted = false;
     let responseText: string | null = null;
 
+    // ── Global PDF Extraction ───────────────────────────────────────────────
+    let extractedText = "";
+    try {
+      console.log(`[AI Insights] Extracting text from PDF buffer (${pdfBuffer?.length || 0} bytes) for AI models...`);
+      const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
+      const pdfData = await pdfParser(pdfBuffer);
+      extractedText = pdfData.text || "";
+      console.log(`[AI Insights] Successfully extracted ${extractedText.length} characters of text.`);
+    } catch (pdfErr: any) {
+      console.warn(`[AI Insights] PDF text extraction failed: ${pdfErr.message}. Will rely on title/metadata only.`);
+    }
+
+    const geminiPrompt = extractedText 
+      ? `[Extracted Paper Content]\n${extractedText.substring(0, 35000)}\n\n${prompt}`
+      : `[PDF content unavailable for paper: "${paperTitle}"]\n\n${prompt}`;
+
     for (const modelName of modelsToTry) {
       try {
         console.log(`[AI Insights] Trying model: ${modelName}`);
-        console.log(`[AI Insights] PDF buffer size: ${pdfBuffer?.length || 0} bytes`);
         
         // 60-second timeout per model
         const timeoutPromise = new Promise((_, reject) =>
@@ -96,13 +111,7 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
             {
               role: 'user',
               parts: [
-                {
-                  inlineData: {
-                    data: pdfBuffer.toString('base64'),
-                    mimeType: 'application/pdf',
-                  },
-                },
-                { text: prompt },
+                { text: geminiPrompt },
               ],
             },
           ],
@@ -146,19 +155,6 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       if (isPuterAvailable()) {
         console.log(`[AI Insights] Attempting Puter.js fallback for paper: "${paperTitle}"`);
         try {
-          // Extract text from PDF for Puter (since Puter doesn't handle buffers natively)
-          let extractedText = "";
-          try {
-            console.log(`[AI Insights] Extracting text from PDF buffer (${pdfBuffer.length} bytes)...`);
-            // Handle different export styles of pdf-parse
-            const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
-            const pdfData = await pdfParser(pdfBuffer);
-            extractedText = pdfData.text || "";
-            console.log(`[AI Insights] Successfully extracted ${extractedText.length} characters of text.`);
-          } catch (pdfErr: any) {
-            console.warn(`[AI Insights] PDF text extraction failed: ${pdfErr.message}. Falling back to title-only analysis.`);
-          }
-
           const puterPrompt = `
             ${prompt}
             
