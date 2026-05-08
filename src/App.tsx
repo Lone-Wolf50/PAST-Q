@@ -1,5 +1,6 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
 import PapersPage from './pages/PapersPage';
 import PaperViewerPage from './pages/PaperViewerPage';
@@ -23,101 +24,104 @@ import NotFoundPage from './pages/NotFoundPage';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import InstallPrompt from './components/InstallPrompt';
-import OTPPage from './pages/OTPPage';
 import AdminNotificationsPage from './pages/AdminNotificationsPage';
+import StudentSubscriptionPage from './pages/StudentSubscriptionPage';
+import StudentNotificationsPage from './pages/StudentNotificationsPage';
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.log('SW registration failed: ', err);
-    });
+    navigator.serviceWorker.register('/sw.js');
   });
 }
 
-// Mock state: change to true to test protected routes
-const isAuthenticated = true;
-
-// A mock ProtectedRoute component
+// Redirects to /login if not authenticated
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  // In a real app, this would check an auth context or token
-
-
-  if (!isAuthenticated) {
-    // Return the 404/Wrong Path page as requested
-    return <NotFoundPage />;
-  }
-  return children;
+  const { isLoggedIn } = useAuth();
+  if (!isLoggedIn) return <Navigate to="/login" replace />;
+  return <>{children}</>;
 };
+
+// Redirects logged-in users away from auth pages
+const GuestRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isLoggedIn } = useAuth();
+  if (isLoggedIn) return <Navigate to="/papers" replace />;
+  return <>{children}</>;
+};
+
+function AppRoutes() {
+  const { isLoggedIn } = useAuth();
+  const location = useLocation();
+
+  const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+  const isAdminPath = location.pathname.startsWith('/hq-portal');
+  const isLandingPage = location.pathname === '/';
+  const shouldHideFooter = (isLoggedIn && !isLandingPage) || isAdminPath || hideFooterRoutes.includes(location.pathname);
+
+  return (
+    <div className="min-h-screen flex flex-col font-sans relative">
+      <InstallPrompt />
+      <Routes>
+        <Route path="/hq-portal/*" element={null} />
+        <Route path="*" element={<Navbar />} />
+      </Routes>
+      <main className={`flex-grow flex flex-col ${isLoggedIn ? 'pb-24 md:pb-0' : ''}`}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+
+          {/* Guest-only Auth Routes */}
+          <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+          <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+          <Route path="/reset-password" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
+          <Route path="/pricing" element={<PricingPage />} />
+
+          {/* Admin Login - Public, Standalone */}
+          <Route path="/hq-portal/login" element={<AdminLoginPage />} />
+
+          {/* Protected Routes */}
+          <Route path="/papers" element={<ProtectedRoute><PapersPage /></ProtectedRoute>} />
+          <Route path="/papers/:id" element={<ProtectedRoute><PaperViewerPage /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          <Route path="/subscription" element={<ProtectedRoute><StudentSubscriptionPage /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><StudentNotificationsPage /></ProtectedRoute>} />
+          <Route path="/ask-ai" element={<ProtectedRoute><AskAIPage /></ProtectedRoute>} />
+          <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
+          <Route path="/delete-account" element={<ProtectedRoute><DeleteAccountPage /></ProtectedRoute>} />
+
+          {/* Admin Routes (Standalone Layout) */}
+          <Route path="/hq-portal/*" element={
+            <Routes>
+              <Route path="/" element={<AdminDashboard />} />
+              <Route path="/subjects" element={<AdminSubjectsPage />} />
+              <Route path="/papers" element={<AdminPapersPage />} />
+              <Route path="/users" element={<AdminUsersPage />} />
+              <Route path="/payments" element={<AdminPaymentsPage />} />
+              <Route path="/notifications" element={<AdminNotificationsPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          } />
+
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </main>
+
+      <Routes>
+        <Route path="*" element={!shouldHideFooter ? <Footer /> : null} />
+      </Routes>
+    </div>
+  );
+}
 
 function App() {
   return (
-    <Router>
-      <div className="min-h-screen flex flex-col font-sans relative">
-        <InstallPrompt />
-        <Routes>
-          <Route path="/admin/*" element={null} />
-          <Route path="*" element={<Navbar />} />
-        </Routes>
-        <main className="flex-grow flex flex-col">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-
-            {/* Public Auth Routes */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/otp" element={<OTPPage />} />
-            <Route path="/pricing" element={<PricingPage />} />
-
-            {/* Admin Login - Public, Standalone (no Navbar/Footer) */}
-            <Route path="/admin/login" element={<AdminLoginPage />} />
-
-            {/* Protected Routes */}
-            <Route path="/papers" element={<ProtectedRoute><PapersPage /></ProtectedRoute>} />
-            <Route path="/papers/:id" element={<ProtectedRoute><PaperViewerPage /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-            <Route path="/ask-ai" element={<ProtectedRoute><AskAIPage /></ProtectedRoute>} />
-            <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
-            <Route path="/delete-account" element={<ProtectedRoute><DeleteAccountPage /></ProtectedRoute>} />
-
-            {/* Admin Routes (Standalone Layout) */}
-            <Route path="/admin/*" element={
-
-              <Routes>
-                <Route path="/" element={<AdminDashboard />} />
-                <Route path="/subjects" element={<AdminSubjectsPage />} />
-                <Route path="/papers" element={<AdminPapersPage />} />
-                <Route path="/users" element={<AdminUsersPage />} />
-                <Route path="/payments" element={<AdminPaymentsPage />} />
-                <Route path="/notifications" element={<AdminNotificationsPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-
-            } />
-
-            {/* Catch-all 404 Route */}
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </main>
-
-        {/* Only show Footer & Navbar on non-admin routes */}
-        <Routes>
-          <Route path="/admin/*" element={null} />
-          <Route path="*" element={!isAuthenticated ? <Footer /> : null} />
-        </Routes>
-      </div>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <AppRoutes />
+      </Router>
+    </AuthProvider>
   );
 }
 
 export default App;
-
-
-
-
-
-
-

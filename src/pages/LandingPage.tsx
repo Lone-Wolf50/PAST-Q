@@ -1,33 +1,53 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Calculator, Microscope, TrendingUp, BookOpen, FlaskConical, Scale, BrainCircuit, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Sparkles, Layout, Zap, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
-
-const STATS = [
-  { label: '24 Subjects', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
-  { label: '1.2k Papers', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-  { label: '15 Years', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-];
-
-const SUBJECTS = [
-  { name: 'Maths', count: '142 papers', tags: ['Y1', 'Y2', 'Y3'], icon: Calculator, iconColor: 'text-indigo-400', iconBg: 'bg-indigo-400/10 border-indigo-400/20' },
-  { name: 'Biology', count: '98 papers', tags: ['Y1', 'Y2'], icon: Microscope, iconColor: 'text-emerald-400', iconBg: 'bg-emerald-400/10 border-emerald-400/20' },
-  { name: 'Economics', count: '76 papers', tags: ['Y1', 'Y3'], icon: TrendingUp, iconColor: 'text-amber-400', iconBg: 'bg-amber-400/10 border-amber-400/20' },
-  { name: 'Literature', count: '112 papers', tags: ['Y2', 'Y3'], icon: BookOpen, iconColor: 'text-pink-400', iconBg: 'bg-pink-400/10 border-pink-400/20' },
-  { name: 'Chemistry', count: '84 papers', tags: ['Y1', 'Y2'], icon: FlaskConical, iconColor: 'text-cyan-400', iconBg: 'bg-cyan-400/10 border-cyan-400/20' },
-  { name: 'Law', count: '56 papers', tags: ['Y3'], icon: Scale, iconColor: 'text-orange-400', iconBg: 'bg-orange-400/10 border-orange-400/20' },
-];
+import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../lib/api';
 
 const CAROUSEL_WORDS = ["breakthrough.", "A+ Grade.", "study hack.", "past paper."];
 
+const HERO_IMAGES = [
+  { url: "/adonyig-school-times-3599175_1920.jpg", title: "Study Smarter", desc: "Collaborate with peers and access the best materials." },
+  { url: "/adonyig-school-times-3599176_1920.jpg", title: "Focused Learning", desc: "Master difficult concepts with step-by-step guidance." },
+  { url: "/adonyig-school-times-3599182_1920.jpg", title: "Better Results", desc: "Join thousands of successful students." },
+  { url: "/ahmadardity-books-2463779_1920.jpg", title: "Infinite Knowledge", desc: "Explore over 15 years of past examination papers." },
+  { url: "/elasticcomputefarm-library-1147815_1920.jpg", title: "Your Digital Library", desc: "Access resources anytime, anywhere." },
+  { url: "/kollinger-books-5211309_1920.jpg", title: "Organized Success", desc: "Everything you need for your exams in one place." },
+];
+
 const LandingPage = () => {
   const [wordIndex, setWordIndex] = useState(0);
+  const [imageIndex, setImageIndex] = useState(0);
+  const [totalPapers, setTotalPapers] = useState(0);
+  const { isLoggedIn } = useAuth();
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await apiFetch('/papers/subjects/public');
+        if (res.subjects) {
+          const total = res.subjects.reduce((sum: number, s: any) => sum + (s.count || 0), 0);
+          setTotalPapers(total);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  useEffect(() => {
+    const wordInterval = setInterval(() => {
       setWordIndex((prev) => (prev + 1) % CAROUSEL_WORDS.length);
     }, 3000);
-    return () => clearInterval(interval);
+    const imageInterval = setInterval(() => {
+      setImageIndex((prev) => (prev + 1) % HERO_IMAGES.length);
+    }, 5000);
+    return () => {
+      clearInterval(wordInterval);
+      clearInterval(imageInterval);
+    };
   }, []);
 
   return (
@@ -53,16 +73,20 @@ const LandingPage = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 mb-10">
-            <Link to="/register" className="w-full sm:w-auto px-8 py-3.5 rounded-full text-white bg-indigo-500 hover:bg-indigo-600 transition-all font-semibold text-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
-              Get Started for Free
+            <Link to={isLoggedIn ? "/papers" : "/register"} className="w-full sm:w-auto px-8 py-3.5 rounded-full text-white bg-indigo-500 hover:bg-indigo-600 transition-all font-semibold text-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+              {isLoggedIn ? "Browse Papers" : "Get Started for Free"}
             </Link>
-            <Link to="/papers" className="w-full sm:w-auto px-8 py-3.5 rounded-full text-theme-primary bg-theme-surface-2 border border-theme-border hover:bg-theme-surface transition-all font-semibold text-center">
-              Browse Papers
+            <Link to={isLoggedIn ? "/papers" : "/login"} className="w-full sm:w-auto px-8 py-3.5 rounded-full text-theme-primary bg-theme-surface-2 border border-theme-border hover:bg-theme-surface transition-all font-semibold text-center">
+              {isLoggedIn ? "View Past Papers" : "Log In"}
             </Link>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
-            {STATS.map((stat) => (
+            {[
+              { label: `All Departments`, color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
+              { label: `${totalPapers > 0 ? totalPapers.toLocaleString() : '1,500+'} Papers`, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+              { label: '15 Years', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+            ].map((stat) => (
               <div key={stat.label} className={clsx("flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold border", stat.color)}>
                 <div className="w-2 h-2 rounded-full bg-current opacity-80" />
                 {stat.label}
@@ -73,91 +97,160 @@ const LandingPage = () => {
 
         <div className="relative w-full h-[400px] md:h-[500px] hidden lg:block perspective-1000">
           <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 rounded-3xl blur-3xl transform -rotate-6"></div>
-          <img 
-            src="/dashboard_mockup.png" 
-            alt="Dashboard Preview" 
-            className="absolute inset-0 w-full h-full object-cover rounded-2xl shadow-2xl border border-theme-border transform rotate-2 hover:rotate-0 transition-transform duration-500"
-          />
+          <div className="absolute inset-0 bg-theme-surface border border-theme-border rounded-2xl shadow-2xl overflow-hidden transform rotate-2 hover:rotate-0 transition-transform duration-700">
+            {HERO_IMAGES.map((img, idx) => (
+              <img 
+                key={img.url}
+                src={img.url} 
+                alt={img.title} 
+                className={clsx(
+                  "absolute inset-0 w-full h-full object-cover transition-opacity duration-1000",
+                  idx === imageIndex ? "opacity-100" : "opacity-0"
+                )}
+              />
+            ))}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+            <div className="absolute bottom-6 left-6 right-6">
+              <div className="overflow-hidden">
+                <p className={clsx(
+                  "text-white font-bold text-2xl mb-1 transition-all duration-500 transform",
+                  "translate-y-0 opacity-100"
+                )}>
+                  {HERO_IMAGES[imageIndex].title}
+                </p>
+              </div>
+              <p className="text-gray-200 text-sm max-w-xs transition-opacity duration-500">
+                {HERO_IMAGES[imageIndex].desc}
+              </p>
+              <div className="flex gap-1.5 mt-4">
+                {HERO_IMAGES.map((_, idx) => (
+                  <div 
+                    key={idx} 
+                    className={clsx(
+                      "h-1 rounded-full transition-all duration-300",
+                      idx === imageIndex ? "w-6 bg-indigo-400" : "w-1.5 bg-white/30"
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* AI Tutor Feature Section */}
+      {/* Feature Showcase 1: AI Tutor */}
       <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mb-32">
         <div className="glass-card p-8 md:p-12 border-theme-border relative overflow-hidden grid lg:grid-cols-2 gap-12 items-center">
-          <div className="relative z-10 w-full h-[300px] md:h-[400px] rounded-2xl overflow-hidden border border-theme-border shadow-2xl">
-            <img src="/ai_tutor_mockup.png" alt="AI Tutor Chat" className="w-full h-full object-cover" />
+          <div className="relative z-10 w-full h-[300px] md:h-[450px] rounded-2xl overflow-hidden border border-theme-border shadow-2xl group">
+            <img src="/leo_fontes-graduation-4502796_1920.jpg" alt="AI Tutor Chat" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+            <div className="absolute inset-0 bg-indigo-500/10 group-hover:bg-transparent transition-colors" />
           </div>
           <div className="relative z-10 text-left">
             <div className="inline-flex p-3 rounded-2xl bg-indigo-500/10 mb-6">
-              <BrainCircuit className="w-8 h-8 text-indigo-400" />
+              <Zap className="w-8 h-8 text-indigo-400" />
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-theme-primary mb-4">Stuck on a question? <br />Ask your AI Tutor.</h2>
-            <p className="text-theme-muted text-lg mb-8">
+            <p className="text-theme-muted text-lg mb-8 leading-relaxed">
               Our advanced AI model is trained specifically on university curriculum. Get instant step-by-step explanations, formulas, and guidance without waiting for office hours.
             </p>
             <ul className="space-y-4">
-              <li className="flex items-center gap-3 text-theme-secondary font-medium">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Available 24/7 for instant help
-              </li>
-              <li className="flex items-center gap-3 text-theme-secondary font-medium">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Deep understanding of past papers
-              </li>
-              <li className="flex items-center gap-3 text-theme-secondary font-medium">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Generates practice questions
-              </li>
+              {[
+                "Available 24/7 for instant help",
+                "Deep understanding of past papers",
+                "Generates practice questions"
+              ].map((item) => (
+                <li key={item} className="flex items-center gap-3 text-theme-secondary font-medium">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" /> {item}
+                </li>
+              ))}
             </ul>
           </div>
         </div>
       </section>
 
-      {/* Browse by Subject Section */}
-      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mb-32 text-left">
-        <div className="flex items-center justify-between mb-10">
-          <div>
-            <h2 className="text-3xl font-bold text-theme-primary mb-2">Browse by subject</h2>
-            <p className="text-theme-muted">Access resources across all major departments.</p>
+      {/* Feature Showcase 2: Comprehensive Archive */}
+      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mb-32">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div className="order-2 lg:order-1 text-left">
+            <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 mb-6">
+              <Layout className="w-8 h-8 text-emerald-400" />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-theme-primary mb-4">15 Years of Academic <br />Excellence in One Place.</h2>
+            <p className="text-theme-muted text-lg mb-8 leading-relaxed">
+              We've digitized and organized a decade and a half of examination materials across all major departments. No more hunting through dusty files or broken links.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { title: "IT & CS", desc: "Latest tech trends" },
+                { title: "Accounting", desc: "Financial mastery" },
+                { title: "Marketing", desc: "Brand strategies" },
+                { title: "Business Admin", desc: "Management core" }
+              ].map((dept) => (
+                <div key={dept.title} className="p-4 rounded-2xl bg-theme-surface border border-theme-border">
+                  <p className="text-theme-primary font-bold">{dept.title}</p>
+                  <p className="text-theme-muted text-xs">{dept.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <Link to="/papers" className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-theme-primary transition-colors">
-            View All <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {SUBJECTS.map((subject) => {
-            const Icon = subject.icon;
-            return (
-              <Link 
-                key={subject.name} 
-                to={`/papers?subject=${subject.name.toLowerCase()}`}
-                className="glass-card p-6 flex flex-col items-start gap-8 group hover:scale-[1.02] border-theme-border transition-all duration-300"
-              >
-                <div className={clsx(
-                  "w-14 h-14 rounded-2xl border flex items-center justify-center transition-colors",
-                  subject.iconBg
-                )}>
-                  <Icon className={clsx("w-7 h-7", subject.iconColor)} />
+          <div className="order-1 lg:order-2 relative w-full h-[300px] md:h-[450px] rounded-2xl overflow-hidden border border-theme-border shadow-2xl">
+             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-emerald-500/20 blur-2xl" />
+             <div className="relative h-full w-full p-8 flex items-center justify-center">
+                <div className="grid grid-cols-2 gap-4 w-full">
+                   <div className="aspect-square relative rounded-2xl border border-indigo-500/20 overflow-hidden group hover:scale-[1.02] transition-transform duration-500">
+                      <img src="/this_is_engineering-team-8499960_1920.jpg" alt="Verified" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                      <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-indigo-900/40">
+                         <ShieldCheck className="w-10 h-10 text-indigo-400 mb-2" />
+                         <p className="text-[10px] uppercase tracking-widest font-bold text-indigo-100">Verified</p>
+                      </div>
+                   </div>
+                   <div className="aspect-square relative rounded-2xl border border-emerald-500/20 overflow-hidden translate-y-8 group hover:scale-[1.02] transition-transform duration-500">
+                      <img src="/ahmadardity-books-2463779_1920.jpg" alt="Organized" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                      <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-emerald-900/40">
+                         <Layout className="w-10 h-10 text-emerald-400 mb-2" />
+                         <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-100">Organized</p>
+                      </div>
+                   </div>
+                   <div className="aspect-square relative rounded-2xl border border-amber-500/20 overflow-hidden group hover:scale-[1.02] transition-transform duration-500">
+                      <img src="/poison_ivy-painting-1673774_1920.jpg" alt="Curated" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                      <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-amber-900/40">
+                         <Sparkles className="w-10 h-10 text-amber-400 mb-2" />
+                         <p className="text-[10px] uppercase tracking-widest font-bold text-amber-100">Curated</p>
+                      </div>
+                   </div>
+                   <div className="aspect-square relative rounded-2xl border border-purple-500/20 overflow-hidden translate-y-8 group hover:scale-[1.02] transition-transform duration-500">
+                      <img src="/xpresshealth-nursing-agency-ireland-9866597_1920.jpg" alt="Instant" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                      <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-purple-900/40">
+                         <Zap className="w-10 h-10 text-purple-400 mb-2" />
+                         <p className="text-[10px] uppercase tracking-widest font-bold text-purple-100">Instant</p>
+                      </div>
+                   </div>
                 </div>
-
-                <div className="w-full">
-                  <h3 className="text-xl font-bold text-theme-primary mb-1">{subject.name}</h3>
-                  <p className="text-sm text-theme-muted mb-6">{subject.count}</p>
-                  
-                  <div className="flex items-center gap-2">
-                    {subject.tags.map((tag) => (
-                      <span 
-                        key={tag} 
-                        className="text-xs font-bold px-2 py-1 rounded-md bg-theme-surface text-theme-secondary border border-theme-border"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+             </div>
+          </div>
         </div>
       </section>
+
+      {/* Final CTA */}
+      {!isLoggedIn && (
+        <section className="w-full px-4 md:px-8 max-w-5xl mx-auto mb-32">
+          <div className="glass-card p-12 text-center border-indigo-500/20 relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
+             <h2 className="text-3xl md:text-5xl font-bold text-theme-primary mb-6">Ready to ace your exams?</h2>
+             <p className="text-theme-muted text-lg mb-10 max-w-2xl mx-auto">
+               Join thousands of students who are already using PastQ to simplify their studies and achieve better results.
+             </p>
+             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link to="/register" className="w-full sm:w-auto px-10 py-4 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+                   Create Free Account
+                </Link>
+                <Link to="/papers" className="w-full sm:w-auto px-10 py-4 rounded-full bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all">
+                   Explore Papers <ArrowRight className="w-4 h-4 inline-block ml-2" />
+                </Link>
+             </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 };

@@ -1,28 +1,43 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import path from 'path';
 import { supabase } from '../lib/supabase';
 import { protect, adminOnly, AuthRequest } from '../middleware/auth';
+import { uploadToR2, deleteFromR2, keyFromUrl } from '../lib/r2';
+import { getAIHealth } from '../lib/ai-health';
+import { generatePaperInsights, getProcessingState, isProcessing } from '../lib/ai-insights';
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB max
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed.'));
+    }
+  },
+});
 
 // ── Admin Login (password-only, separate from student auth) ──────────────────
 router.post('/auth/login', async (req: Request, res: Response) => {
-  const { password } = req.body;
+  const { email, password } = req.body;
 
-  if (!password) {
-    res.status(400).json({ error: 'Password is required.' });
+  if (!email || !password) {
+    res.status(400).json({ error: 'Email and password are required.' });
     return;
   }
 
-  if (password !== process.env.ADMIN_PASSWORD) {
-    // Simulate a slight delay to thwart brute force
+  if (email !== process.env.ADMIN_EMAIL || password !== process.env.ADMIN_PASSWORD) {
     await new Promise((r) => setTimeout(r, 400));
     res.status(401).json({ error: 'Invalid admin credentials.' });
     return;
   }
 
   const token = jwt.sign(
-    { id: 'admin', email: process.env.ADMIN_EMAIL || 'admin@pastq.com', plan: 'pro', role: 'admin' },
+    { id: 'admin', email: process.env.ADMIN_EMAIL!, plan: 'pro', role: 'admin' },
     process.env.JWT_SECRET!,
     { expiresIn: '8h' } as jwt.SignOptions
   );
@@ -37,11 +52,19 @@ router.use(protect, adminOnly);
 router.get('/subjects', async (_req: AuthRequest, res: Response) => {
   try {
     const { data, error } = await supabase
-      .from('UPSA_subjects')
-      .select('id, name, code, created_at')
+      .from('upsa_subjects')
+      .select('id, name, code, created_at, upsa_papers(count)')
       .order('name');
     if (error) throw error;
-    res.status(200).json({ subjects: data });
+
+    // Flatten the nested count into a plain `count` number field
+    const subjects = (data || []).map((s: any) => ({
+      ...s,
+      count: s.upsa_papers?.[0]?.count ?? 0,
+      upsa_papers: undefined,
+    }));
+
+    res.status(200).json({ subjects });
   } catch {
     res.status(500).json({ error: 'Failed to fetch subjects.' });
   }
@@ -52,7 +75,7 @@ router.post('/subjects', async (req: AuthRequest, res: Response) => {
   if (!name || !code) { res.status(400).json({ error: 'Name and code are required.' }); return; }
   try {
     const { data, error } = await supabase
-      .from('UPSA_subjects').insert({ name, code }).select('id, name, code').single();
+      .from('upsa_subjects').insert({ name, code }).select('id, name, code').single();
     if (error) throw error;
     res.status(201).json({ subject: data });
   } catch {
@@ -65,7 +88,7 @@ router.patch('/subjects/:id', async (req: AuthRequest, res: Response) => {
   const { name, code } = req.body;
   try {
     const { data, error } = await supabase
-      .from('UPSA_subjects').update({ name, code }).eq('id', id).select('id, name, code').single();
+      .from('upsa_subjects').update({ name, code }).eq('id', id).select('id, name, code').single();
     if (error) throw error;
     res.status(200).json({ subject: data });
   } catch {
@@ -76,7 +99,7 @@ router.patch('/subjects/:id', async (req: AuthRequest, res: Response) => {
 router.delete('/subjects/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   try {
-    await supabase.from('UPSA_subjects').delete().eq('id', id);
+    await supabase.from('upsa_subjects').delete().eq('id', id);
     res.status(200).json({ message: 'Subject deleted.' });
   } catch {
     res.status(500).json({ error: 'Failed to delete subject.' });
@@ -87,38 +110,197 @@ router.delete('/subjects/:id', async (req: AuthRequest, res: Response) => {
 router.get('/papers', async (_req: AuthRequest, res: Response) => {
   try {
     const { data, error } = await supabase
-      .from('UPSA_papers')
-      .select('id, title, year, semester, file_url, has_answers, subjects(name, code)')
+      .from('upsa_papers')
+      .select('*, upsa_subjects(name, code), upsa_paper_insights(id)')
       .order('year', { ascending: false });
     if (error) throw error;
-    res.status(200).json({ papers: data });
-  } catch {
-    res.status(500).json({ error: 'Failed to fetch papers.' });
+
+    // Include per-paper processing state from in-memory tracker
+    const processingState = getProcessingState();
+
+    // Map to include a simple boolean for insights status
+    const papersWithStatus = (data || []).map((p: any) => ({
+      ...p,
+      has_insights: (p.upsa_paper_insights?.length ?? 0) > 0,
+      ai_processing_started_at: processingState[p.id] ?? null,
+      upsa_paper_insights: undefined
+    }));
+
+    res.status(200).json({ 
+      papers: papersWithStatus,
+      ai_health: getAIHealth()
+    });
+  } catch (err: any) {
+    console.error('[admin GET /papers] Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch papers.' });
   }
 });
 
-router.post('/papers', async (req: AuthRequest, res: Response) => {
-  const { title, subject_id, year, semester, file_url, has_answers, answer_url } = req.body;
-  if (!title || !subject_id || !year || !semester || !file_url) {
-    res.status(400).json({ error: 'All required fields must be provided.' });
-    return;
-  }
+// ── Fetch full AI insights for a specific paper ───────────────────────────
+router.get('/papers/:id/insights', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
   try {
     const { data, error } = await supabase
-      .from('UPSA_papers')
-      .insert({ title, subject_id, year, semester, file_url, has_answers: !!has_answers, answer_url: answer_url || null })
-      .select('id, title').single();
-    if (error) throw error;
-    res.status(201).json({ paper: data });
-  } catch {
-    res.status(500).json({ error: 'Failed to upload paper.' });
+      .from('upsa_paper_insights')
+      .select('*')
+      .eq('paper_id', id)
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ error: 'No insights found for this paper.' });
+    }
+    res.status(200).json({ insights: data });
+  } catch (err: any) {
+    console.error('[admin GET /papers/:id/insights]', err);
+    res.status(500).json({ error: 'Failed to fetch insights.' });
   }
 });
+
+
+router.post(
+  '/papers',
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'answer_file', maxCount: 1 },
+  ]),
+  async (req: AuthRequest, res: Response) => {
+    const { title, subject_id, year, semester, file_url, has_answers, answer_url } = req.body;
+
+    if (!title || !subject_id || !year || !semester) {
+      res.status(400).json({ error: 'title, subject_id, year, and semester are required.' });
+      return;
+    }
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    const pdfFile = files?.['file']?.[0];
+    const answerFile = files?.['answer_file']?.[0];
+
+    if (!pdfFile && !file_url) {
+      res.status(400).json({ error: 'Provide either a PDF file upload or an external file_url.' });
+      return;
+    }
+
+    try {
+      let finalFileUrl = file_url || '';
+      let finalAnswerUrl = answer_url || null;
+
+      if (pdfFile) {
+        const ext = path.extname(pdfFile.originalname) || '.pdf';
+        const sanitizedTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const key = `papers/${year}/${sanitizedTitle}_${Date.now()}${ext}`;
+        finalFileUrl = await uploadToR2(pdfFile.buffer, key, pdfFile.mimetype);
+      }
+
+      if (answerFile) {
+        const ext = path.extname(answerFile.originalname) || '.pdf';
+        const sanitizedTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const key = `papers/${year}/${sanitizedTitle}_answers_${Date.now()}${ext}`;
+        finalAnswerUrl = await uploadToR2(answerFile.buffer, key, answerFile.mimetype);
+      }
+
+      const { data, error } = await supabase
+        .from('upsa_papers')
+        .insert({
+          title,
+          subject_id,
+          year,
+          semester,
+          file_url: finalFileUrl,
+          has_answers: has_answers === 'true' || has_answers === true,
+          answer_url: finalAnswerUrl,
+        })
+        .select('id, title')
+        .single();
+
+      if (error) throw error;
+
+      res.status(201).json({ paper: data, file_url: finalFileUrl });
+    } catch (e: any) {
+      console.error('[admin POST /papers]', e);
+      res.status(500).json({ error: e.message || 'Failed to upload paper.' });
+    }
+  }
+);
+
+router.patch(
+  '/papers/:id',
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'answer_file', maxCount: 1 },
+  ]),
+  async (req: AuthRequest, res: Response) => {
+    const id = req.params.id as string;
+
+    // multer populates req.body from multipart fields; guard against undefined
+    const body = req.body || {};
+    const { title, subject_id, year, semester, file_url, has_answers, answer_url } = body;
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    const pdfFile = files?.['file']?.[0];
+    const answerFile = files?.['answer_file']?.[0];
+
+    const updates: any = {};
+    if (title !== undefined) updates.title = title;
+    if (subject_id !== undefined) updates.subject_id = subject_id;
+    if (year !== undefined) updates.year = year;
+    if (semester !== undefined) updates.semester = semester;
+    if (has_answers !== undefined) updates.has_answers = has_answers === 'true' || has_answers === true;
+    if (answer_url !== undefined) updates.answer_url = answer_url || null;
+
+    try {
+      // If a new PDF was uploaded, push it to R2
+      if (pdfFile) {
+        const ext = path.extname(pdfFile.originalname) || '.pdf';
+        const sanitized = (title || 'paper').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const key = `papers/${year || 'unknown'}/${sanitized}_${Date.now()}${ext}`;
+        updates.file_url = await uploadToR2(pdfFile.buffer, key, pdfFile.mimetype);
+      } else if (file_url !== undefined) {
+        updates.file_url = file_url;
+      }
+
+      if (answerFile) {
+        const ext = path.extname(answerFile.originalname) || '.pdf';
+        const sanitized = (title || 'paper').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const key = `papers/${year || 'unknown'}/${sanitized}_answers_${Date.now()}${ext}`;
+        updates.answer_url = await uploadToR2(answerFile.buffer, key, answerFile.mimetype);
+      }
+
+      const { data, error } = await supabase
+        .from('upsa_papers')
+        .update(updates)
+        .eq('id', id as string)
+        .select('id, title')
+        .single();
+      if (error) throw error;
+      res.status(200).json({ paper: data });
+    } catch (e: any) {
+      console.error('[admin PATCH /papers/:id]', e);
+      res.status(500).json({ error: e.message || 'Failed to update paper.' });
+    }
+  }
+);
 
 router.delete('/papers/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   try {
-    await supabase.from('UPSA_papers').delete().eq('id', id);
+    const { data: paper } = await supabase
+      .from('upsa_papers')
+      .select('file_url, answer_url')
+      .eq('id', id)
+      .single();
+
+    await supabase.from('upsa_papers').delete().eq('id', id);
+
+    if (paper) {
+      const r2Base = process.env.CLOUDFLARE_R2_PUBLIC_URL?.replace(/\/$/, '');
+      if (r2Base && paper.file_url?.startsWith(r2Base)) {
+        deleteFromR2(keyFromUrl(paper.file_url)).catch(console.error);
+      }
+      if (r2Base && paper.answer_url?.startsWith(r2Base)) {
+        deleteFromR2(keyFromUrl(paper.answer_url)).catch(console.error);
+      }
+    }
+
     res.status(200).json({ message: 'Paper deleted.' });
   } catch {
     res.status(500).json({ error: 'Failed to delete paper.' });
@@ -129,8 +311,8 @@ router.delete('/papers/:id', async (req: AuthRequest, res: Response) => {
 router.get('/users', async (_req: AuthRequest, res: Response) => {
   try {
     const { data, error } = await supabase
-      .from('UPSA_users')
-      .select('id, full_name, email, plan, role, is_verified, created_at')
+      .from('upsa_users')
+      .select('id, full_name, email, plan, role, status, is_verified, ai_enabled, created_at')
       .order('created_at', { ascending: false });
     if (error) throw error;
     res.status(200).json({ users: data });
@@ -145,20 +327,58 @@ router.patch('/users/:id/plan', async (req: AuthRequest, res: Response) => {
   const validPlans = ['free', 'basic', 'plus', 'pro'];
   if (!validPlans.includes(plan)) { res.status(400).json({ error: 'Invalid plan.' }); return; }
   try {
-    await supabase.from('UPSA_users').update({ plan }).eq('id', id);
+    await supabase.from('upsa_users').update({ plan }).eq('id', id);
     res.status(200).json({ message: `Plan updated to ${plan}.` });
   } catch {
     res.status(500).json({ error: 'Failed to update plan.' });
   }
 });
 
+router.patch('/users/:id/status', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const validStatuses = ['active', 'suspended', 'deactivated'];
+  if (!validStatuses.includes(status)) { res.status(400).json({ error: 'Invalid status.' }); return; }
+  try {
+    await supabase.from('upsa_users').update({ status }).eq('id', id);
+    res.status(200).json({ message: `Status updated to ${status}.` });
+  } catch {
+    res.status(500).json({ error: 'Failed to update status.' });
+  }
+});
+
+router.patch('/users/:id/ai-status', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const { ai_enabled } = req.body;
+  if (typeof ai_enabled !== 'boolean') { res.status(400).json({ error: 'Invalid AI status.' }); return; }
+  try {
+    await supabase.from('upsa_users').update({ ai_enabled }).eq('id', id);
+    res.status(200).json({ message: `AI access ${ai_enabled ? 'enabled' : 'disabled'}.` });
+  } catch {
+    res.status(500).json({ error: 'Failed to update AI access.' });
+  }
+});
+
 router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   try {
-    await supabase.from('UPSA_users').delete().eq('id', id);
+    await supabase.from('upsa_users').delete().eq('id', id);
     res.status(200).json({ message: 'User deleted.' });
   } catch {
     res.status(500).json({ error: 'Failed to delete user.' });
+  }
+});
+
+router.get('/deletions', async (_req: AuthRequest, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('upsa_deleted_accounts')
+      .select('*')
+      .order('deleted_at', { ascending: false });
+    if (error) throw error;
+    res.status(200).json({ deletions: data });
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch deletions.' });
   }
 });
 
@@ -166,8 +386,8 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
 router.get('/payments', async (_req: AuthRequest, res: Response) => {
   try {
     const { data, error } = await supabase
-      .from('UPSA_transactions')
-      .select('id, reference, plan, amount, status, created_at, UPSA_users(full_name, email)')
+      .from('upsa_transactions')
+      .select('id, reference, plan, amount, status, created_at, upsa_users(full_name, email)')
       .order('created_at', { ascending: false });
     if (error) throw error;
     res.status(200).json({ transactions: data });
@@ -176,24 +396,223 @@ router.get('/payments', async (_req: AuthRequest, res: Response) => {
   }
 });
 
-// ── Dashboard Stats ───────────────────────────────────────────────────────────
-router.get('/stats', async (_req: AuthRequest, res: Response) => {
+// ── Notifications ─────────────────────────────────────────────────────────────
+router.get('/notifications', async (_req: AuthRequest, res: Response) => {
   try {
-    const [usersResult, papersResult, txResult] = await Promise.all([
-      supabase.from('UPSA_users').select('id, plan', { count: 'exact' }),
-      supabase.from('UPSA_papers').select('id', { count: 'exact' }),
-      supabase.from('UPSA_transactions').select('amount, status'),
+    const { data, error } = await supabase
+      .from('upsa_admin_notifications')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.status(200).json({ notifications: data });
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch notifications.' });
+  }
+});
+
+router.patch('/notifications/read-all', async (_req: AuthRequest, res: Response) => {
+  try {
+    const { error } = await supabase
+      .from('upsa_admin_notifications')
+      .update({ is_read: true })
+      .eq('is_read', false);
+    if (error) throw error;
+    res.status(200).json({ message: 'All notifications marked as read.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to mark notifications as read.' });
+  }
+});
+
+router.patch('/notifications/:id', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabase
+      .from('upsa_admin_notifications')
+      .update({ is_read: true })
+      .eq('id', id);
+    if (error) throw error;
+    res.status(200).json({ message: 'Notification marked as read.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to mark notification as read.' });
+  }
+});
+
+router.delete('/notifications/:id', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabase
+      .from('upsa_admin_notifications')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    res.status(200).json({ message: 'Notification deleted.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to delete notification.' });
+  }
+});
+
+// ── Dashboard Stats ──────────────────
+router.get('/stats', async (req: AuthRequest, res: Response) => {
+  try {
+    const range = (req.query.range as string) || 'monthly';
+    let gteDate = new Date();
+
+    if (range === 'daily') gteDate.setHours(0, 0, 0, 0); // Start of today
+    else if (range === 'weekly') gteDate.setDate(gteDate.getDate() - 7);
+    else if (range === 'yearly') gteDate.setFullYear(gteDate.getFullYear() - 1);
+    else gteDate.setMonth(gteDate.getMonth() - 1); // Default Monthly (30 days)
+
+    const results = await Promise.all([
+      supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+      supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').neq('plan', 'free'),
+      supabase.from('upsa_papers').select('*', { count: 'exact', head: true }),
+      supabase.from('upsa_deleted_accounts').select('*', { count: 'exact', head: true }),
+      supabase.from('upsa_users').select('plan').eq('role', 'student').neq('plan', 'free'),
+      supabase.from('upsa_transactions').select('amount, status, created_at').gte('created_at', gteDate.toISOString()),
     ]);
 
-    const totalUsers = usersResult.count || 0;
-    const activePlans = (usersResult.data || []).filter(u => u.plan !== 'free').length;
-    const totalPapers = papersResult.count || 0;
-    const totalRevenue = (txResult.data || [])
-      .filter(t => t.status === 'success')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+    const totalStudents = results[0].count || 0;
+    const activePlans = results[1].count || 0;
+    const totalPapers = results[2].count || 0;
+    const totalDeleted = results[3].count || 0;
+    const planRows = results[4].data || [];
+    const transactions = results[5].data || [];
 
-    res.status(200).json({ totalUsers, activePlans, totalPapers, totalRevenue });
-  } catch {
+    const planBreakdown = { basic: 0, plus: 0, pro: 0 };
+    planRows.forEach((u: any) => {
+      if (u.plan in planBreakdown) planBreakdown[u.plan as keyof typeof planBreakdown]++;
+    });
+
+    let totalRevenue = 0;
+    let failedTransactions = 0;
+    transactions.forEach((t: any) => {
+      if (t.status === 'success') totalRevenue += Number(t.amount) || 0;
+      if (t.status === 'failed') failedTransactions++;
+    });
+
+    // Process sales data for charts
+    const salesByPeriod: Record<string, number> = {};
+    const revenueByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
+    
+    transactions.forEach((t: any) => {
+      if (t.status === 'success') {
+        let periodKey: string;
+        const d = new Date(t.created_at);
+        
+        if (range === 'daily' || range === 'weekly') {
+          periodKey = d.toISOString().split('T')[0]; // Daily
+        } else {
+          periodKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`; // Monthly
+        }
+        
+        salesByPeriod[periodKey] = (salesByPeriod[periodKey] || 0) + (Number(t.amount) || 0);
+
+        // Revenue by plan (we assume the plan is in the transaction metadata or we can infer it)
+        // Since we don't have a direct plan column in transactions, we'll try to find it in metadata
+        // or just skip if not present. Actually, let's assume we can infer it for this dashboard.
+        // For now, let's use a dummy grouping or check if we have it.
+        // Wait, I'll check the transaction schema in a moment.
+      }
+    });
+
+    // AI Usage Stats (Join with users to get plan)
+    const { data: aiStats } = await supabase
+      .from('upsa_ai_queries')
+      .select('user_id, upsa_users(plan)')
+      .gte('created_at', gteDate.toISOString());
+
+    const aiUsageByPlan: Record<string, number> = { free: 0, basic: 0, plus: 0, pro: 0 };
+    (aiStats || []).forEach((q: any) => {
+      const plan = q.upsa_users?.plan?.toLowerCase();
+      if (plan && plan in aiUsageByPlan) {
+        aiUsageByPlan[plan]++;
+      }
+    });
+
+    // Revenue by Plan (Sum from transactions)
+    const { data: revenueData } = await supabase
+      .from('upsa_transactions')
+      .select('amount, plan')
+      .eq('status', 'success')
+      .gte('created_at', gteDate.toISOString());
+
+    const revenueBreakdownByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
+    (revenueData || []).forEach((r: any) => {
+      const p = r.plan?.toLowerCase();
+      if (p && p in revenueBreakdownByPlan) {
+        revenueBreakdownByPlan[p] += Number(r.amount) || 0;
+      }
+    });
+
+    const salesChartData = Object.keys(salesByPeriod).sort().map(key => ({
+      date: key,
+      revenue: salesByPeriod[key]
+    }));
+
+    // User Growth by Plan (Signups)
+    const { data: usersForGrowth } = await supabase
+      .from('upsa_users')
+      .select('created_at, plan')
+      .gte('created_at', gteDate.toISOString())
+      .order('created_at');
+
+    const growthByPeriod: Record<string, any> = {};
+    (usersForGrowth || []).forEach((u: any) => {
+      const d = new Date(u.created_at);
+      let periodKey: string;
+        if (range === 'daily' || range === 'weekly') {
+          periodKey = d.toISOString().split('T')[0]; // Daily granularity
+        } else {
+          periodKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`; // Monthly granularity
+        }
+
+      if (!growthByPeriod[periodKey]) {
+        growthByPeriod[periodKey] = { date: periodKey, free: 0, basic: 0, plus: 0, pro: 0 };
+      }
+      const planKey = u.plan.toLowerCase() as 'free' | 'basic' | 'plus' | 'pro';
+      if (planKey in growthByPeriod[periodKey]) {
+        growthByPeriod[periodKey][planKey]++;
+      }
+    });
+
+    const growthChartDataArr = Object.values(growthByPeriod).sort((a: any, b: any) => a.date.localeCompare(b.date));
+
+    // Make it cumulative
+    let cumulativeFree = 0;
+    let cumulativeBasic = 0;
+    let cumulativePlus = 0;
+    let cumulativePro = 0;
+
+    const cumulativeGrowthData = growthChartDataArr.map((d: any) => {
+      cumulativeFree += d.free;
+      cumulativeBasic += d.basic;
+      cumulativePlus += d.plus;
+      cumulativePro += d.pro;
+      return {
+        ...d,
+        free: cumulativeFree,
+        basic: cumulativeBasic,
+        plus: cumulativePlus,
+        pro: cumulativePro,
+      };
+    });
+
+    res.status(200).json({
+      totalStudents,
+      activePlans,
+      planBreakdown,
+      totalPapers,
+      totalDeleted,
+      totalRevenue,
+      failedTransactions,
+      activeSubscribers: activePlans,
+      salesChartData,
+      growthChartData: cumulativeGrowthData,
+      revenueByPlan: revenueBreakdownByPlan,
+      aiUsageByPlan,
+    });
+  } catch (err: any) {
+    console.error('[admin GET /stats]', err);
     res.status(500).json({ error: 'Failed to fetch stats.' });
   }
 });

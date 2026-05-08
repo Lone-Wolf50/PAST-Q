@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { supabase } from '../lib/supabase';
 
 export interface AuthRequest extends Request {
   user?: { id: string; email: string; plan: string; role: string };
@@ -9,7 +10,7 @@ export interface AuthRequest extends Request {
  * Middleware to verify JWT from Authorization header.
  * Attaches decoded user payload to req.user.
  */
-export const protect = (req: AuthRequest, res: Response, next: NextFunction): void => {
+export const protect = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -26,6 +27,36 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction): vo
       plan: string;
       role: string;
     };
+
+    // Skip DB check for hardcoded admin account
+    if (decoded.id === 'admin') {
+      req.user = decoded;
+      next();
+      return;
+    }
+
+    // Verify user status in DB for real-time enforcement
+    const { data: user, error } = await supabase
+      .from('upsa_users')
+      .select('status')
+      .eq('id', decoded.id)
+      .single();
+
+    if (error || !user) {
+      res.status(401).json({ error: 'User account not found.' });
+      return;
+    }
+
+    if (user.status === 'suspended') {
+      res.status(403).json({ error: 'Your account is suspended. Please contact support.' });
+      return;
+    }
+
+    if (user.status === 'deactivated') {
+      res.status(403).json({ error: 'This account has been deactivated.' });
+      return;
+    }
+
     req.user = decoded;
     next();
   } catch (err) {

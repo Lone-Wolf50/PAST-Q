@@ -1,93 +1,263 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, X, AtSign, Globe, ChevronDown, BookOpen, Shield, HelpCircle, Zap, FileText } from 'lucide-react';
 import { clsx } from 'clsx';
+import ContactModal from './ContactModal';
+
+import Popover from './ui/Popover';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
-const FOOTER_SECTIONS = [
+const FOOTER_SECTIONS = (openContact: (subj?: string) => void) => [
   {
     title: 'Platform',
     icon: Zap,
     links: [
-      { label: 'Browse Papers', href: '/papers', desc: 'Search past questions by subject and year' },
-      { label: 'Pricing & Plans', href: '/pricing', desc: 'Free, Basic, Plus, and Pro tiers' },
-      { label: 'Ask AI Tutor', href: '/ask-ai', desc: 'Get instant explanations powered by Gemini' },
-      { label: 'Create Account', href: '/register', desc: 'Join thousands of students today' },
+      { 
+        label: 'Browse Papers', 
+        href: '/papers', 
+        desc: 'Search UPSA questions',
+        popover: {
+          title: 'UPSA Database',
+          content: 'Access a specialized collection of past exam questions specifically from UPSA, organized by level, semester, and department.'
+        }
+      },
+      { 
+        label: 'Pricing & Plans', 
+        href: '/pricing', 
+        desc: 'Flexible study tiers',
+        popover: {
+          title: 'Student Plans',
+          content: 'Affordable plans designed for UPSA students. Get unlimited PDF downloads and AI tutoring to ace your end-of-semester exams.'
+        }
+      },
+      { 
+        label: 'Ask AI Tutor', 
+        href: '/ask-ai', 
+        desc: 'Instant AI explanations',
+        popover: {
+          title: 'Advanced AI Tutor',
+          content: 'Stuck on a difficult question? Our AI tutor explains concepts instantly, helping you understand the "why" behind every answer.'
+        }
+      },
+      { 
+        label: 'Join Today', 
+        href: '/register', 
+        desc: 'Join 10,000+ students',
+        popover: {
+          title: 'Start Free',
+          content: 'Creating an account is instant. Start with 5 free papers every month and upgrade whenever you need more power.'
+        }
+      },
     ],
   },
   {
     title: 'Resources',
     icon: BookOpen,
     links: [
-      { label: 'How It Works', href: '/#how-it-works', desc: 'Step-by-step guide to using PastQ' },
-      { label: 'Study Tips', href: '/#tips', desc: 'Evidence-based exam preparation strategies' },
-      { label: 'Supported Schools', href: '/#schools', desc: 'Universities covered on the platform' },
-      { label: 'Subject Categories', href: '/papers', desc: 'Business, Law, Engineering, and more' },
+      { 
+        label: 'How It Works', 
+        href: '/#how-it-works', 
+        desc: 'Quick start guide',
+        popover: {
+          title: 'Easy Navigation',
+          content: 'Search for your course code, download the PDF, and use the AI sidebar to get explanations while you study.'
+        }
+      },
+      { 
+        label: 'Study Tips', 
+        href: '/#tips', 
+        desc: 'Preparation strategies',
+        popover: {
+          title: 'Exam Success',
+          content: 'Learn how to use active recall and spaced repetition with our past papers to maximize your GPA.'
+        }
+      },
+      { 
+        label: 'Supported Depts', 
+        href: '/papers', 
+        desc: 'IT, Law, Business...',
+        popover: {
+          title: 'UPSA Departments',
+          content: 'We cover IT, Business Admin, Marketing, Accounting, Logistics & Transport, Law, Public Relations, and Actuarial Science.'
+        }
+      },
+      { 
+        label: 'Subject Categories', 
+        href: '/papers', 
+        desc: 'View all courses',
+        popover: {
+          title: 'Course Coverage',
+          content: 'Every department at UPSA is covered, from basic level 100 courses to advanced level 400 and professional programs.'
+        }
+      },
     ],
   },
   {
     title: 'Support',
     icon: HelpCircle,
     links: [
-      { label: 'Help Centre', href: '/help', desc: 'FAQs and troubleshooting guides' },
-      { label: 'Contact Us', href: 'mailto:support@pastq.com', desc: 'support@pastq.com' },
-      { label: 'Report an Issue', href: '/report', desc: 'Flag a broken paper or wrong content' },
-      { label: 'Feature Request', href: '/feedback', desc: 'Tell us what you need' },
+      { 
+        label: 'Help Centre', 
+        href: '/#faq', 
+        desc: 'FAQs and guides',
+        popover: {
+          title: 'Self-Service',
+          content: 'Find answers to common questions about your account, billing, and how to use the AI features.'
+        }
+      },
+      { 
+        label: 'Contact Us', 
+        onClick: () => openContact('General Support'), 
+        desc: 'Get in touch',
+        popover: {
+          title: 'Talk to Us',
+          content: 'Send a message directly to our support team. We usually respond to UPSA students within 24 hours.'
+        }
+      },
+      { 
+        label: 'Report an Issue', 
+        onClick: () => openContact('Technical Issue'), 
+        desc: 'Flag broken content',
+        popover: {
+          title: 'Fix Content',
+          content: 'Found a typo or a broken PDF? Report it here and our team will fix it immediately for the community.'
+        }
+      },
+      { 
+        label: 'Feature Request', 
+        onClick: () => openContact('Feature Request'), 
+        desc: 'Tell us what you need',
+        popover: {
+          title: 'Your Voice',
+          content: 'Want a new feature or a specific subject added? Tell us and we will put it on our development roadmap.'
+        }
+      },
     ],
   },
   {
     title: 'Legal',
     icon: Shield,
     links: [
-      { label: 'Privacy Policy', href: '/privacy', desc: 'How we handle your personal data' },
-      { label: 'Terms of Service', href: '/terms', desc: 'Your rights and responsibilities' },
-      { label: 'Cookie Policy', href: '/cookies', desc: 'What cookies we use and why' },
-      { label: 'Academic Integrity', href: '/integrity', desc: 'Ethical use of past questions' },
+      { 
+        label: 'Privacy Policy', 
+        href: '/privacy', 
+        desc: 'Your data safety',
+        popover: {
+          title: 'Privacy Matters',
+          content: 'We prioritize your data security. We never sell your personal information or UPSA study history to third parties.'
+        }
+      },
+      { 
+        label: 'Terms & Conditions', 
+        href: '/terms', 
+        desc: 'Platform rules',
+        popover: {
+          title: 'User Agreement',
+          content: 'Our terms ensure a fair and safe environment. This includes fair usage of AI resources and subscription rules.'
+        }
+      },
+      { 
+        label: 'Cookie Policy', 
+        href: '/cookies', 
+        desc: 'Browser cookies',
+        popover: {
+          title: 'Cookie Usage',
+          content: 'We use essential cookies to keep you logged in and session-specific cookies to save your theme preferences.'
+        }
+      },
+      { 
+        label: 'Academic Integrity', 
+        href: '/integrity', 
+        desc: 'Ethical studying',
+        popover: {
+          title: 'Our Pledge',
+          content: 'PastQ is a study aid, not a cheating tool. Use papers to understand concepts, not just to memorize answers.'
+        }
+      },
     ],
   },
 ];
 
-// ── Accordion Item (mobile only) ───────────────────────────────────────────────
-const AccordionSection = ({ section }: { section: typeof FOOTER_SECTIONS[0] }) => {
-  const [open, setOpen] = useState(false);
+// ── Accordion Item (mobile & desktop friendly) ────────────────────────────────
+const AccordionSection = ({ section }: { section: any }) => {
+  // Desktop is open by default, mobile is an accordion
+  const isDesktop = window.innerWidth >= 1024;
+  const [open, setOpen] = useState(isDesktop);
   const Icon = section.icon;
 
-  return (
-    <div className="border-b border-theme-border">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between py-4 text-left"
-      >
-        <div className="flex items-center gap-2">
-          <Icon className="w-4 h-4 text-indigo-400" />
-          <span className="text-sm font-semibold text-theme-primary">{section.title}</span>
-        </div>
-        <ChevronDown
-          className={clsx(
-            'w-4 h-4 text-theme-muted transition-transform duration-300',
-            open && 'rotate-180'
-          )}
-        />
-      </button>
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) setOpen(true);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-      {/* Animated accordion body */}
-      <div
-        className={clsx(
-          'overflow-hidden transition-all duration-300 ease-in-out',
-          open ? 'max-h-96 opacity-100 pb-4' : 'max-h-0 opacity-0'
-        )}
-      >
-        <div className="flex flex-col gap-3 pl-6">
-          {section.links.map((link) => (
-            <Link
-              key={link.label}
-              to={link.href}
-              className="group flex flex-col gap-0.5"
-            >
-              <span className="text-sm text-theme-secondary group-hover:text-theme-primary transition-colors">{link.label}</span>
-              <span className="text-xs text-theme-muted group-hover:text-theme-muted transition-colors">{link.desc}</span>
-            </Link>
-          ))}
+  return (
+    <div className="flex flex-col h-full">
+      <div className="glass-card border-theme-border p-2 h-full flex flex-col">
+        <button
+          onClick={() => !isDesktop && setOpen(!open)}
+          className={clsx(
+            "w-full flex items-center justify-between p-4 text-left group transition-all",
+            isDesktop ? "cursor-default" : "cursor-pointer"
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
+              <Icon className="w-4 h-4 text-indigo-400" />
+            </div>
+            <span className="text-sm font-bold text-theme-primary tracking-tight">{section.title}</span>
+          </div>
+          {!isDesktop && (
+            <ChevronDown
+              className={clsx(
+                'w-4 h-4 text-theme-muted transition-transform duration-500',
+                open && 'rotate-180'
+              )}
+            />
+          )}
+        </button>
+
+        {/* Animated accordion body */}
+        <div
+          className={clsx(
+            'overflow-hidden transition-all duration-500 ease-in-out',
+            open ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
+          )}
+        >
+          <div className="flex flex-col gap-1 p-4 pt-0 border-t border-theme-border/50 mt-2">
+            {section.links.map((link: any) => {
+              const content = (
+                <div className="group flex flex-col gap-0.5 py-2 px-3 rounded-xl hover:bg-theme-surface transition-colors w-full text-left">
+                  <span className="text-sm font-medium text-theme-secondary group-hover:text-theme-primary transition-colors">{link.label}</span>
+                  <span className="text-[10px] text-theme-muted group-hover:text-theme-secondary transition-colors">{link.desc}</span>
+                </div>
+              );
+
+              if (link.popover) {
+                return (
+                  <Popover 
+                    key={link.label}
+                    title={link.popover.title}
+                    description={link.popover.content}
+                    align="start"
+                    trigger={content}
+                  />
+                );
+              }
+
+              return link.href ? (
+                <Link key={link.label} to={link.href} className="w-full">
+                  {content}
+                </Link>
+              ) : (
+                <button key={link.label} onClick={link.onClick} className="w-full">
+                  {content}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -96,8 +266,37 @@ const AccordionSection = ({ section }: { section: typeof FOOTER_SECTIONS[0] }) =
 
 // ── Main Footer ────────────────────────────────────────────────────────────────
 const Footer = () => {
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactSubject, setContactSubject] = useState('General Support');
+  const [subscriberEmail, setSubscriberEmail] = useState('');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
+  const openContact = (subj?: string) => {
+    if (subj) setContactSubject(subj);
+    setContactOpen(true);
+  };
+
+  const handleSubscribe = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subscriberEmail) return;
+    
+    setIsSubscribed(true);
+    setSubscriberEmail('');
+    
+    // Reset after 3 seconds
+    setTimeout(() => {
+      setIsSubscribed(false);
+    }, 3000);
+  };
+
   return (
     <footer className="mt-20 px-4 md:px-8 pb-8 max-w-7xl mx-auto w-full">
+      <ContactModal 
+        isOpen={contactOpen} 
+        onClose={() => setContactOpen(false)} 
+        initialSubject={contactSubject}
+      />
+
       <div className="glass-card relative overflow-hidden border-theme-border">
         {/* Background glows */}
         <div className="absolute bottom-0 right-0 w-72 h-72 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -133,20 +332,29 @@ const Footer = () => {
             <div className="max-w-xs w-full">
               <p className="text-sm font-medium text-theme-primary mb-1">Stay updated</p>
               <p className="text-xs text-theme-muted mb-3">Get notified when new past papers are added for your subject.</p>
-              <form className="flex gap-2" onSubmit={(e) => e.preventDefault()}>
+              <form className="flex gap-2" onSubmit={handleSubscribe}>
                 <div className="relative flex-1">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
                   <input
                     type="email"
+                    value={subscriberEmail}
+                    onChange={(e) => setSubscriberEmail(e.target.value)}
                     placeholder="your@email.com"
-                    className="w-full bg-theme-surface border border-theme-border rounded-xl py-2.5 pl-9 pr-3 text-sm text-theme-primary placeholder-gray-600 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                    disabled={isSubscribed}
+                    className="w-full bg-theme-surface border border-theme-border rounded-xl py-2.5 pl-9 pr-3 text-sm text-theme-primary placeholder-gray-600 focus:outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-50"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium transition-colors shrink-0"
+                  disabled={isSubscribed}
+                  className={clsx(
+                    "px-4 py-2.5 rounded-xl text-sm font-medium transition-all shrink-0",
+                    isSubscribed 
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
+                      : "bg-indigo-500 hover:bg-indigo-600 text-white"
+                  )}
                 >
-                  Subscribe
+                  {isSubscribed ? 'Subscribed!' : 'Subscribe'}
                 </button>
               </form>
             </div>
@@ -156,7 +364,7 @@ const Footer = () => {
         {/* ── All Devices: Responsive Accordion Grid ── */}
         <div className="px-6 md:px-12 py-10 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
-            {FOOTER_SECTIONS.map((section) => (
+            {FOOTER_SECTIONS(openContact).map((section) => (
               <AccordionSection key={section.title} section={section} />
             ))}
           </div>
@@ -191,13 +399,14 @@ const Footer = () => {
               { icon: X, href: '#', label: 'X (Twitter)' },
               { icon: AtSign, href: '#', label: 'Instagram' },
               { icon: Globe, href: '#', label: 'LinkedIn' },
-              { icon: Mail, href: 'mailto:support@pastq.com', label: 'Email' },
-            ].map(({ icon: Icon, href, label }) => (
+              { icon: Mail, onClick: () => openContact('General Support'), label: 'Email' },
+            ].map(({ icon: Icon, href, label, onClick }) => (
               <a
                 key={label}
                 href={href}
+                onClick={onClick}
                 aria-label={label}
-                className="flex items-center justify-center w-8 h-8 rounded-full bg-theme-surface hover:bg-theme-surface-2 border border-theme-border hover:border-indigo-500/30 transition-all text-theme-muted hover:text-theme-primary"
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-theme-surface hover:bg-theme-surface-2 border border-theme-border hover:border-indigo-500/30 transition-all text-theme-muted hover:text-theme-primary cursor-pointer"
               >
                 <Icon className="w-3.5 h-3.5" />
               </a>

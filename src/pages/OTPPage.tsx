@@ -1,9 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import { KeyRound, ArrowRight } from 'lucide-react';
 
 const OTPPage = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const timerId = setInterval(() => {
+      setTimeLeft((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timerId);
+  }, [timeLeft]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleResend = () => {
+    // Add logic to actually call resend API if needed
+    setTimeLeft(300);
+  };
 
   const handleChange = (index: number, value: string) => {
     if (value.length > 1) return;
@@ -29,6 +49,15 @@ const OTPPage = () => {
           <p className="text-theme-muted">
             We've sent a 6-digit verification code to your email address.
           </p>
+          {timeLeft > 0 ? (
+            <p className="text-sm font-medium text-indigo-400 mt-3">
+              Code expires in {formatTime(timeLeft)}
+            </p>
+          ) : (
+            <p className="text-sm font-medium text-red-400 mt-3">
+              Code has expired. Please request a new one.
+            </p>
+          )}
         </div>
 
         <div className="glass-card p-6 md:p-8">
@@ -57,7 +86,7 @@ const OTPPage = () => {
           <div className="mt-6 text-center">
             <p className="text-sm text-theme-muted">
               Didn't receive the code?{' '}
-              <button className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
+              <button onClick={handleResend} className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
                 Resend Code
               </button>
             </p>

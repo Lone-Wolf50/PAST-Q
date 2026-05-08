@@ -11,7 +11,7 @@ router.use(protect, adminOnly);
 router.get('/', async (_req: AuthRequest, res: Response) => {
   try {
     const { data, error } = await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .select('id, full_name, email, plan, role, is_verified, created_at')
       .order('created_at', { ascending: false });
 
@@ -36,7 +36,7 @@ router.patch('/:id/plan', async (req: AuthRequest, res: Response) => {
 
   try {
     const { error } = await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .update({ plan })
       .eq('id', id);
 
@@ -54,7 +54,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
   try {
     const { error } = await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .delete()
       .eq('id', id);
 

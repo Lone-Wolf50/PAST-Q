@@ -2,67 +2,124 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
+import validator from 'validator';
 import { supabase } from '../lib/supabase';
 import { sendOtpEmail } from '../lib/mailer';
 
 const router = Router();
 
-// Stricter rate limiter for auth endpoints
+// ─── Rate limiter ────────────────────────────────────────────
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
 });
 
-// --- Helpers ---
+// ─── Helpers ─────────────────────────────────────────────────
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
-const otpExpiry = () => new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
+const otpExpiry = () => new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-// --- REGISTER ---
+/**
+ * Sanitize a free-text string:
+ * - Trim whitespace
+ * - Strip HTML tags and dangerous characters to prevent XSS stored in DB
+ * - Collapse multiple spaces into one
+ */
+const sanitizeText = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return validator.escape(value.trim()).replace(/\s+/g, ' ');
+};
+
+/**
+ * Normalize and validate an email address:
+ * - Trim and lowercase
+ * - Reject anything that isn't a valid email format
+ * Returns null if invalid.
+ */
+const sanitizeEmail = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const email = validator.normalizeEmail(value.trim(), { gmail_remove_dots: false });
+  if (!email || !validator.isEmail(email)) return null;
+  return email;
+};
+
+/**
+ * Ensure a value is a plain string OTP of exactly 6 digits.
+ * Rejects booleans, objects, or anything non-numeric.
+ */
+const sanitizeOtp = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^\d{6}$/.test(trimmed)) return null;
+  return trimmed;
+};
+
+
+// ─── REGISTER ────────────────────────────────────────────────
 router.post('/register', authLimiter, async (req: Request, res: Response) => {
-  const { full_name, email, password } = req.body;
+  const full_name = sanitizeText(req.body.full_name);
+  const email = sanitizeEmail(req.body.email);
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
 
-  if (!full_name || !email || !password) {
-    res.status(400).json({ error: 'All fields are required.' });
+  // Validate full_name
+  if (!full_name || full_name.length < 2) {
+    res.status(400).json({ error: 'Full name must be at least 2 characters.' });
+    return;
+  }
+  if (full_name.length > 100) {
+    res.status(400).json({ error: 'Full name must be under 100 characters.' });
     return;
   }
 
+  // Validate email
+  if (!email) {
+    res.status(400).json({ error: 'A valid email address is required.' });
+    return;
+  }
+
+  // Validate password — enforce on backend, not just frontend
   if (password.length < 8) {
     res.status(400).json({ error: 'Password must be at least 8 characters.' });
     return;
   }
+  if (password.length > 128) {
+    res.status(400).json({ error: 'Password must be under 128 characters.' });
+    return;
+  }
 
   try {
-    // Check if email already exists
     const { data: existing } = await supabase
-      .from('UPSA_users')
-      .select('id')
+      .from('upsa_users')
+      .select('id, is_verified')
       .eq('email', email)
       .single();
 
     if (existing) {
-      res.status(409).json({ error: 'An account with this email already exists.' });
-      return;
+      if (existing.is_verified) {
+        res.status(409).json({ error: 'An account with this email already exists.' });
+        return;
+      } else {
+        // Delete the unverified account so they can try again
+        await supabase.from('upsa_users').delete().eq('id', existing.id);
+      }
     }
 
-    // Hash password
     const password_hash = await bcrypt.hash(password, 12);
     const otp = generateOtp();
     const otp_expires_at = otpExpiry();
 
-    // Create user (unverified)
     const { data: user, error } = await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .insert({ full_name, email, password_hash, otp, otp_expires_at, is_verified: false })
       .select('id, email')
       .single();
 
     if (error || !user) {
-      res.status(500).json({ error: 'Failed to create account. Please try again.' });
+      console.error('[register] Supabase insert error:', JSON.stringify(error, null, 2));
+      res.status(500).json({ error: 'Failed to create account. Please try again.', detail: error?.message });
       return;
     }
 
-    // Send OTP email
     await sendOtpEmail(email, otp, 'verify');
 
     res.status(201).json({ message: 'Account created. Please check your email for the verification code.' });
@@ -72,18 +129,24 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// --- VERIFY EMAIL (OTP) ---
-router.post('/verify-email', authLimiter, async (req: Request, res: Response) => {
-  const { email, otp } = req.body;
 
-  if (!email || !otp) {
-    res.status(400).json({ error: 'Email and OTP are required.' });
+// ─── VERIFY EMAIL ────────────────────────────────────────────
+router.post('/verify-email', authLimiter, async (req: Request, res: Response) => {
+  const email = sanitizeEmail(req.body.email);
+  const otp = sanitizeOtp(req.body.otp);
+
+  if (!email) {
+    res.status(400).json({ error: 'A valid email address is required.' });
+    return;
+  }
+  if (!otp) {
+    res.status(400).json({ error: 'OTP must be a 6-digit code.' });
     return;
   }
 
   try {
     const { data: user, error } = await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .select('id, otp, otp_expires_at, is_verified')
       .eq('email', email)
       .single();
@@ -108,9 +171,8 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
       return;
     }
 
-    // Mark as verified, clear OTP
     await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .update({ is_verified: true, otp: null, otp_expires_at: null })
       .eq('id', user.id);
 
@@ -121,24 +183,45 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
   }
 });
 
-// --- LOGIN ---
-router.post('/login', authLimiter, async (req: Request, res: Response) => {
-  const { email, password } = req.body;
 
-  if (!email || !password) {
-    res.status(400).json({ error: 'Email and password are required.' });
+// ─── LOGIN ───────────────────────────────────────────────────
+router.post('/login', authLimiter, async (req: Request, res: Response) => {
+  const email = sanitizeEmail(req.body.email);
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
+
+  if (!email) {
+    res.status(400).json({ error: 'A valid email address is required.' });
+    return;
+  }
+  if (!password) {
+    res.status(400).json({ error: 'Password is required.' });
+    return;
+  }
+  // Hard cap to prevent bcrypt DoS (bcrypt silently truncates at 72 bytes)
+  if (password.length > 128) {
+    res.status(401).json({ error: 'Invalid email or password.' });
     return;
   }
 
   try {
     const { data: user, error } = await supabase
-      .from('UPSA_users')
-      .select('id, full_name, email, password_hash, plan, role, is_verified')
+      .from('upsa_users')
+      .select('id, full_name, email, password_hash, plan, role, is_verified, avatar_url, status')
       .eq('email', email)
       .single();
 
     if (error || !user) {
       res.status(401).json({ error: 'Invalid email or password.' });
+      return;
+    }
+
+    if (user.status === 'suspended') {
+      res.status(403).json({ error: 'Your account is suspended. Please contact support.' });
+      return;
+    }
+
+    if (user.status === 'deactivated') {
+      res.status(403).json({ error: 'This account has been deactivated.' });
       return;
     }
 
@@ -153,7 +236,6 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    // Sign JWT
     const token = jwt.sign(
       { id: user.id, email: user.email, plan: user.plan, role: user.role || 'student' },
       process.env.JWT_SECRET!,
@@ -168,7 +250,8 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
         email: user.email,
         plan: user.plan,
         role: user.role || 'student',
-      }
+        avatar_url: user.avatar_url,
+      },
     });
   } catch (err) {
     console.error('[login]', err);
@@ -176,25 +259,28 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// --- FORGOT PASSWORD ---
+
+// ─── FORGOT PASSWORD ─────────────────────────────────────────
 router.post('/forgot-password', authLimiter, async (req: Request, res: Response) => {
-  const { email } = req.body;
+  const email = sanitizeEmail(req.body.email);
 
   if (!email) {
-    res.status(400).json({ error: 'Email is required.' });
+    res.status(400).json({ error: 'A valid email address is required.' });
     return;
   }
 
+  // Always return the same message — never reveal whether the email exists
+  const genericResponse = { message: 'If an account exists, a reset code has been sent.' };
+
   try {
     const { data: user } = await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .select('id')
       .eq('email', email)
       .single();
 
-    // Always return success to prevent email enumeration
     if (!user) {
-      res.status(200).json({ message: 'If an account exists, a reset code has been sent.' });
+      res.status(200).json(genericResponse);
       return;
     }
 
@@ -202,36 +288,46 @@ router.post('/forgot-password', authLimiter, async (req: Request, res: Response)
     const otp_expires_at = otpExpiry();
 
     await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .update({ otp, otp_expires_at })
       .eq('id', user.id);
 
     await sendOtpEmail(email, otp, 'reset');
 
-    res.status(200).json({ message: 'If an account exists, a reset code has been sent.' });
+    res.status(200).json(genericResponse);
   } catch (err) {
     console.error('[forgot-password]', err);
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
 
-// --- RESET PASSWORD ---
-router.post('/reset-password', authLimiter, async (req: Request, res: Response) => {
-  const { email, otp, new_password } = req.body;
 
-  if (!email || !otp || !new_password) {
-    res.status(400).json({ error: 'All fields are required.' });
+// ─── RESET PASSWORD ──────────────────────────────────────────
+router.post('/reset-password', authLimiter, async (req: Request, res: Response) => {
+  const email = sanitizeEmail(req.body.email);
+  const otp = sanitizeOtp(req.body.otp);
+  const new_password = typeof req.body.new_password === 'string' ? req.body.new_password : '';
+
+  if (!email) {
+    res.status(400).json({ error: 'A valid email address is required.' });
     return;
   }
-
+  if (!otp) {
+    res.status(400).json({ error: 'OTP must be a 6-digit code.' });
+    return;
+  }
   if (new_password.length < 8) {
     res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    return;
+  }
+  if (new_password.length > 128) {
+    res.status(400).json({ error: 'Password must be under 128 characters.' });
     return;
   }
 
   try {
     const { data: user } = await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .select('id, otp, otp_expires_at')
       .eq('email', email)
       .single();
@@ -254,7 +350,7 @@ router.post('/reset-password', authLimiter, async (req: Request, res: Response) 
     const password_hash = await bcrypt.hash(new_password, 12);
 
     await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .update({ password_hash, otp: null, otp_expires_at: null })
       .eq('id', user.id);
 
@@ -265,18 +361,19 @@ router.post('/reset-password', authLimiter, async (req: Request, res: Response) 
   }
 });
 
-// --- RESEND OTP ---
+
+// ─── RESEND OTP ──────────────────────────────────────────────
 router.post('/resend-otp', authLimiter, async (req: Request, res: Response) => {
-  const { email } = req.body;
+  const email = sanitizeEmail(req.body.email);
 
   if (!email) {
-    res.status(400).json({ error: 'Email is required.' });
+    res.status(400).json({ error: 'A valid email address is required.' });
     return;
   }
 
   try {
     const { data: user } = await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .select('id, is_verified')
       .eq('email', email)
       .single();
@@ -295,7 +392,7 @@ router.post('/resend-otp', authLimiter, async (req: Request, res: Response) => {
     const otp_expires_at = otpExpiry();
 
     await supabase
-      .from('UPSA_users')
+      .from('upsa_users')
       .update({ otp, otp_expires_at })
       .eq('id', user.id);
 

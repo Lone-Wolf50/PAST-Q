@@ -1,23 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Check, Trash2, Menu } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
-
-const MOCK_NOTIFICATIONS = [
-  { id: 1, title: 'New User Registration', message: 'John Doe just created a new account.', time: '2 mins ago', read: false },
-  { id: 2, title: 'Subscription Upgraded', message: 'Jane Smith upgraded to Premium.', time: '1 hour ago', read: false },
-  { id: 3, title: 'System Alert', message: 'Database backup completed successfully.', time: '5 hours ago', read: true },
-];
+import { apiFetch } from '../lib/api';
 
 const AdminNotificationsPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
-  const markAsRead = (id: number) => {
-    setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+  const fetchNotifications = async () => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      if (!token) return;
+      const res = await apiFetch('/hq-management/notifications', { token });
+      setNotifications(res.notifications || []);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const deleteNotification = (id: number) => {
-    setNotifications(notifications.filter(n => n.id !== id));
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const markAsRead = async (id: string) => {
+    try {
+      await apiFetch(`/hq-management/notifications/${id}`, { method: 'PATCH', token: localStorage.getItem('admin_token')! });
+      fetchNotifications();
+    } catch (err) { console.error(err); }
+  };
+
+  const markAllRead = async () => {
+    try {
+      await apiFetch('/hq-management/notifications/read-all', { method: 'PATCH', token: localStorage.getItem('admin_token')! });
+      fetchNotifications();
+    } catch (err) { console.error(err); }
+  };
+
+  const deleteNotification = async (id: string) => {
+    try {
+      await apiFetch(`/hq-management/notifications/${id}`, { method: 'DELETE', token: localStorage.getItem('admin_token')! });
+      fetchNotifications();
+    } catch (err) { console.error(err); }
   };
 
   return (
@@ -40,7 +63,7 @@ const AdminNotificationsPage = () => {
             </div>
             <button 
               className="flex items-center gap-2 px-4 py-2 bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary rounded-xl transition-colors text-sm font-medium"
-              onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
+              onClick={markAllRead}
             >
               <Check className="w-4 h-4" />
               Mark all read
@@ -55,19 +78,19 @@ const AdminNotificationsPage = () => {
               </div>
             ) : (
               notifications.map((notif) => (
-                <div key={notif.id} className={`glass-card p-4 border-white/5 flex items-start gap-4 transition-colors ${!notif.read ? 'bg-indigo-500/5 border-indigo-500/20' : ''}`}>
-                  <div className={`p-2 rounded-lg shrink-0 mt-1 ${!notif.read ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-gray-400'}`}>
+                <div key={notif.id} className={`glass-card p-4 border-white/5 flex items-start gap-4 transition-colors ${!notif.is_read ? 'bg-indigo-500/5 border-indigo-500/20' : ''}`}>
+                  <div className={`p-2 rounded-lg shrink-0 mt-1 ${!notif.is_read ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-gray-400'}`}>
                     <Bell className="w-5 h-5" />
                   </div>
                   <div className="flex-grow">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className={`font-semibold ${!notif.read ? 'text-white' : 'text-gray-300'}`}>{notif.title}</h3>
+                        <h3 className={`font-semibold ${!notif.is_read ? 'text-white' : 'text-gray-300'}`}>{notif.title}</h3>
                         <p className="text-sm text-theme-muted mt-1">{notif.message}</p>
-                        <p className="text-xs text-theme-muted mt-2">{notif.time}</p>
+                        <p className="text-xs text-theme-muted mt-2">{new Date(notif.created_at).toLocaleString()}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {!notif.read && (
+                        {!notif.is_read && (
                           <button onClick={() => markAsRead(notif.id)} className="p-1.5 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-emerald-400 transition-colors" title="Mark as read">
                             <Check className="w-4 h-4" />
                           </button>

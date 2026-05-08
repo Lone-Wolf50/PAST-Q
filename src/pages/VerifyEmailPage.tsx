@@ -1,33 +1,106 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Mail, ArrowRight, ShieldCheck } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 const VerifyEmailPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Email is passed via navigate state from RegisterPage
+  const email = (location.state as { email?: string })?.email || '';
+
   const [code, setCode] = useState(['', '', '', '', '', '']);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(60);
+  const [canResend, setCanResend] = useState(false);
+
+  // If no email in state (e.g. direct navigation), redirect to register
+  useEffect(() => {
+    if (!email) navigate('/register', { replace: true });
+  }, [email, navigate]);
+
+  const [expiresIn, setExpiresIn] = useState(300); // 5 minutes
+
+  // Expiry timer countdown
+  useEffect(() => {
+    if (expiresIn <= 0) return;
+    const timer = setInterval(() => setExpiresIn((prev) => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [expiresIn]);
+
+  // Resend cooldown countdown
+  useEffect(() => {
+    if (resendCooldown <= 0) {
+      setCanResend(true);
+      return;
+    }
+    const timer = setInterval(() => setResendCooldown((prev) => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const handleChange = (index: number, value: string) => {
     if (value.length <= 1 && /^\d*$/.test(value)) {
       const newCode = [...code];
       newCode[index] = value;
       setCode(newCode);
-      
-      // Auto-focus next input
       if (value !== '' && index < 5) {
-        const nextInput = document.getElementById(`otp-${index + 1}`);
-        if (nextInput) nextInput.focus();
+        document.getElementById(`otp-${index + 1}`)?.focus();
       }
     }
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && code[index] === '' && index > 0) {
-      const prevInput = document.getElementById(`otp-${index - 1}`);
-      if (prevInput) prevInput.focus();
+      document.getElementById(`otp-${index - 1}`)?.focus();
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const otp = code.join('');
+    if (otp.length < 6) {
+      setError('Please enter the full 6-digit code.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiFetch('/auth/verify-email', {
+        method: 'POST',
+        body: { email, otp },
+      });
+      navigate('/login', { state: { verified: true } });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!canResend) return;
+    setError('');
+    setSuccess('');
+    try {
+      await apiFetch('/auth/resend-otp', {
+        method: 'POST',
+        body: { email },
+      });
+      setSuccess('A new code has been sent to your email.');
+      setCanResend(false);
+      setResendCooldown(60);
+      setExpiresIn(300);
+      setCode(['', '', '', '', '', '']);
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
   return (
-    <div className="w-full flex-grow flex items-center justify-center px-4 py-12 mb-24 md:mb-0">
+    <div className="w-full flex-grow flex items-center justify-center px-4 py-12">
       <div className="glass-card w-full max-w-md p-8 md:p-10 relative overflow-hidden">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
 
@@ -41,17 +114,37 @@ const VerifyEmailPage = () => {
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-theme-primary mb-2">Check your email</h1>
             <p className="text-sm text-theme-muted">
-              We sent a 6-digit verification code to <span className="text-theme-primary font-medium">name@university.edu</span>
+              We sent a 6-digit verification code to{' '}
+              <span className="text-theme-primary font-medium">{email}</span>
             </p>
+            {expiresIn > 0 ? (
+              <p className="text-xs font-medium text-orange-400 mt-2">
+                Code expires in: {Math.floor(expiresIn / 60).toString().padStart(2, '0')}:{(expiresIn % 60).toString().padStart(2, '0')}
+              </p>
+            ) : (
+              <p className="text-xs font-medium text-red-500 mt-2">Code has expired. Please resend.</p>
+            )}
           </div>
 
-          <form className="flex flex-col gap-6">
+          {error && (
+            <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="mb-4 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-400">
+              {success}
+            </div>
+          )}
+
+          <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
             <div className="flex justify-between gap-2">
               {code.map((digit, index) => (
                 <input
                   key={index}
                   id={`otp-${index}`}
                   type="text"
+                  inputMode="numeric"
                   maxLength={1}
                   value={digit}
                   onChange={(e) => handleChange(index, e.target.value)}
@@ -61,29 +154,32 @@ const VerifyEmailPage = () => {
               ))}
             </div>
 
-            <button 
-              type="submit" 
-              className="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-white bg-indigo-500 hover:bg-indigo-600 transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] active:scale-[0.98]"
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] active:scale-[0.98]"
             >
               <ShieldCheck className="w-5 h-5" />
-              Verify Email
-              <ArrowRight className="w-4 h-4" />
+              {loading ? 'Verifying...' : 'Verify Email'}
+              {!loading && <ArrowRight className="w-4 h-4" />}
             </button>
           </form>
 
           <div className="mt-8 text-center">
-            <p className="text-sm text-theme-muted mb-2">
-              Didn't receive the code?
-            </p>
-            <button className="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors">
-              Resend code (0:59)
+            <p className="text-sm text-theme-muted mb-2">Didn't receive the code?</p>
+            <button
+              onClick={handleResend}
+              disabled={!canResend}
+              className="text-sm font-medium text-indigo-400 hover:text-indigo-300 disabled:text-theme-muted disabled:cursor-not-allowed transition-colors"
+            >
+              {canResend ? 'Resend code' : `Resend in ${resendCooldown}s`}
             </button>
           </div>
-          
+
           <div className="mt-6 text-center">
-             <Link to="/login" className="text-sm text-theme-muted hover:text-theme-secondary transition-colors">
-               Back to sign in
-             </Link>
+            <Link to="/login" className="text-sm text-theme-muted hover:text-theme-secondary transition-colors">
+              Back to sign in
+            </Link>
           </div>
         </div>
       </div>
@@ -92,3 +188,4 @@ const VerifyEmailPage = () => {
 };
 
 export default VerifyEmailPage;
+

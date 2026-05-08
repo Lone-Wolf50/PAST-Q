@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Lock, Eye, EyeOff, ShieldAlert } from 'lucide-react';
+import { Lock, Eye, EyeOff, ShieldAlert, Mail } from 'lucide-react';
 
 const AdminLoginPage = () => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -14,11 +15,13 @@ const AdminLoginPage = () => {
     setError('');
     setLoading(true);
 
+    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
     try {
-      const res = await fetch('/api/admin/auth/login', {
+      const res = await fetch(`${BASE_URL}/hq-management/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -29,9 +32,9 @@ const AdminLoginPage = () => {
       }
 
       localStorage.setItem('admin_token', data.token);
-      navigate('/admin');
+      navigate('/hq-portal');
     } catch {
-      setError('Server error. Please try again.');
+      setError('Cannot reach the server. Make sure the backend is running on port 5000.');
     } finally {
       setLoading(false);
     }
@@ -58,6 +61,22 @@ const AdminLoginPage = () => {
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-theme-secondary ml-1">Admin Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-theme-muted" />
+                <input 
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@pastq.com" 
+                  className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-4 text-theme-primary placeholder-gray-600 focus:outline-none focus:border-red-500/40 focus:bg-theme-surface-2 transition-colors"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-theme-secondary ml-1">Admin Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-theme-muted" />
@@ -68,7 +87,6 @@ const AdminLoginPage = () => {
                   placeholder="••••••••••••" 
                   className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-10 text-theme-primary placeholder-gray-600 focus:outline-none focus:border-red-500/40 focus:bg-theme-surface-2 transition-colors"
                   required
-                  autoFocus
                 />
                 <button 
                   type="button"
@@ -88,7 +106,7 @@ const AdminLoginPage = () => {
 
             <button 
               type="submit" 
-              disabled={loading || !password}
+              disabled={loading || !email || !password}
               className="w-full py-3 rounded-xl font-semibold text-white bg-red-500/80 hover:bg-red-500 disabled:bg-theme-surface-2 disabled:text-theme-muted transition-all shadow-[0_0_20px_rgba(239,68,68,0.2)] active:scale-[0.98]"
             >
               {loading ? 'Verifying...' : 'Access Dashboard'}

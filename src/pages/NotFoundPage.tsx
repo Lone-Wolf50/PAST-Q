@@ -1,9 +1,12 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, ArrowLeft } from 'lucide-react';
 
 const NotFoundPage = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isAdmin = location.pathname.startsWith('/hq-portal');
   return (
-    <div className="w-full flex-grow flex items-center justify-center px-4 py-12 mb-24 md:mb-0">
+    <div className="w-full flex-grow flex items-center justify-center px-4 py-12">
       <div className="text-center">
         <div className="relative inline-block mb-8">
           <h1 className="text-9xl font-bold text-theme-primary/5 tracking-tighter">404</h1>
@@ -18,19 +21,19 @@ const NotFoundPage = () => {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link 
-            to="/"
+          <button 
+            onClick={() => navigate(-1)}
             className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-theme-primary bg-theme-surface-2 hover:bg-theme-surface-2 border border-theme-border transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Go Back
-          </Link>
+          </button>
           <Link 
-            to="/login"
+            to={isAdmin ? "/hq-portal" : "/login"}
             className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-white bg-indigo-500 hover:bg-indigo-600 transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)]"
           >
             <Home className="w-4 h-4" />
-            Return to Login
+            {isAdmin ? "Return to Dashboard" : "Return to Login"}
           </Link>
         </div>
       </div>
@@ -39,3 +42,4 @@ const NotFoundPage = () => {
 };
 
 export default NotFoundPage;
+

@@ -1,9 +1,35 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Mail, ArrowRight, ArrowLeft } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 const ForgotPasswordPage = () => {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      await apiFetch('/auth/forgot-password', {
+        method: 'POST',
+        body: { email },
+      });
+      // Always navigate — backend never reveals whether email exists
+      navigate('/reset-password', { state: { email } });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="w-full flex-grow flex items-center justify-center px-4 py-12 mb-24 md:mb-0">
+    <div className="w-full flex-grow flex items-center justify-center px-4 py-12">
       <div className="glass-card w-full max-w-md p-8 md:p-10 relative overflow-hidden">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
 
@@ -22,26 +48,35 @@ const ForgotPasswordPage = () => {
             </p>
           </div>
 
-          <form className="flex flex-col gap-6">
+          {error && (
+            <div className="mb-5 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+              {error}
+            </div>
+          )}
+
+          <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-theme-secondary ml-1">Email address</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-theme-muted" />
-                <input 
-                  type="email" 
-                  placeholder="name@university.edu" 
+                <input
+                  type="email"
+                  placeholder="name@university.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-4 text-theme-primary placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:bg-theme-surface-2 transition-colors"
                   required
                 />
               </div>
             </div>
 
-            <button 
-              type="submit" 
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-white bg-indigo-500 hover:bg-indigo-600 transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] active:scale-[0.98]"
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] active:scale-[0.98]"
             >
-              Send Code
-              <ArrowRight className="w-4 h-4" />
+              {loading ? 'Sending...' : 'Send Code'}
+              {!loading && <ArrowRight className="w-4 h-4" />}
             </button>
           </form>
         </div>
@@ -51,3 +86,4 @@ const ForgotPasswordPage = () => {
 };
 
 export default ForgotPasswordPage;
+
