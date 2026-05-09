@@ -389,8 +389,10 @@ const Footer = () => {
 
         {/* ── Bottom Bar ── */}
         <div className="px-6 md:px-12 py-5 border-t border-theme-border flex flex-col sm:flex-row items-center justify-between gap-4 relative z-10">
-          <p className="text-xs text-theme-muted text-center sm:text-left">
-            © {new Date().getFullYear()} PastQ. Built for students, by students. 🇬🇭
+          <p className="text-xs text-theme-muted text-center sm:text-left flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+            <span>© {new Date().getFullYear()} PastQ. Built for students, by students. 🇬🇭</span>
+            <span className="hidden sm:inline text-theme-border">•</span>
+            <span className="text-[10px] font-black tracking-widest text-indigo-400/70 uppercase">Sponsored by Wolf Team 🐺</span>
           </p>
 
           <div className="flex items-center gap-4">
