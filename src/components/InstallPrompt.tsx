@@ -16,9 +16,16 @@ const InstallPrompt = () => {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // Check if already installed
+    // If they previously dismissed it or we know they installed it, don't show
+    if (localStorage.getItem('pwa_prompt_dismissed') === 'true' || localStorage.getItem('has_installed_pwa') === 'true') {
+      setIsStandalone(true); // Reusing this flag to permanently hide
+      return;
+    }
+
+    // Check if currently running in standalone mode (installed app)
     if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
       setIsStandalone(true);
+      localStorage.setItem('has_installed_pwa', 'true');
       return;
     }
 
@@ -40,6 +47,12 @@ const InstallPrompt = () => {
     };
   }, []);
 
+  const handleDismiss = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setDismissed(true);
+    localStorage.setItem('pwa_prompt_dismissed', 'true');
+  };
+
   const handleInstallClick = async () => {
     if (isIOS) {
       setShowIOSPrompt(true);
@@ -47,12 +60,22 @@ const InstallPrompt = () => {
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === 'accepted') {
+        localStorage.setItem('has_installed_pwa', 'true');
         setDeferredPrompt(null);
       }
     } else if (isAndroid) {
       // If we're on Android but deferredPrompt isn't ready (often happens when testing over local HTTP IP address)
       setShowAndroidPrompt(true);
     }
+  };
+
+  const handleAcknowledgeInstruction = (isIOSModal: boolean) => {
+    if (isIOSModal) setShowIOSPrompt(false);
+    else setShowAndroidPrompt(false);
+    
+    // We assume if they followed instructions, they will install it.
+    // If they just close it to ignore, they can use the X button instead.
+    localStorage.setItem('pwa_prompt_dismissed', 'true');
   };
 
   if (isStandalone || dismissed) return null;
@@ -71,10 +94,7 @@ const InstallPrompt = () => {
           <span>Install App</span>
           <div 
             className="ml-2 p-1 rounded-full hover:bg-white/20 transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              setDismissed(true);
-            }}
+            onClick={handleDismiss}
           >
             <X className="w-4 h-4" />
           </div>
@@ -119,7 +139,7 @@ const InstallPrompt = () => {
               </div>
               
               <button 
-                onClick={() => setShowIOSPrompt(false)}
+                onClick={() => handleAcknowledgeInstruction(true)}
                 className="w-full mt-6 py-3 rounded-xl bg-indigo-500 text-white font-semibold hover:bg-indigo-600 transition-colors"
               >
                 Got it
@@ -163,7 +183,7 @@ const InstallPrompt = () => {
               </div>
               
               <button 
-                onClick={() => setShowAndroidPrompt(false)}
+                onClick={() => handleAcknowledgeInstruction(false)}
                 className="w-full mt-6 py-3 rounded-xl bg-indigo-500 text-white font-semibold hover:bg-indigo-600 transition-colors"
               >
                 Got it

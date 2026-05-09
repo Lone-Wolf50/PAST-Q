@@ -88,9 +88,14 @@ const Navbar = () => {
             <>
               <button
                 onClick={toggleTheme}
-                className="flex items-center justify-center w-10 h-10 rounded-full bg-theme-surface border border-theme-border hover:bg-theme-surface-2 transition-colors text-theme-secondary hover:text-theme-primary"
+                className="relative flex items-center justify-center w-10 h-10 rounded-xl backdrop-blur-md bg-theme-surface/50 border border-theme-border/50 hover:bg-theme-surface-2/60 transition-all duration-300 shadow-[0_4px_12px_rgba(0,0,0,0.05)] group"
               >
-                {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)] z-10" />
+                ) : (
+                  <Moon className="w-5 h-5 text-indigo-600 drop-shadow-[0_0_8px_rgba(79,70,229,0.5)] z-10" />
+                )}
               </button>
               <Link
                 to="/profile"
@@ -112,18 +117,33 @@ const Navbar = () => {
             <div className="flex items-center gap-2 md:gap-4">
               <button
                 onClick={toggleTheme}
-                className="flex items-center justify-center w-10 h-10 rounded-full text-theme-secondary hover:text-theme-primary hover:bg-theme-surface transition-colors"
+                className="relative flex items-center justify-center w-10 h-10 rounded-xl backdrop-blur-md bg-theme-surface/50 border border-theme-border/50 hover:bg-theme-surface-2/60 transition-all duration-300 shadow-[0_4px_12px_rgba(0,0,0,0.05)] group"
               >
-                {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)] z-10" />
+                ) : (
+                  <Moon className="w-5 h-5 text-indigo-600 drop-shadow-[0_0_8px_rgba(79,70,229,0.5)] z-10" />
+                )}
               </button>
-              <Link to="/login" className="px-4 py-2 text-sm font-medium text-theme-secondary hover:text-theme-primary transition-colors">
+              <Link to="/login" className="hidden md:block px-4 py-2 text-sm font-medium text-theme-secondary hover:text-theme-primary transition-colors">
                 Log in
               </Link>
               <Link
                 to="/register"
-                className="px-4 py-2 rounded-full text-sm font-medium text-theme-primary bg-theme-surface-2 hover:bg-theme-surface-2 border border-theme-border transition-colors"
+                className="hidden md:flex px-4 py-2 rounded-full text-sm font-medium text-theme-primary bg-theme-surface-2 hover:bg-theme-surface-2 border border-theme-border transition-colors"
               >
                 Sign up
+              </Link>
+              {/* Mobile Combined Glassmorphic Button */}
+              <Link
+                to="/register"
+                className="md:hidden relative inline-flex h-9 items-center justify-center overflow-hidden rounded-xl p-[1px] group shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+              >
+                <span className="absolute inset-[-1000%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#818cf8_0%,#c084fc_50%,#818cf8_100%)]" />
+                <span className="relative z-10 flex h-full w-full items-center justify-center rounded-xl bg-theme-surface/80 backdrop-blur-xl px-4 py-1 text-sm font-bold text-theme-primary transition-all group-hover:bg-theme-surface/60">
+                  Get Started
+                </span>
               </Link>
             </div>
           )}

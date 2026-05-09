@@ -206,7 +206,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const { data: user, error } = await supabase
       .from('upsa_users')
-      .select('id, full_name, email, password_hash, plan, role, is_verified, avatar_url, status')
+      .select('id, full_name, email, password_hash, plan, role, is_verified, avatar_url, status, session_version')
       .eq('email', email)
       .single();
 
@@ -236,10 +236,17 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       return;
     }
 
+    // Increment session_version to invalidate other devices
+    const newSessionVersion = (user.session_version || 0) + 1;
+    await supabase
+      .from('upsa_users')
+      .update({ session_version: newSessionVersion })
+      .eq('id', user.id);
+
     const token = jwt.sign(
-      { id: user.id, email: user.email, plan: user.plan, role: user.role || 'student' },
+      { id: user.id, email: user.email, plan: user.plan, role: user.role || 'student', session_version: newSessionVersion },
       process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as jwt.SignOptions
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' } as jwt.SignOptions
     );
 
     res.status(200).json({

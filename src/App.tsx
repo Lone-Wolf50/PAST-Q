@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
@@ -27,6 +27,7 @@ import InstallPrompt from './components/InstallPrompt';
 import AdminNotificationsPage from './pages/AdminNotificationsPage';
 import StudentSubscriptionPage from './pages/StudentSubscriptionPage';
 import StudentNotificationsPage from './pages/StudentNotificationsPage';
+import { AlertModal } from './components/ui/AlertModal';
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
@@ -61,6 +62,13 @@ const GuestRoute = ({ children }: { children: React.ReactNode }) => {
 function AppRoutes() {
   const { isLoggedIn } = useAuth();
   const location = useLocation();
+  const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
+
+  useEffect(() => {
+    const handleSessionExpired = () => setSessionExpiredOpen(true);
+    window.addEventListener('session_expired', handleSessionExpired);
+    return () => window.removeEventListener('session_expired', handleSessionExpired);
+  }, []);
 
   const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
   const isAdminPath = location.pathname.startsWith('/hq-portal');
@@ -119,6 +127,14 @@ function AppRoutes() {
       <Routes>
         <Route path="*" element={!shouldHideFooter ? <Footer /> : null} />
       </Routes>
+
+      <AlertModal
+        isOpen={sessionExpiredOpen}
+        onClose={() => setSessionExpiredOpen(false)}
+        title="Session Expired"
+        message="You have been logged out because your account was accessed from another device."
+        variant="error"
+      />
     </div>
   );
 }

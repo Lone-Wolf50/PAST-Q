@@ -42,15 +42,14 @@ const UpgradePage = () => {
           amount: res.totalInKobo,
           currency: 'GHS',
           ref: res.reference,
-          metadata: {
-            plan,
-            user_id: user?.id
-          },
+          // No metadata here — prevents Paystack from using it for receipt display
           callback: function (response: any) {
-            // Verify payment on the server before redirecting
+            // Close the Paystack iframe immediately so their receipt screen never shows
+            try { handler.close(); } catch (_) { /* ignore */ }
+
+            // Verify payment on the server
             (async () => {
               try {
-                // Use the reference from Paystack or the one we generated
                 const ref = response.reference || res.reference;
                 await apiFetch(`/payments/verify/${ref}`, { token: token || undefined });
                 setSuccess(true);

@@ -26,6 +26,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       email: string;
       plan: string;
       role: string;
+      session_version?: number;
     };
 
     // Skip DB check for hardcoded admin account
@@ -38,13 +39,20 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     // Verify user status in DB for real-time enforcement
     const { data: user, error } = await supabase
       .from('upsa_users')
-      .select('status')
+      .select('status, session_version')
       .eq('id', decoded.id)
       .single();
 
     if (error || !user) {
       res.status(401).json({ error: 'User account not found.' });
       return;
+    }
+
+    if (decoded.session_version !== undefined && user.session_version !== undefined) {
+      if (decoded.session_version !== user.session_version) {
+        res.status(401).json({ code: 'SESSION_EXPIRED', error: 'Session expired' });
+        return;
+      }
     }
 
     if (user.status === 'suspended') {

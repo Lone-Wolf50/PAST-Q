@@ -57,8 +57,10 @@ router.post('/initialize', protect, async (req: AuthRequest, res: Response) => {
       original_amount: planPrices[plan],
       paystack_fee: fee,
       total_charged: totalCharged,
+      // Disable Paystack receipt emails/SMS so users receive no receipt
+      send_email: false,
+      send_sms: false,
     },
-    callback_url: `${process.env.FRONTEND_URL}/profile`,
   });
 
   const options = {

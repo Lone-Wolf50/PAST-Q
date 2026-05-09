@@ -23,33 +23,81 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Helper to check if running as installed app/PWA
+const isApp = () => {
+  return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+};
+
+// Returns the appropriate storage based on environment
+const getStorage = () => isApp() ? localStorage : sessionStorage;
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  // Use sessionStorage so users are logged out when the tab is closed
-  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(() => {
+    const storage = getStorage();
+    
+    // If it's an app, enforce the 7-day rolling window
+    if (isApp()) {
+      const lastVisit = storage.getItem('last_visit');
+      if (lastVisit) {
+        const timeSince = Date.now() - parseInt(lastVisit, 10);
+        if (timeSince > 7 * 24 * 60 * 60 * 1000) {
+          // More than 7 days, clear storage
+          storage.removeItem('token');
+          storage.removeItem('user');
+          storage.removeItem('last_visit');
+          return null;
+        }
+      }
+      // Update last visit timestamp
+      storage.setItem('last_visit', Date.now().toString());
+    }
+
+    return storage.getItem('token');
+  });
+
   const [user, setUser] = useState<AuthUser | null>(() => {
-    const stored = sessionStorage.getItem('user');
+    const stored = getStorage().getItem('user');
     return stored ? JSON.parse(stored) : null;
   });
 
-  // Effect to handle single-session enforcement (logout other tabs on new login)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
+      // If a new login happened in another tab (on the same device), log this one out
       if (e.key === 'last_login_id' && e.newValue) {
-        // If a new login happened in another tab, log this one out
         logout();
+      }
+      // Sync logout across tabs if the token is cleared
+      if (e.key === 'token' && !e.newValue) {
+        setToken(null);
+        setUser(null);
       }
     };
 
+    const handleSessionExpired = () => {
+      logout();
+      // The AlertModal in App.tsx or a global notification can listen to this,
+      // but dispatching here just cleans up the state.
+    };
+
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('session_expired', handleSessionExpired);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('session_expired', handleSessionExpired);
+    };
   }, []);
 
   const login = (newToken: string, newUser: AuthUser) => {
-    // Save to sessionStorage (tab-specific)
-    sessionStorage.setItem('token', newToken);
-    sessionStorage.setItem('user', JSON.stringify(newUser));
+    const storage = getStorage();
+    storage.setItem('token', newToken);
+    storage.setItem('user', JSON.stringify(newUser));
     
-    // Trigger a signal to other tabs using localStorage
+    if (isApp()) {
+      storage.setItem('last_visit', Date.now().toString());
+    }
+    
+    // Trigger a signal to other tabs using localStorage (cross-tab sync on same device)
     localStorage.setItem('last_login_id', Date.now().toString());
     
     setToken(newToken);
@@ -59,13 +107,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateUser = (updates: Partial<AuthUser>) => {
     if (!user) return;
     const updatedUser = { ...user, ...updates };
-    sessionStorage.setItem('user', JSON.stringify(updatedUser));
+    getStorage().setItem('user', JSON.stringify(updatedUser));
     setUser(updatedUser);
   };
 
   const logout = () => {
+    const storage = getStorage();
+    storage.removeItem('token');
+    storage.removeItem('user');
+    storage.removeItem('last_visit');
+    
+    // Optional: Also clear the other storage just in case they switch contexts
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    
     setToken(null);
     setUser(null);
   };
