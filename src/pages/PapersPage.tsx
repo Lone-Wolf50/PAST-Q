@@ -176,6 +176,8 @@ const PapersPage = () => {
           { name: "IT", color: "text-blue-400", bg: "bg-blue-500/5", border: "border-blue-500/20", gradient: "from-cyan-500 to-blue-500", shadow: "shadow-blue-500/30" },
           { name: "Accounting", color: "text-emerald-400", bg: "bg-emerald-500/5", border: "border-emerald-500/20", gradient: "from-emerald-500 to-teal-500", shadow: "shadow-emerald-500/30" },
           { name: "Marketing", color: "text-fuchsia-400", bg: "bg-fuchsia-500/5", border: "border-fuchsia-500/20", gradient: "from-fuchsia-500 to-pink-500", shadow: "shadow-pink-500/30" },
+          { name: "LLB (Law)", color: "text-rose-400", bg: "bg-rose-500/5", border: "border-rose-500/20", gradient: "from-rose-600 to-red-500", shadow: "shadow-red-500/30" },
+          { name: "Actuarial Science", color: "text-indigo-400", bg: "bg-indigo-500/5", border: "border-indigo-500/20", gradient: "from-indigo-600 to-blue-500", shadow: "shadow-blue-500/30" },
           { name: "Business Admin", color: "text-violet-400", bg: "bg-violet-500/5", border: "border-violet-500/20", gradient: "from-violet-500 to-purple-500", shadow: "shadow-purple-500/30" },
           { name: "Logistics", color: "text-amber-400", bg: "bg-amber-500/5", border: "border-amber-500/20", gradient: "from-amber-500 to-orange-500", shadow: "shadow-orange-500/30" },
           { name: "PR", color: "text-rose-400", bg: "bg-rose-500/5", border: "border-rose-500/20", gradient: "from-rose-500 to-red-500", shadow: "shadow-red-500/30" }
