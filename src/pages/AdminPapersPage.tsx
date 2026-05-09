@@ -1,18 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Download, Filter,
-  ExternalLink, FileCheck, RotateCw, Sun, Moon, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert
+  ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
 
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch, apiFetchMultipart } from '../lib/api';
-import { useTheme } from '../context/ThemeContext';
+
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
 
 const AdminPapersPage = () => {
-  const { theme, toggleTheme } = useTheme();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [papers, setPapers] = useState<any[]>([]);
@@ -308,13 +309,7 @@ const AdminPapersPage = () => {
                 AI RECHARGING
               </div>
             )}
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors mr-1"
-              title="Toggle Theme"
-            >
-              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="mr-1"><ThemeToggle /></div>
             <button 
               onClick={() => { fetchPapers(); fetchSubjects(); }} 
               className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors group"

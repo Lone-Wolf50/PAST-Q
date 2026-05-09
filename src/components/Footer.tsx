@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, X, AtSign, Globe, ChevronDown, BookOpen, Shield, HelpCircle, Zap, FileText } from 'lucide-react';
+import { Mail, ChevronDown, BookOpen, Shield, HelpCircle, Zap, FileText } from 'lucide-react';
 import { clsx } from 'clsx';
 import ContactModal from './ContactModal';
 
@@ -290,7 +290,7 @@ const Footer = () => {
   };
 
   return (
-    <footer className="mt-20 px-4 md:px-8 pb-8 max-w-7xl mx-auto w-full">
+    <footer className="mt-20 px-4 md:px-8 pb-32 md:pb-8 max-w-7xl mx-auto w-full">
       <ContactModal 
         isOpen={contactOpen} 
         onClose={() => setContactOpen(false)} 
@@ -395,25 +395,7 @@ const Footer = () => {
             <span className="text-[10px] font-black tracking-widest text-indigo-400/70 uppercase">Sponsored by Wolf Team 🐺</span>
           </p>
 
-          <div className="flex items-center gap-4">
-            {/* Social Links */}
-            {[
-              { icon: X, href: '#', label: 'X (Twitter)' },
-              { icon: AtSign, href: '#', label: 'Instagram' },
-              { icon: Globe, href: '#', label: 'LinkedIn' },
-              { icon: Mail, onClick: () => openContact('General Support'), label: 'Email' },
-            ].map(({ icon: Icon, href, label, onClick }) => (
-              <a
-                key={label}
-                href={href}
-                onClick={onClick}
-                aria-label={label}
-                className="flex items-center justify-center w-8 h-8 rounded-full bg-theme-surface hover:bg-theme-surface-2 border border-theme-border hover:border-indigo-500/30 transition-all text-theme-muted hover:text-theme-primary cursor-pointer"
-              >
-                <Icon className="w-3.5 h-3.5" />
-              </a>
-            ))}
-          </div>
+
 
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />

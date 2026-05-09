@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 
 import { Link } from 'react-router-dom';
-import { Users, FileText, TrendingUp, UserMinus, Menu, Bell, Search, RotateCw, Sun, Moon } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { Users, FileText, TrendingUp, UserMinus, Menu, Bell, Search, RotateCw } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend, AreaChart, Area } from 'recharts';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
 import { clsx } from 'clsx';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
 
 const COLORS = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
 const AdminDashboard = () => {
-  const { theme, toggleTheme } = useTheme();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [recentSignups, setRecentSignups] = useState<any[]>([]);
@@ -100,13 +100,7 @@ const AdminDashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors mr-1"
-              title="Toggle Theme"
-            >
-              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="mr-1"><ThemeToggle /></div>
             <button 
               onClick={() => fetchDashboardData(true)}
               className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors group"

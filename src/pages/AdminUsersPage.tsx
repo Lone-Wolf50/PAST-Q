@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Search, Ban, CheckCircle2, UserX, Menu, Filter, User as UserIcon, Trash2, RotateCw, Sun, Moon } from 'lucide-react';
+import { Search, Ban, CheckCircle2, UserX, Menu, Filter, User as UserIcon, Trash2, RotateCw } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
 import { clsx } from 'clsx';
-import { useTheme } from '../context/ThemeContext';
+
+import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
 
 const AdminUsersPage = () => {
-  const { theme, toggleTheme } = useTheme();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,13 +139,7 @@ const AdminUsersPage = () => {
             <h1 className="text-lg font-bold text-theme-primary">User Management</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors mr-1"
-              title="Toggle Theme"
-            >
-              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="mr-1"><ThemeToggle /></div>
             <button 
               onClick={() => fetchUsers()} 
               className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors group"

@@ -1,14 +1,13 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FileText, Sparkles, User, Tag, BrainCircuit, Sun, Moon } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { Home, FileText, Sparkles, User, Tag, BrainCircuit } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { clsx } from 'clsx';
 import { Fragment } from 'react';
+import { ThemeToggle } from './ui/ThemeToggle';
 
 const Navbar = () => {
   const location = useLocation();
   const { isLoggedIn, user } = useAuth();
-  const { theme, toggleTheme } = useTheme();
 
   const desktopNavLinks = [
     { name: 'Home', path: '/', icon: Home },
@@ -86,17 +85,7 @@ const Navbar = () => {
         <div className="flex items-center gap-3">
           {isLoggedIn ? (
             <>
-              <button
-                onClick={toggleTheme}
-                className="relative flex items-center justify-center w-10 h-10 rounded-xl backdrop-blur-md bg-theme-surface/50 border border-theme-border/50 hover:bg-theme-surface-2/60 transition-all duration-300 shadow-[0_4px_12px_rgba(0,0,0,0.05)] group"
-              >
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                {theme === 'dark' ? (
-                  <Sun className="w-5 h-5 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)] z-10" />
-                ) : (
-                  <Moon className="w-5 h-5 text-indigo-600 drop-shadow-[0_0_8px_rgba(79,70,229,0.5)] z-10" />
-                )}
-              </button>
+              <ThemeToggle />
               <Link
                 to="/profile"
                 className="hidden md:flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-theme-surface border border-theme-border hover:bg-theme-surface-2 transition-colors"
@@ -115,17 +104,7 @@ const Navbar = () => {
             </>
           ) : (
             <div className="flex items-center gap-2 md:gap-4">
-              <button
-                onClick={toggleTheme}
-                className="relative flex items-center justify-center w-10 h-10 rounded-xl backdrop-blur-md bg-theme-surface/50 border border-theme-border/50 hover:bg-theme-surface-2/60 transition-all duration-300 shadow-[0_4px_12px_rgba(0,0,0,0.05)] group"
-              >
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                {theme === 'dark' ? (
-                  <Sun className="w-5 h-5 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)] z-10" />
-                ) : (
-                  <Moon className="w-5 h-5 text-indigo-600 drop-shadow-[0_0_8px_rgba(79,70,229,0.5)] z-10" />
-                )}
-              </button>
+              <div className="hidden md:block"><ThemeToggle /></div>
               <Link to="/login" className="hidden md:block px-4 py-2 text-sm font-medium text-theme-secondary hover:text-theme-primary transition-colors">
                 Log in
               </Link>
