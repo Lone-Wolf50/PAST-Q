@@ -11,7 +11,7 @@ const HERO_IMAGES = [
   { url: "/adonyig-school-times-3599175_1920.jpg", title: "Study Smarter", desc: "Collaborate with peers and access the best materials." },
   { url: "/adonyig-school-times-3599176_1920.jpg", title: "Focused Learning", desc: "Master difficult concepts with step-by-step guidance." },
   { url: "/adonyig-school-times-3599182_1920.jpg", title: "Better Results", desc: "Join thousands of successful students." },
-  { url: "/ahmadardity-books-2463779_1920.jpg", title: "Infinite Knowledge", desc: "Explore over 15 years of past examination papers." },
+  { url: "/ahmadardity-books-2463779_1920.jpg", title: "Infinite Knowledge", desc: "Explore over 20 years of past examination papers." },
   { url: "/elasticcomputefarm-library-1147815_1920.jpg", title: "Your Digital Library", desc: "Access resources anytime, anywhere." },
   { url: "/kollinger-books-5211309_1920.jpg", title: "Organized Success", desc: "Everything you need for your exams in one place." },
 ];
@@ -52,7 +52,7 @@ const LandingPage = () => {
 
   return (
     <div className="w-full flex-grow flex flex-col items-center">
-      
+
       {/* Hero Section */}
       <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mt-12 md:mt-20 mb-24 grid lg:grid-cols-2 gap-12 items-center">
         <div className="text-left">
@@ -60,16 +60,16 @@ const LandingPage = () => {
             <SparklesIcon className="w-4 h-4 text-indigo-400" />
             <span>The ultimate study companion for university students</span>
           </div>
-          
+
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-theme-primary mb-6 leading-[1.1] min-h-[160px] sm:min-h-[180px] md:min-h-[220px]">
             Find your next <br />
             <span className="gradient-text transition-all duration-500 inline-block">
               {CAROUSEL_WORDS[wordIndex]}
             </span>
           </h1>
-          
+
           <p className="text-lg text-theme-muted mb-8 max-w-lg leading-relaxed">
-            Stop guessing what will be on the exam. Access 15 years of past questions, comprehensive answers, and a powerful AI tutor to help you study smarter, not harder.
+            Stop guessing what will be on the exam. Access 20 years of past questions, comprehensive answers, and a powerful AI tutor to help you study smarter, not harder.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 mb-10">
@@ -85,7 +85,7 @@ const LandingPage = () => {
             {[
               { label: `All Departments`, color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
               { label: `${totalPapers > 0 ? totalPapers.toLocaleString() : '1,500+'} Papers`, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-              { label: '15 Years', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+              { label: '20 Years', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
             ].map((stat) => (
               <div key={stat.label} className={clsx("flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold border", stat.color)}>
                 <div className="w-2 h-2 rounded-full bg-current opacity-80" />
@@ -99,10 +99,10 @@ const LandingPage = () => {
           <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 rounded-3xl blur-3xl transform -rotate-6"></div>
           <div className="absolute inset-0 bg-theme-surface border border-theme-border rounded-2xl shadow-2xl overflow-hidden transform rotate-2 hover:rotate-0 transition-transform duration-700">
             {HERO_IMAGES.map((img, idx) => (
-              <img 
+              <img
                 key={img.url}
-                src={img.url} 
-                alt={img.title} 
+                src={img.url}
+                alt={img.title}
                 className={clsx(
                   "absolute inset-0 w-full h-full object-cover transition-opacity duration-1000",
                   idx === imageIndex ? "opacity-100" : "opacity-0"
@@ -124,8 +124,8 @@ const LandingPage = () => {
               </p>
               <div className="flex gap-1.5 mt-4">
                 {HERO_IMAGES.map((_, idx) => (
-                  <div 
-                    key={idx} 
+                  <div
+                    key={idx}
                     className={clsx(
                       "h-1 rounded-full transition-all duration-300",
                       idx === imageIndex ? "w-6 bg-indigo-400" : "w-1.5 bg-white/30"
@@ -175,7 +175,7 @@ const LandingPage = () => {
             <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 mb-6">
               <Layout className="w-8 h-8 text-emerald-400" />
             </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-theme-primary mb-4">15 Years of Academic <br />Excellence in One Place.</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-theme-primary mb-4">20 Years of Academic <br />Excellence in One Place.</h2>
             <p className="text-theme-muted text-lg mb-8 leading-relaxed">
               We've digitized and organized a decade and a half of examination materials across all major departments. No more hunting through dusty files or broken links.
             </p>
@@ -194,39 +194,39 @@ const LandingPage = () => {
             </div>
           </div>
           <div className="order-1 lg:order-2 relative w-full h-[300px] md:h-[450px] rounded-2xl overflow-hidden border border-theme-border shadow-2xl">
-             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-emerald-500/20 blur-2xl" />
-             <div className="relative h-full w-full p-8 flex items-center justify-center">
-                <div className="grid grid-cols-2 gap-4 w-full">
-                   <div className="aspect-square relative rounded-2xl border border-indigo-500/20 overflow-hidden group hover:scale-[1.02] transition-transform duration-500">
-                      <img src="/this_is_engineering-team-8499960_1920.jpg" alt="Verified" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                      <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-indigo-900/40">
-                         <ShieldCheck className="w-10 h-10 text-indigo-400 mb-2" />
-                         <p className="text-[10px] uppercase tracking-widest font-bold text-indigo-100">Verified</p>
-                      </div>
-                   </div>
-                   <div className="aspect-square relative rounded-2xl border border-emerald-500/20 overflow-hidden translate-y-8 group hover:scale-[1.02] transition-transform duration-500">
-                      <img src="/ahmadardity-books-2463779_1920.jpg" alt="Organized" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                      <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-emerald-900/40">
-                         <Layout className="w-10 h-10 text-emerald-400 mb-2" />
-                         <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-100">Organized</p>
-                      </div>
-                   </div>
-                   <div className="aspect-square relative rounded-2xl border border-amber-500/20 overflow-hidden group hover:scale-[1.02] transition-transform duration-500">
-                      <img src="/poison_ivy-painting-1673774_1920.jpg" alt="Curated" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                      <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-amber-900/40">
-                         <Sparkles className="w-10 h-10 text-amber-400 mb-2" />
-                         <p className="text-[10px] uppercase tracking-widest font-bold text-amber-100">Curated</p>
-                      </div>
-                   </div>
-                   <div className="aspect-square relative rounded-2xl border border-purple-500/20 overflow-hidden translate-y-8 group hover:scale-[1.02] transition-transform duration-500">
-                      <img src="/xpresshealth-nursing-agency-ireland-9866597_1920.jpg" alt="Instant" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                      <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-purple-900/40">
-                         <Zap className="w-10 h-10 text-purple-400 mb-2" />
-                         <p className="text-[10px] uppercase tracking-widest font-bold text-purple-100">Instant</p>
-                      </div>
-                   </div>
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-emerald-500/20 blur-2xl" />
+            <div className="relative h-full w-full p-8 flex items-center justify-center">
+              <div className="grid grid-cols-2 gap-4 w-full">
+                <div className="aspect-square relative rounded-2xl border border-indigo-500/20 overflow-hidden group hover:scale-[1.02] transition-transform duration-500">
+                  <img src="/this_is_engineering-team-8499960_1920.jpg" alt="Verified" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                  <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-indigo-900/40">
+                    <ShieldCheck className="w-10 h-10 text-indigo-400 mb-2" />
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-indigo-100">Verified</p>
+                  </div>
                 </div>
-             </div>
+                <div className="aspect-square relative rounded-2xl border border-emerald-500/20 overflow-hidden translate-y-8 group hover:scale-[1.02] transition-transform duration-500">
+                  <img src="/ahmadardity-books-2463779_1920.jpg" alt="Organized" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                  <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-emerald-900/40">
+                    <Layout className="w-10 h-10 text-emerald-400 mb-2" />
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-100">Organized</p>
+                  </div>
+                </div>
+                <div className="aspect-square relative rounded-2xl border border-amber-500/20 overflow-hidden group hover:scale-[1.02] transition-transform duration-500">
+                  <img src="/poison_ivy-painting-1673774_1920.jpg" alt="Curated" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                  <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-amber-900/40">
+                    <Sparkles className="w-10 h-10 text-amber-400 mb-2" />
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-amber-100">Curated</p>
+                  </div>
+                </div>
+                <div className="aspect-square relative rounded-2xl border border-purple-500/20 overflow-hidden translate-y-8 group hover:scale-[1.02] transition-transform duration-500">
+                  <img src="/xpresshealth-nursing-agency-ireland-9866597_1920.jpg" alt="Instant" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                  <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-purple-900/40">
+                    <Zap className="w-10 h-10 text-purple-400 mb-2" />
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-purple-100">Instant</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -235,19 +235,19 @@ const LandingPage = () => {
       {!isLoggedIn && (
         <section className="w-full px-4 md:px-8 max-w-5xl mx-auto mb-32">
           <div className="glass-card p-12 text-center border-indigo-500/20 relative overflow-hidden">
-             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
-             <h2 className="text-3xl md:text-5xl font-bold text-theme-primary mb-6">Ready to ace your exams?</h2>
-             <p className="text-theme-muted text-lg mb-10 max-w-2xl mx-auto">
-               Join thousands of students who are already using PastQ to simplify their studies and achieve better results.
-             </p>
-             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link to="/register" className="w-full sm:w-auto px-10 py-4 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)]">
-                   Create Free Account
-                </Link>
-                <Link to="/papers" className="w-full sm:w-auto px-10 py-4 rounded-full bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all">
-                   Explore Papers <ArrowRight className="w-4 h-4 inline-block ml-2" />
-                </Link>
-             </div>
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
+            <h2 className="text-3xl md:text-5xl font-bold text-theme-primary mb-6">Ready to ace your exams?</h2>
+            <p className="text-theme-muted text-lg mb-10 max-w-2xl mx-auto">
+              Join thousands of students who are already using PastQ to simplify their studies and achieve better results.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link to="/register" className="w-full sm:w-auto px-10 py-4 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+                Create Free Account
+              </Link>
+              <Link to="/papers" className="w-full sm:w-auto px-10 py-4 rounded-full bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all">
+                Explore Papers <ArrowRight className="w-4 h-4 inline-block ml-2" />
+              </Link>
+            </div>
           </div>
         </section>
       )}
