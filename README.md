@@ -21,6 +21,17 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 - **Session Management**: Persistent chat histories that allow students to resume their tutoring sessions across different papers.
 - **Premium Tiers**: Role-based access control for Basic, Plus, and Pro subscription plans.
 
+### 📱 Progressive Web App (PWA)
+- **Installable**: Users can install the platform directly to their device home screens for a native app-like experience.
+- **Smart Prompts**: Intelligent installation prompts that gracefully hide themselves once the app is installed or dismissed.
+- **Adaptive Icons**: Fully optimized maskable icons for Android and iOS.
+
+### 🔒 Advanced Security & Session Management
+- **Single-Device Login**: Strict concurrent session control. If a user logs into a new device, any older active sessions are instantly invalidated and the user is presented with a professional expiry notification.
+- **Smart Storage**: 
+  - *Browser Users*: Temporary session storage that automatically logs out on exit for shared computers.
+  - *App/PWA Users*: Persistent local storage featuring a rolling 7-day authentication window for uninterrupted daily study sessions.
+
 ### 🛡️ Admin HQ Portal
 - **Centralized Management**: Full control over papers, subjects, and student records.
 - **AI Health Monitoring**: Real-time status indicators for API quota and processing status.
