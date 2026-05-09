@@ -24,12 +24,12 @@ const PLANS = [
   {
     name: 'Basic',
     price: '10',
-    duration: 'week',
+    duration: 'month',
     description: 'Essential tools for active students.',
     features: [
       { text: 'Unlimited viewing', included: true },
       { text: '20 PDF downloads / cycle', included: true },
-      { text: '10 AI queries / week', included: true },
+      { text: '10 AI queries / month', included: true },
       { text: 'Upload up to 5 files', included: true },
       { text: 'No AI history tracking', included: false },
       { text: 'Standard AI Tutor', included: true }
