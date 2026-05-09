@@ -126,40 +126,36 @@ const PapersPage = () => {
           <p className="text-theme-muted">Find and download past questions to boost your preparation.</p>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="relative flex-grow md:flex-grow-0">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
             <input 
               type="text" 
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-              placeholder="Search by subject code or name..." 
-              className="w-full md:w-64 bg-theme-surface border border-theme-border rounded-full py-2 pl-9 pr-4 text-sm text-theme-primary placeholder-gray-500 focus:outline-none focus:border-indigo-400/50 transition-colors"
+              placeholder="Search papers..." 
+              className="w-full bg-theme-surface border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary placeholder-gray-500 focus:outline-none focus:border-indigo-400/50 transition-all shadow-sm"
             />
           </div>
-          <div className="flex gap-2">
-            <div className="relative">
-              <select
-                value={selectedYear}
-                onChange={(e) => { setSelectedYear(e.target.value); setPage(1); }}
-                className="theme-select text-sm py-2 px-3"
-              >
-                <option value="">All Years</option>
-                {years.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <select
+              value={selectedYear}
+              onChange={(e) => { setSelectedYear(e.target.value); setPage(1); }}
+              className="theme-select text-[11px] font-bold uppercase tracking-tight py-2.5 px-3 flex-1 sm:flex-none min-w-[90px]"
+            >
+              <option value="">All Years</option>
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
             
-            <div className="relative">
-              <select
-                value={selectedSemester}
-                onChange={(e) => { setSelectedSemester(e.target.value); setPage(1); }}
-                className="theme-select text-sm py-2 px-3"
-              >
-                <option value="">All Semesters</option>
-                <option value="First">First Semester</option>
-                <option value="Second">Second Semester</option>
-              </select>
-            </div>
+            <select
+              value={selectedSemester}
+              onChange={(e) => { setSelectedSemester(e.target.value); setPage(1); }}
+              className="theme-select text-[11px] font-bold uppercase tracking-tight py-2.5 px-3 flex-1 sm:flex-none min-w-[110px]"
+            >
+              <option value="">Semesters</option>
+              <option value="First">First</option>
+              <option value="Second">Second</option>
+            </select>
           </div>
         </div>
       </div>
@@ -168,30 +164,30 @@ const PapersPage = () => {
         <button 
           onClick={() => { setSelectedDepartment(null); setPage(1); }}
           className={clsx(
-            "px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border snap-center shrink-0",
+            "px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0",
             selectedDepartment === null 
               ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent shadow-lg shadow-indigo-500/30 scale-105" 
-              : "bg-theme-surface text-theme-muted border-theme-border hover:bg-theme-surface-2 hover:text-white"
+              : "bg-theme-surface text-theme-muted border-theme-border hover:text-indigo-400"
           )}
         >
           All Subjects
         </button>
         {[
-          { name: "IT", gradient: "from-cyan-500 to-blue-500", shadow: "shadow-blue-500/30" },
-          { name: "Accounting", gradient: "from-emerald-500 to-teal-500", shadow: "shadow-emerald-500/30" },
-          { name: "Marketing", gradient: "from-fuchsia-500 to-pink-500", shadow: "shadow-pink-500/30" },
-          { name: "Business Admin", gradient: "from-violet-500 to-purple-500", shadow: "shadow-purple-500/30" },
-          { name: "Logistics", gradient: "from-amber-500 to-orange-500", shadow: "shadow-orange-500/30" },
-          { name: "PR", gradient: "from-rose-500 to-red-500", shadow: "shadow-red-500/30" }
+          { name: "IT", color: "text-blue-400", bg: "bg-blue-500/5", border: "border-blue-500/20", gradient: "from-cyan-500 to-blue-500", shadow: "shadow-blue-500/30" },
+          { name: "Accounting", color: "text-emerald-400", bg: "bg-emerald-500/5", border: "border-emerald-500/20", gradient: "from-emerald-500 to-teal-500", shadow: "shadow-emerald-500/30" },
+          { name: "Marketing", color: "text-fuchsia-400", bg: "bg-fuchsia-500/5", border: "border-fuchsia-500/20", gradient: "from-fuchsia-500 to-pink-500", shadow: "shadow-pink-500/30" },
+          { name: "Business Admin", color: "text-violet-400", bg: "bg-violet-500/5", border: "border-violet-500/20", gradient: "from-violet-500 to-purple-500", shadow: "shadow-purple-500/30" },
+          { name: "Logistics", color: "text-amber-400", bg: "bg-amber-500/5", border: "border-amber-500/20", gradient: "from-amber-500 to-orange-500", shadow: "shadow-orange-500/30" },
+          { name: "PR", color: "text-rose-400", bg: "bg-rose-500/5", border: "border-rose-500/20", gradient: "from-rose-500 to-red-500", shadow: "shadow-red-500/30" }
         ].map(dept => (
           <button 
             key={dept.name}
             onClick={() => { setSelectedDepartment(dept.name); setPage(1); }}
             className={clsx(
-              "px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border snap-center shrink-0 relative overflow-hidden group",
+              "px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0 relative overflow-hidden group",
               selectedDepartment === dept.name 
                 ? `bg-gradient-to-r ${dept.gradient} text-white border-transparent shadow-lg ${dept.shadow} scale-105` 
-                : "bg-theme-surface text-theme-secondary border-theme-border hover:border-transparent"
+                : `${dept.bg} ${dept.color} ${dept.border} hover:border-transparent`
             )}
           >
             {selectedDepartment !== dept.name && (
