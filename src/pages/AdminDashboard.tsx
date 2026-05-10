@@ -67,7 +67,7 @@ const AdminDashboard = () => {
       setGlobalAiBlock(newState); // optimistic
       await apiFetch('/hq-management/ai-config', {
         method: 'POST',
-        token,
+        token: token ?? undefined,
         body: { globalAiBlock: newState }
       });
     } catch (err) {
@@ -83,7 +83,7 @@ const AdminDashboard = () => {
       setGlobalBannerActive(isActive);
       await apiFetch('/hq-management/ai-config', {
         method: 'POST',
-        token,
+        token: token ?? undefined,
         body: { globalBanner, globalBannerActive: isActive }
       });
       setTimeout(() => setIsBannerSaving(false), 2000);
