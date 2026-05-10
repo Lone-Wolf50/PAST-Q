@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, BookOpen, Download, Eye } from 'lucide-react';
+import { Search, BookOpen, Download, Eye, Star, Flame, FileCheck } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useLocation, Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
@@ -11,22 +11,45 @@ interface Paper {
   year: string;
   semester: string;
   has_answers?: boolean;
+  answer_url?: string;
   upsa_subjects?: { name: string; code: string };
 }
 
 const PapersPage = () => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [selectedSemester, setSelectedSemester] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSaved, setShowSaved] = useState(false);
   const [page, setPage] = useState(1);
-  const itemsPerPage = 12;
-  
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) { // lg
+        setItemsPerPage(20); // 4 x 5
+      } else if (window.innerWidth >= 768) { // md
+        setItemsPerPage(10); // 2 x 5
+      } else {
+        setItemsPerPage(5); // 1 x 5
+      }
+    };
+    
+    handleResize(); // Initial call
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [papers, setPapers] = useState<Paper[]>([]);
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const [bookmarkLoading, setBookmarkLoading] = useState<string | null>(null);
   const [years, setYears] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [streak, setStreak] = useState<number>(0);
+
+  const isPremium = ['basic', 'plus', 'pro'].includes(user?.plan?.toLowerCase() || '');
 
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
@@ -55,32 +78,45 @@ const PapersPage = () => {
         setLoading(false);
       }
     };
-    
+
     if (token) {
       fetchData();
     }
   }, [token]);
 
-  const filteredPapers = papers.filter(p => {
-    if (selectedSubject && p.upsa_subjects?.name?.toLowerCase() !== selectedSubject.toLowerCase()) return false;
-    if (selectedDepartment && selectedDepartment !== 'All Subjects') {
-      // For now, departments are universal, but you can add specific filtering logic here if needed
+  // Load bookmark IDs for premium users
+  useEffect(() => {
+    if (!token || !isPremium) return;
+    apiFetch('/papers/bookmarks/ids', { token: token! })
+      .then(res => setBookmarkedIds(new Set(res.ids || [])))
+      .catch(() => {});
+  }, [token, isPremium]);
+
+  // Load streak from session storage (set by AuthContext ping)
+  useEffect(() => {
+    const stored = sessionStorage.getItem('streak_count');
+    if (stored) setStreak(parseInt(stored, 10));
+  }, []);
+
+  const handleToggleBookmark = async (e: React.MouseEvent, paperId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isPremium || bookmarkLoading) return;
+    setBookmarkLoading(paperId);
+    try {
+      const res = await apiFetch(`/papers/${paperId}/bookmark`, { method: 'POST', token: token! });
+      setBookmarkedIds(prev => {
+        const next = new Set(prev);
+        if (res.bookmarked) next.add(paperId);
+        else next.delete(paperId);
+        return next;
+      });
+    } catch {
+      // silently fail
+    } finally {
+      setBookmarkLoading(null);
     }
-    if (selectedYear && p.year !== selectedYear) return false;
-    if (selectedSemester && p.semester !== selectedSemester) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const title = p.title?.toLowerCase() || '';
-      const subjName = p.upsa_subjects?.name?.toLowerCase() || '';
-      const subjCode = p.upsa_subjects?.code?.toLowerCase() || '';
-      if (!title.includes(q) && !subjName.includes(q) && !subjCode.includes(q)) {
-        return false;
-      }
-    }
-    return true;
-  });
-  
-  const displayedPapers = filteredPapers.slice(0, page * itemsPerPage);
+  };
 
   const handleDownload = async (paperId: string, action: 'view' | 'download') => {
     try {
@@ -96,10 +132,8 @@ const PapersPage = () => {
       
       if (res.file_url) {
         if (action === 'view') {
-          // Clean the URL if needed, or just open
           window.open(res.file_url.split('?')[0], '_blank');
         } else {
-          // Create a temporary link to trigger download
           const link = document.createElement('a');
           link.href = res.file_url;
           link.download = '';
@@ -118,30 +152,70 @@ const PapersPage = () => {
     }
   };
 
+  const filteredPapers = papers.filter(p => {
+    // Saved tab filter
+    if (showSaved && !bookmarkedIds.has(p.id)) return false;
+
+    if (selectedSubject && p.upsa_subjects?.name?.toLowerCase() !== selectedSubject.toLowerCase()) return false;
+    if (selectedDepartment && selectedDepartment !== 'All Subjects') {
+      // placeholder for department-level filtering
+    }
+    if (selectedYear && p.year !== selectedYear) return false;
+    if (selectedSemester && p.semester !== selectedSemester) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const title = p.title?.toLowerCase() || '';
+      const subjName = p.upsa_subjects?.name?.toLowerCase() || '';
+      const subjCode = p.upsa_subjects?.code?.toLowerCase() || '';
+      if (!title.includes(q) && !subjName.includes(q) && !subjCode.includes(q)) {
+        return false;
+      }
+    }
+    return true;
+  });
+  
+  const displayedPapers = filteredPapers.slice(0, page * itemsPerPage);
+
   return (
     <div className="w-full flex-grow flex flex-col px-4 md:px-8 max-w-7xl mx-auto py-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-theme-primary mb-2">Browse Papers</h1>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-3xl md:text-4xl font-bold text-theme-primary">Browse Papers</h1>
+            {/* Streak Badge */}
+            {streak > 0 && (
+              <div className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black border transition-all',
+                streak >= 7
+                  ? 'bg-orange-500/15 border-orange-500/30 text-orange-400'
+                  : streak >= 3
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                  : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
+              )}>
+                <Flame className="w-3.5 h-3.5" />
+                {streak} Day{streak !== 1 ? 's' : ''} Streak
+              </div>
+            )}
+          </div>
           <p className="text-theme-muted">Find and download past questions to boost your preparation.</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          <div className="relative w-full sm:w-64">
+        <div className="flex flex-col sm:flex-row flex-nowrap sm:flex-wrap items-start sm:items-center gap-3 w-full md:w-auto">
+          <div className="relative w-full sm:w-64 lg:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
             <input 
               type="text" 
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); setShowSaved(false); }}
               placeholder="Search papers..." 
               className="w-full bg-theme-surface border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary placeholder-gray-500 focus:outline-none focus:border-indigo-400/50 transition-all shadow-sm"
             />
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex flex-nowrap gap-2 w-full sm:w-auto">
             <select
               value={selectedYear}
               onChange={(e) => { setSelectedYear(e.target.value); setPage(1); }}
-              className="theme-select text-[11px] font-bold uppercase tracking-tight py-2.5 px-3 flex-1 sm:flex-none min-w-[90px]"
+              className="theme-select text-[11px] font-bold uppercase tracking-tight py-2.5 px-3 flex-1 sm:flex-none w-1/2 sm:w-[100px]"
             >
               <option value="">All Years</option>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
@@ -150,7 +224,7 @@ const PapersPage = () => {
             <select
               value={selectedSemester}
               onChange={(e) => { setSelectedSemester(e.target.value); setPage(1); }}
-              className="theme-select text-[11px] font-bold uppercase tracking-tight py-2.5 px-3 flex-1 sm:flex-none min-w-[110px]"
+              className="theme-select text-[11px] font-bold uppercase tracking-tight py-2.5 px-3 flex-1 sm:flex-none w-1/2 sm:w-[100px]"
             >
               <option value="">Semesters</option>
               <option value="First">First</option>
@@ -160,12 +234,44 @@ const PapersPage = () => {
         </div>
       </div>
 
+      {/* Department / Saved Tabs */}
       <div className="flex gap-3 overflow-x-auto pb-6 mb-8 scrollbar-hide snap-x -mx-4 px-4 md:mx-0 md:px-0 w-[calc(100%+2rem)] md:w-full">
+        {/* ⭐ Saved Tab */}
+        {isPremium ? (
+          <button 
+            onClick={() => { setShowSaved(s => !s); setSelectedDepartment(null); setPage(1); }}
+            className={clsx(
+              "px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0 flex items-center gap-1.5",
+              showSaved
+                ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-lg shadow-amber-500/30 scale-105" 
+                : "bg-theme-surface text-amber-400 border-amber-500/20 hover:border-amber-500/40"
+            )}
+          >
+            <Star className={clsx('w-3 h-3', showSaved && 'fill-white')} />
+            Saved
+          </button>
+        ) : (
+          /* Free users see a locked Saved button */
+          <div className="relative group">
+            <button 
+              className="px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap border border-dashed border-theme-border text-theme-muted/40 flex items-center gap-1.5 cursor-not-allowed snap-center shrink-0"
+            >
+              <Star className="w-3 h-3" />
+              Saved
+              <span className="text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-black ml-1">PRO</span>
+            </button>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-theme-surface border border-theme-border rounded-lg text-[10px] font-bold text-theme-secondary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+              Upgrade to save papers
+            </div>
+          </div>
+        )}
+
+        {/* All Subjects */}
         <button 
-          onClick={() => { setSelectedDepartment(null); setPage(1); }}
+          onClick={() => { setSelectedDepartment(null); setShowSaved(false); setPage(1); }}
           className={clsx(
             "px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0",
-            selectedDepartment === null 
+            selectedDepartment === null && !showSaved
               ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent shadow-lg shadow-indigo-500/30 scale-105" 
               : "bg-theme-surface text-theme-muted border-theme-border hover:text-indigo-400"
           )}
@@ -184,10 +290,10 @@ const PapersPage = () => {
         ].map(dept => (
           <button 
             key={dept.name}
-            onClick={() => { setSelectedDepartment(dept.name); setPage(1); }}
+            onClick={() => { setSelectedDepartment(dept.name); setShowSaved(false); setPage(1); }}
             className={clsx(
               "px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0 relative overflow-hidden group",
-              selectedDepartment === dept.name 
+              selectedDepartment === dept.name && !showSaved
                 ? `bg-gradient-to-r ${dept.gradient} text-white border-transparent shadow-lg ${dept.shadow} scale-105` 
                 : `${dept.bg} ${dept.color} ${dept.border} hover:border-transparent`
             )}
@@ -207,10 +313,22 @@ const PapersPage = () => {
       ) : (
       <>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+      {/* Saved empty state */}
+      {showSaved && filteredPapers.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+          <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400 border border-amber-500/20">
+            <Star size={28} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-theme-primary mb-1">No Saved Papers Yet</h3>
+            <p className="text-sm text-theme-muted max-w-xs mx-auto">Star any paper by clicking the ★ icon on the card to save it here for quick access.</p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         {displayedPapers.map((paper, index) => {
           const isAnswers = paper.has_answers;
-          // Assign a pseudo-random gradient based on index so it looks colorful and premium
           const gradients = [
             "from-indigo-500 via-purple-500 to-pink-500",
             "from-cyan-500 via-blue-500 to-indigo-500",
@@ -219,6 +337,7 @@ const PapersPage = () => {
             "from-fuchsia-500 via-pink-500 to-rose-500"
           ];
           const gradient = gradients[index % gradients.length];
+          const isStarred = bookmarkedIds.has(paper.id);
           
           return (
           <div key={paper.id} className="glass-card p-6 group flex flex-col hover:translate-y-[-6px] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_20px_rgba(99,102,241,0.2)] transition-all duration-500 border-theme-border/50 relative overflow-hidden bg-gradient-to-b from-theme-surface to-theme-surface-2">
@@ -244,12 +363,34 @@ const PapersPage = () => {
                   <span className="text-[10px] text-theme-muted font-bold tracking-tighter uppercase">Academic Year</span>
                 </div>
               </div>
-              {isAnswers && (
-                <div className="flex items-center gap-1 text-[9px] font-black text-white bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded-md shadow-lg shadow-emerald-500/20 transform group-hover:scale-105 transition-transform uppercase tracking-tighter">
-                  <div className="w-1 h-1 rounded-full bg-white animate-pulse" />
-                  ANSWERS
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {isAnswers && (
+                  <div className="flex items-center gap-1 text-[9px] font-black text-white bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded-md shadow-lg shadow-emerald-500/20 transform group-hover:scale-105 transition-transform uppercase tracking-tighter">
+                    <div className="w-1 h-1 rounded-full bg-white animate-pulse" />
+                    ANSWERS
+                  </div>
+                )}
+                {/* Bookmark Star */}
+                {isPremium ? (
+                  <button
+                    onClick={(e) => handleToggleBookmark(e, paper.id)}
+                    disabled={bookmarkLoading === paper.id}
+                    className={clsx(
+                      'w-8 h-8 flex items-center justify-center rounded-lg border transition-all',
+                      isStarred
+                        ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+                        : 'bg-theme-surface border-theme-border text-theme-muted hover:text-amber-400 hover:border-amber-500/30 opacity-100 lg:opacity-0 lg:group-hover:opacity-100'
+                    )}
+                    title={isStarred ? 'Remove bookmark' : 'Save this paper'}
+                  >
+                    <Star className={clsx('w-4 h-4', isStarred && 'fill-amber-400')} strokeWidth={2.5} />
+                  </button>
+                ) : (
+                  <div className="w-8 h-8 flex items-center justify-center rounded-lg border border-dashed border-theme-border/40 text-theme-muted/30 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity cursor-not-allowed" title="Upgrade to save papers">
+                    <Star className="w-4 h-4" strokeWidth={2.5} />
+                  </div>
+                )}
+              </div>
             </div>
             
             <div className="relative z-10 mb-6 flex-grow">
@@ -260,7 +401,7 @@ const PapersPage = () => {
                 {paper.upsa_subjects?.code || 'GEN 000'}
               </div>
             </div>
-    
+  
             <div className="mt-auto pt-5 border-t border-theme-border/30 flex items-center justify-between relative z-10">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-theme-surface border border-theme-border flex items-center justify-center">
@@ -269,6 +410,17 @@ const PapersPage = () => {
                 <span className="text-[10px] font-bold text-theme-muted uppercase tracking-tight">{paper.semester} Semester</span>
               </div>
               <div className="flex gap-2">
+                {paper.has_answers && paper.answer_url && (
+                  <a
+                    href={paper.answer_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 hover:text-white hover:bg-emerald-500 transition-all shadow-sm hover:shadow-md"
+                    title="View Answer Key"
+                  >
+                    <FileCheck className="w-5 h-5" />
+                  </a>
+                )}
                 <Link 
                   to={`/papers/${paper.id}`}
                   className="w-10 h-10 flex items-center justify-center rounded-xl bg-theme-surface border border-theme-border text-theme-secondary hover:text-indigo-400 hover:border-indigo-500/30 transition-all shadow-sm hover:shadow-md"
@@ -308,4 +460,3 @@ const PapersPage = () => {
 };
 
 export default PapersPage;
-

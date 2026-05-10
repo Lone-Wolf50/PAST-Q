@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 import { Link } from 'react-router-dom';
 import { Users, FileText, TrendingUp, UserMinus, Menu, Bell, Search, RotateCw } from 'lucide-react';
@@ -18,29 +18,39 @@ const AdminDashboard = () => {
   const [deletions, setDeletions] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [timeRange, setTimeRange] = useState('30d');
-  const [, setLoading] = useState(true);
+  const [globalAiBlock, setGlobalAiBlock] = useState(false);
+  const [globalBanner, setGlobalBanner] = useState('');
+  const [globalBannerActive, setGlobalBannerActive] = useState(false);
+  const [isBannerSaving, setIsBannerSaving] = useState(false);
+  const hasLoadedBanner = React.useRef(false);
 
-  const fetchDashboardData = async (manual = false) => {
+  const fetchDashboardData = async () => {
     try {
-      if (manual) setLoading(true);
       const token = localStorage.getItem('admin_token');
       if (!token) return;
 
-      const [statsData, usersData, deletionsData, notifData] = await Promise.all([
+      const [statsData, usersData, deletionsData, notifData, aiConfigData] = await Promise.all([
         apiFetch(`/hq-management/stats?range=${timeRange}`, { token }),
         apiFetch('/hq-management/users', { token }),
         apiFetch('/hq-management/deletions', { token }),
-        apiFetch('/hq-management/notifications', { token })
+        apiFetch('/hq-management/notifications', { token }),
+        apiFetch('/hq-management/ai-config', { token })
       ]);
 
       setStats(statsData);
       setRecentSignups((usersData.users || []).slice(0, 5));
       setDeletions(deletionsData.deletions || []);
       setNotifications(notifData.notifications || []);
+      if (aiConfigData) {
+        setGlobalAiBlock(aiConfigData.globalAiBlock || false);
+        setGlobalBannerActive(aiConfigData.globalBannerActive || false);
+        if (!hasLoadedBanner.current) {
+          setGlobalBanner(aiConfigData.globalBanner || '');
+          hasLoadedBanner.current = true;
+        }
+      }
     } catch (err: any) {
       console.error('Failed to load dashboard data:', err?.message || 'Unknown error');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -49,6 +59,40 @@ const AdminDashboard = () => {
     const interval = setInterval(() => fetchDashboardData(), 30000); // refresh every 30s
     return () => clearInterval(interval);
   }, [timeRange]);
+
+  const toggleGlobalAi = async () => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      const newState = !globalAiBlock;
+      setGlobalAiBlock(newState); // optimistic
+      await apiFetch('/hq-management/ai-config', {
+        method: 'POST',
+        token,
+        body: { globalAiBlock: newState }
+      });
+    } catch (err) {
+      console.error('Failed to toggle global AI block:', err);
+      setGlobalAiBlock(!globalAiBlock); // revert on error
+    }
+  };
+
+  const saveGlobalBanner = async (isActive: boolean) => {
+    try {
+      setIsBannerSaving(true);
+      const token = localStorage.getItem('admin_token');
+      setGlobalBannerActive(isActive);
+      await apiFetch('/hq-management/ai-config', {
+        method: 'POST',
+        token,
+        body: { globalBanner, globalBannerActive: isActive }
+      });
+      setTimeout(() => setIsBannerSaving(false), 2000);
+    } catch (err) {
+      console.error('Failed to save global banner:', err);
+      setGlobalBannerActive(!isActive); // revert
+      setIsBannerSaving(false);
+    }
+  };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -98,11 +142,27 @@ const AdminDashboard = () => {
               <h1 className="text-lg md:text-xl font-bold text-theme-primary">Dashboard Overview</h1>
               <p className="text-xs text-theme-muted hidden md:block">Welcome back, Admin.</p>
             </div>
+            
+            {/* Global AI Toggle */}
+            <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-theme-surface border border-theme-border rounded-xl ml-4 shadow-sm">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-theme-primary">Global AI Status</span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${globalAiBlock ? 'text-rose-500' : 'text-emerald-500'}`}>
+                  {globalAiBlock ? 'Offline (Blocked)' : 'Online (Active)'}
+                </span>
+              </div>
+              <button
+                onClick={toggleGlobalAi}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-theme-base ${globalAiBlock ? 'bg-theme-surface-2 border border-theme-border' : 'bg-emerald-500'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${globalAiBlock ? 'translate-x-1 shadow-sm' : 'translate-x-6'}`} />
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="mr-1"><ThemeToggle /></div>
             <button 
-              onClick={() => fetchDashboardData(true)}
+              onClick={() => fetchDashboardData()}
               className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors group"
               title="Refresh Data"
             >
@@ -126,6 +186,47 @@ const AdminDashboard = () => {
         </header>
 
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+          
+          {/* Global Announcement Banner Settings */}
+          <div className="glass-card p-6 border-theme-border mb-8 border-indigo-500/20 bg-indigo-500/5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-theme-primary flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-indigo-400" />
+                  Global Site Announcement
+                </h2>
+                <p className="text-xs text-theme-muted mt-1">This message will be prominently displayed at the top of every page to all students.</p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${globalBannerActive ? 'text-emerald-500' : 'text-theme-muted'}`}>
+                  {globalBannerActive ? 'Active & Visible' : 'Hidden'}
+                </span>
+                <button
+                  onClick={() => saveGlobalBanner(!globalBannerActive)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${globalBannerActive ? 'bg-emerald-500' : 'bg-theme-surface-2 border border-theme-border'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${globalBannerActive ? 'translate-x-6' : 'translate-x-1 shadow-sm'}`} />
+                </button>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <input
+                type="text"
+                placeholder="e.g. 📢 Scheduled maintenance on Sunday at 2 AM..."
+                value={globalBanner}
+                onChange={(e) => setGlobalBanner(e.target.value)}
+                className="flex-1 bg-theme-surface border border-theme-border rounded-xl px-4 py-2 text-sm text-theme-primary focus:border-indigo-500/50 outline-none"
+              />
+              <button
+                onClick={() => saveGlobalBanner(globalBannerActive)}
+                className={`px-6 py-2 text-white text-sm font-bold rounded-xl transition-all shadow-md ${isBannerSaving ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+              >
+                {isBannerSaving ? 'Saved!' : 'Save'}
+              </button>
+            </div>
+          </div>
+
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {STATS_CARDS.map((card, i) => {

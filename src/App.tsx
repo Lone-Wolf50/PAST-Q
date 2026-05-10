@@ -28,6 +28,7 @@ import AdminNotificationsPage from './pages/AdminNotificationsPage';
 import StudentSubscriptionPage from './pages/StudentSubscriptionPage';
 import StudentNotificationsPage from './pages/StudentNotificationsPage';
 import { AlertModal } from './components/ui/AlertModal';
+import { GlobalBanner } from './components/GlobalBanner';
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
@@ -77,6 +78,7 @@ function AppRoutes() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans relative">
+      <GlobalBanner />
       <InstallPrompt />
       <Routes>
         <Route path="/hq-portal/*" element={null} />

@@ -66,6 +66,28 @@ const AdminUsersPage = () => {
     }
   };
 
+  const updateUserPlan = async (id: string, plan: string) => {
+    const previousUsers = [...users];
+    setUsers(users.map(u => u.id === id ? { ...u, plan } : u));
+    
+    try {
+      await apiFetch(`/hq-management/users/${id}/plan`, {
+        method: 'PATCH',
+        body: { plan },
+        token: localStorage.getItem('admin_token')!
+      });
+    } catch (err: any) {
+      console.error(err?.message || err);
+      setUsers(previousUsers); // Rollback
+      setAlert({
+        show: true,
+        title: 'Update Failed',
+        message: `Failed to update user plan: ${err.message || 'Unknown error'}`,
+        variant: 'error'
+      });
+    }
+  };
+
   const toggleAiAccess = async (id: string, enabled: boolean) => {
     const previousUsers = [...users];
     setUsers(users.map(u => u.id === id ? { ...u, ai_enabled: enabled } : u));
@@ -228,14 +250,22 @@ const AdminUsersPage = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={clsx(
-                            "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border",
-                            user.plan === 'pro' ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
-                            user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
-                            "bg-theme-surface text-theme-muted border-theme-border"
-                          )}>
-                            {user.plan}
-                          </span>
+                          <select
+                            value={user.plan}
+                            onChange={(e) => updateUserPlan(user.id, e.target.value)}
+                            className={clsx(
+                              "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border cursor-pointer outline-none transition-colors",
+                              user.plan === 'pro' ? "bg-orange-500/10 text-orange-400 border-orange-500/20 hover:border-orange-500/40" :
+                              user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:border-indigo-500/40" :
+                              user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:border-emerald-500/40" :
+                              "bg-theme-surface text-theme-muted border-theme-border hover:border-theme-primary/20"
+                            )}
+                          >
+                            <option value="free" className="text-theme-primary bg-theme-base">FREE</option>
+                            <option value="basic" className="text-theme-primary bg-theme-base">BASIC</option>
+                            <option value="plus" className="text-theme-primary bg-theme-base">PLUS</option>
+                            <option value="pro" className="text-theme-primary bg-theme-base">PRO</option>
+                          </select>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-1.5">

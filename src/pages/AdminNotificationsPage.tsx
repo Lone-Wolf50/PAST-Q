@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Check, Trash2, Menu } from 'lucide-react';
+import { Bell, Check, Trash2, Menu, Flag } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
 
@@ -77,32 +77,52 @@ const AdminNotificationsPage = () => {
                 <p>No notifications right now.</p>
               </div>
             ) : (
-              notifications.map((notif) => (
-                <div key={notif.id} className={`glass-card p-4 border-white/5 flex items-start gap-4 transition-colors ${!notif.is_read ? 'bg-indigo-500/5 border-indigo-500/20' : ''}`}>
-                  <div className={`p-2 rounded-lg shrink-0 mt-1 ${!notif.is_read ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-gray-400'}`}>
-                    <Bell className="w-5 h-5" />
-                  </div>
-                  <div className="flex-grow">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <h3 className={`font-semibold ${!notif.is_read ? 'text-white' : 'text-gray-300'}`}>{notif.title}</h3>
-                        <p className="text-sm text-theme-muted mt-1">{notif.message}</p>
-                        <p className="text-xs text-theme-muted mt-2">{new Date(notif.created_at).toLocaleString()}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {!notif.is_read && (
-                          <button onClick={() => markAsRead(notif.id)} className="p-1.5 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-emerald-400 transition-colors" title="Mark as read">
-                            <Check className="w-4 h-4" />
+              notifications.map((notif) => {
+                const isReport = notif.type === 'report';
+                return (
+                  <div key={notif.id} className={`glass-card p-4 flex items-start gap-4 transition-colors ${
+                    isReport && !notif.is_read
+                      ? 'bg-red-500/5 border-red-500/20'
+                      : !notif.is_read
+                      ? 'bg-indigo-500/5 border-indigo-500/20'
+                      : 'border-white/5'
+                  }`}>
+                    <div className={`p-2 rounded-lg shrink-0 mt-1 ${
+                      isReport
+                        ? !notif.is_read ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-red-400/50'
+                        : !notif.is_read ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-gray-400'
+                    }`}>
+                      {isReport ? <Flag className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+                    </div>
+                    <div className="flex-grow">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className={`font-semibold ${!notif.is_read ? 'text-white' : 'text-gray-300'}`}>{notif.title}</h3>
+                            {isReport && (
+                              <span className="px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 text-[9px] font-black uppercase tracking-widest border border-red-500/20">
+                                Content Report
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-theme-muted mt-1">{notif.message}</p>
+                          <p className="text-xs text-theme-muted mt-2">{new Date(notif.created_at).toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {!notif.is_read && (
+                            <button onClick={() => markAsRead(notif.id)} className="p-1.5 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-emerald-400 transition-colors" title="Mark as read">
+                              <Check className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button onClick={() => deleteNotification(notif.id)} className="p-1.5 rounded-lg bg-theme-surface hover:bg-red-500/10 text-theme-muted hover:text-red-400 transition-colors" title="Delete">
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                        )}
-                        <button onClick={() => deleteNotification(notif.id)} className="p-1.5 rounded-lg bg-theme-surface hover:bg-red-500/10 text-theme-muted hover:text-red-400 transition-colors" title="Delete">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </main>

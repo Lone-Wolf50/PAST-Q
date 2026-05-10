@@ -269,6 +269,14 @@ router.delete('/me', async (req: AuthRequest, res: Response) => {
     // 3. Perform hard delete
     await supabase.from('upsa_users').delete().eq('id', userId);
 
+    if (user) {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: 'Account Deleted',
+        message: `User ${user.email} (${user.full_name || 'No Name'}) has permanently deleted their account.`,
+        type: 'alert'
+      });
+    }
+
     res.status(200).json({ message: 'Account deleted successfully.' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete account.' });

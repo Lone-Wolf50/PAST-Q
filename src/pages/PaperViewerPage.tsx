@@ -3,12 +3,13 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Download, Sparkles, AlertCircle, 
   BookOpen, Target, Lightbulb, ShieldAlert,
-  Loader2, ChevronDown, ChevronUp
+  Loader2, ChevronDown, ChevronUp, Star, Flag, FileCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
+import ReportModal from '../components/ReportModal';
 
 const PaperViewerPage = () => {
   const { id } = useParams();
@@ -24,6 +25,14 @@ const PaperViewerPage = () => {
 
   const [isRevealing, setIsRevealing] = useState(false);
   const [isRevealed, setIsRevealed] = useState(false);
+
+  // Bookmark state
+  const isPremium = ['basic', 'plus', 'pro'].includes(user?.plan?.toLowerCase() || '');
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+
+  // Report modal
+  const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
     const fetchPaper = async () => {
@@ -47,6 +56,27 @@ const PaperViewerPage = () => {
 
     if (id && token) fetchPaper();
   }, [id, token]);
+
+  // Load bookmark state for premium users
+  useEffect(() => {
+    if (!id || !token || !isPremium) return;
+    apiFetch('/papers/bookmarks/ids', { token: token! })
+      .then(res => setIsBookmarked((res.ids || []).includes(id)))
+      .catch(() => {});
+  }, [id, token, isPremium]);
+
+  const handleToggleBookmark = async () => {
+    if (bookmarkLoading) return;
+    setBookmarkLoading(true);
+    try {
+      const res = await apiFetch(`/papers/${id}/bookmark`, { method: 'POST', token: token! });
+      setIsBookmarked(res.bookmarked);
+    } catch {
+      // silently fail
+    } finally {
+      setBookmarkLoading(false);
+    }
+  };
 
 
 
@@ -123,6 +153,58 @@ const PaperViewerPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Flag / Report button — visible to all users */}
+          <button
+            onClick={() => setShowReport(true)}
+            title="Report an issue with this paper"
+            className="w-11 h-11 flex items-center justify-center rounded-2xl bg-theme-surface border border-theme-border text-theme-muted hover:text-red-400 hover:border-red-500/30 transition-all group relative"
+          >
+            <Flag className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            {/* Tooltip */}
+            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-theme-surface border border-theme-border rounded-lg text-[10px] font-bold text-theme-secondary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+              Report an issue
+            </span>
+          </button>
+
+          {/* Bookmark button — premium only */}
+          {isPremium ? (
+            <button
+              onClick={handleToggleBookmark}
+              disabled={bookmarkLoading}
+              title={isBookmarked ? 'Remove bookmark' : 'Save this paper'}
+              className={clsx(
+                'w-11 h-11 flex items-center justify-center rounded-2xl border transition-all group relative',
+                isBookmarked
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                  : 'bg-theme-surface border-theme-border text-theme-muted hover:text-amber-400 hover:border-amber-500/30'
+              )}
+            >
+              <Star className={clsx('w-4 h-4 group-hover:scale-110 transition-transform', isBookmarked && 'fill-amber-400')} />
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-theme-surface border border-theme-border rounded-lg text-[10px] font-bold text-theme-secondary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                {isBookmarked ? 'Remove bookmark' : 'Save paper'}
+              </span>
+            </button>
+          ) : (
+            <div title="Upgrade to save papers" className="w-11 h-11 flex items-center justify-center rounded-2xl bg-theme-surface border border-dashed border-theme-border text-theme-muted/40 cursor-not-allowed relative group">
+              <Star className="w-4 h-4" />
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-theme-surface border border-theme-border rounded-lg text-[10px] font-bold text-theme-secondary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                Upgrade to save papers
+              </span>
+            </div>
+          )}
+
+          {paper.has_answers && paper.answer_url && (
+            <a 
+              href={paper.answer_url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+            >
+              <FileCheck size={16} />
+              View Answers
+            </a>
+          )}
+
           <button 
             onClick={handleDownload}
             disabled={downloading}
@@ -342,6 +424,16 @@ const PaperViewerPage = () => {
         </aside>
 
       </div>
+
+      {/* Report Modal */}
+      {showReport && paper && (
+        <ReportModal
+          paperId={id!}
+          paperTitle={paper.upsa_subjects?.name || paper.title || 'This Paper'}
+          token={token!}
+          onClose={() => setShowReport(false)}
+        />
+      )}
     </div>
   );
 };

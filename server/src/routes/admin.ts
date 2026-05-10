@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { supabase } from '../lib/supabase';
 import { protect, adminOnly, AuthRequest } from '../middleware/auth';
 import { uploadToR2, deleteFromR2, keyFromUrl } from '../lib/r2';
@@ -614,6 +615,43 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     console.error('[admin GET /stats]', err);
     res.status(500).json({ error: 'Failed to fetch stats.' });
+  }
+});
+
+const aiConfigPath = path.join(__dirname, '../../ai-config.json');
+
+router.get('/ai-config', async (req: AuthRequest, res: Response) => {
+  try {
+    let globalAiBlock = process.env.GLOBAL_AI_BLOCK === 'true';
+    let globalBanner = '';
+    let globalBannerActive = false;
+    if (fs.existsSync(aiConfigPath)) {
+      const data = JSON.parse(fs.readFileSync(aiConfigPath, 'utf8'));
+      if (typeof data.globalAiBlock === 'boolean') {
+        globalAiBlock = data.globalAiBlock;
+      }
+      if (typeof data.globalBanner === 'string') globalBanner = data.globalBanner;
+      if (typeof data.globalBannerActive === 'boolean') globalBannerActive = data.globalBannerActive;
+    }
+    res.status(200).json({ globalAiBlock, globalBanner, globalBannerActive });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to read AI config' });
+  }
+});
+
+router.post('/ai-config', async (req: AuthRequest, res: Response) => {
+  const { globalAiBlock, globalBanner, globalBannerActive } = req.body;
+  try {
+    const currentData = fs.existsSync(aiConfigPath) ? JSON.parse(fs.readFileSync(aiConfigPath, 'utf8')) : {};
+    
+    if (typeof globalAiBlock === 'boolean') currentData.globalAiBlock = globalAiBlock;
+    if (typeof globalBanner === 'string') currentData.globalBanner = globalBanner;
+    if (typeof globalBannerActive === 'boolean') currentData.globalBannerActive = globalBannerActive;
+    
+    fs.writeFileSync(aiConfigPath, JSON.stringify(currentData, null, 2));
+    res.status(200).json({ success: true, ...currentData });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to save config' });
   }
 });
 

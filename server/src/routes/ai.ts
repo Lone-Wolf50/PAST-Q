@@ -5,9 +5,13 @@ import { supabase } from '../lib/supabase';
 import { setAIHealth } from '../lib/ai-health';
 import { generatePaperInsights, isProcessing } from '../lib/ai-insights';
 import { askPuter, isPuterAvailable } from '../lib/puter';
+import fs from 'fs';
+import path from 'path';
+
 const pdf = require('pdf-parse');
 
 const router = express.Router();
+const aiConfigPath = path.join(__dirname, '../../ai-config.json');
 
 // Plan-based query limits (counted by history length = number of user turns)
 const PLAN_LIMITS: Record<string, number> = {
@@ -19,6 +23,28 @@ const PLAN_LIMITS: Record<string, number> = {
 
 // ─── Middleware ─────────────────────────────────────────────────────────────
 const checkAiEnabled = async (req: AuthRequest, res: any, next: any) => {
+  // 1. Check Global AI Block
+  let isGlobalBlock = process.env.GLOBAL_AI_BLOCK === 'true';
+  try {
+    if (fs.existsSync(aiConfigPath)) {
+      const data = JSON.parse(fs.readFileSync(aiConfigPath, 'utf8'));
+      if (typeof data.globalAiBlock === 'boolean') {
+        isGlobalBlock = data.globalAiBlock;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to read ai-config.json', err);
+  }
+
+  if (isGlobalBlock) {
+    return res.status(403).json({ 
+      error: 'ai_disabled', 
+      isMaintenance: true,
+      message: 'Our AI Tutor is currently undergoing routine maintenance and upgrades. Please check back later!' 
+    });
+  }
+
+  // 2. Check Individual Access
   try {
     const { data: userAccess, error: accessError } = await supabase
       .from('upsa_users')

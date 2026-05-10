@@ -12,6 +12,7 @@ import paymentsRouter from './routes/payments';
 import adminRouter from './routes/admin';
 import aiRouter from './routes/ai';
 import supportRouter from './routes/support';
+import streaksRouter from './routes/streaks';
 
 dotenv.config();
 
@@ -47,6 +48,24 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok', message: 'PastQ API is running' });
 });
 
+// ── Public Config ──────────────────────────────────────────────────────────────
+app.get('/api/public/site-config', (_req, res) => {
+  try {
+    const configPath = require('path').join(__dirname, '../ai-config.json');
+    if (require('fs').existsSync(configPath)) {
+      const data = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+      res.json({
+        globalBanner: data.globalBanner || '',
+        globalBannerActive: !!data.globalBannerActive,
+      });
+    } else {
+      res.json({ globalBanner: '', globalBannerActive: false });
+    }
+  } catch (err) {
+    res.json({ globalBanner: '', globalBannerActive: false });
+  }
+});
+
 // ── Routes ─────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
 app.use('/api/papers', papersRouter);
@@ -55,6 +74,7 @@ app.use('/api/payments', paymentsRouter);
 app.use('/api/hq-management', adminRouter);   // includes /api/hq-management/auth/login, /subjects, /papers, /users, /payments, /stats
 app.use('/api/ai', aiRouter);
 app.use('/api/support', supportRouter);
+app.use('/api/streaks', streaksRouter);
 
 // ── 404 Handler ────────────────────────────────────────────────────────────────
 app.use((_req, res) => {

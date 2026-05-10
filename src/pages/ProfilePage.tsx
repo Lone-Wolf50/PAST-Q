@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { User, Mail, CreditCard, LogOut, ShieldAlert, Bell, Camera, Trash2, Sparkles, HelpCircle, X as CloseIcon, Zap, MessageSquare, Target } from 'lucide-react';
+import { User, Mail, CreditCard, LogOut, ShieldAlert, Bell, Camera, Trash2, Sparkles, HelpCircle, X as CloseIcon, Zap, MessageSquare, Target, Flame } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
@@ -14,6 +14,7 @@ const ProfilePage = () => {
   const [message, setMessage] = useState('');
   const [showPersonalizeInfo, setShowPersonalizeInfo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [streak, setStreak] = useState<number>(0);
 
   useEffect(() => {
     // Fetch latest profile to get avatar_url if any
@@ -32,12 +33,19 @@ const ProfilePage = () => {
             plan_expires: res.user.plan_expires,
             ai_usage_count: res.user.ai_usage_count
           });
+          // Load streak from DB if available
+          if (res.user.streak_count !== undefined) {
+            setStreak(res.user.streak_count);
+          }
         }
       } catch (err) {
         console.error("Failed to load profile", err);
       }
     };
     fetchProfile();
+    // Also read from sessionStorage (set by AuthContext ping)
+    const cached = sessionStorage.getItem('streak_count');
+    if (cached) setStreak(parseInt(cached, 10));
   }, []);
 
   const handleRemoveAvatar = () => {
@@ -403,6 +411,73 @@ const ProfilePage = () => {
               </div>
             </div>
           )}
+
+          {/* ── Revision Streak Card ─────────────────────────────── */}
+          <div className="glass-card p-0 overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-orange-500/5 blur-[80px] pointer-events-none" />
+            <div className="p-6 md:p-8 relative">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-theme-primary mb-1 flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-orange-400" />
+                    Revision Streak
+                  </h2>
+                  <p className="text-sm text-theme-muted">Keep logging in daily to grow your streak!</p>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                  streak >= 7 ? 'bg-orange-500/15 border-orange-500/30 text-orange-400'
+                  : streak >= 3 ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                  : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
+                }`}>
+                  {streak >= 7 ? '🔥 On Fire' : streak >= 3 ? '⚡ Building' : '🌱 Starting'}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-6">
+                {/* Flame display */}
+                <div className="flex flex-col items-center">
+                  <div className={`w-20 h-20 rounded-2xl flex items-center justify-center border ${
+                    streak > 0
+                      ? 'bg-gradient-to-br from-orange-500/20 to-amber-500/10 border-orange-500/30 text-orange-400'
+                      : 'bg-theme-surface border-theme-border text-theme-muted/30'
+                  }`}>
+                    <Flame className="w-10 h-10" />
+                  </div>
+                  <span className="text-[10px] text-theme-muted font-bold mt-2 uppercase tracking-wider">Today</span>
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="text-5xl font-black text-theme-primary tracking-tight">{streak}</span>
+                    <span className="text-sm font-bold text-theme-muted">day{streak !== 1 ? 's' : ''}</span>
+                  </div>
+                  <p className="text-xs text-theme-muted leading-relaxed">
+                    {streak === 0
+                      ? 'Log in today to start your streak!'
+                      : streak === 1
+                      ? 'Great start! Come back tomorrow to keep it going.'
+                      : streak < 7
+                      ? `${7 - streak} more day${7 - streak !== 1 ? 's' : ''} to reach a 7-day streak! 🎯`
+                      : 'Incredible dedication! Keep it up! 🏆'}
+                  </p>
+                  {/* Mini streak dots */}
+                  <div className="flex gap-1.5 mt-3">
+                    {Array.from({ length: 7 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-2 flex-1 rounded-full transition-all ${
+                          i < streak
+                            ? 'bg-gradient-to-r from-orange-500 to-amber-400'
+                            : 'bg-theme-surface border border-theme-border'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-theme-muted mt-1.5">7-day goal</p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Restored Danger Zone */}
           <div className="glass-card p-6 md:p-8 border-red-500/20 bg-red-500/5">

@@ -75,8 +75,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const handleSessionExpired = () => {
       logout();
-      // The AlertModal in App.tsx or a global notification can listen to this,
-      // but dispatching here just cleans up the state.
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -87,6 +85,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       window.removeEventListener('session_expired', handleSessionExpired);
     };
   }, []);
+
+  // Ping streak once per browser session when user is logged in
+  useEffect(() => {
+    if (!token) return;
+    // Only ping once per browser session (not on every re-render)
+    if (sessionStorage.getItem('streak_pinged')) return;
+    sessionStorage.setItem('streak_pinged', '1');
+
+    fetch(`${import.meta.env.VITE_API_URL || ''}/api/streaks/ping`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.streak !== undefined) {
+          sessionStorage.setItem('streak_count', String(data.streak));
+        }
+      })
+      .catch(() => {}); // Never crash the app over streak
+  }, [token]);
 
   const login = (newToken: string, newUser: AuthUser) => {
     const storage = getStorage();

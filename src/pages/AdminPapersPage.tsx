@@ -654,6 +654,60 @@ const AdminPapersPage = () => {
                     </label>
                   </div>
 
+                  {/* Answer File Upload (Conditional) */}
+                  {hasAnswers && (
+                    <div className="border border-theme-border rounded-xl p-4 bg-emerald-500/5">
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="text-sm font-bold text-theme-primary">Answer File Source</label>
+                        <div className="flex bg-theme-surface p-1 rounded-lg border border-theme-border">
+                          <button 
+                            type="button" 
+                            onClick={() => setAnswerMode('file')}
+                            className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", answerMode === 'file' ? "bg-emerald-500 text-white" : "text-theme-muted")}
+                          >
+                            FILE UPLOAD
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => setAnswerMode('url')}
+                            className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", answerMode === 'url' ? "bg-emerald-500 text-white" : "text-theme-muted")}
+                          >
+                            DIRECT URL
+                          </button>
+                        </div>
+                      </div>
+
+                      {answerMode === 'file' ? (
+                        <div className="relative group">
+                          <input 
+                            type="file" 
+                            name="answer_file"
+                            accept=".pdf" 
+                            className="hidden" 
+                            id="answer-pdf-upload" 
+                          />
+                          <label 
+                            htmlFor="answer-pdf-upload"
+                            className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-emerald-500/30 rounded-2xl hover:border-emerald-500/60 transition-colors cursor-pointer bg-theme-surface"
+                          >
+                            <CloudUpload className="w-6 h-6 text-emerald-400 mb-2" />
+                            <span className="text-sm font-semibold text-theme-secondary">Choose Answer PDF</span>
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
+                          <input 
+                            type="url" 
+                            name="answer_url"
+                            placeholder="https://example.com/answer.pdf" 
+                            className="w-full bg-theme-surface border border-emerald-500/30 rounded-xl py-3 pl-10 pr-4 text-theme-primary outline-none focus:border-emerald-500/60" 
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex justify-end gap-3 pt-2">
                     <button 
                       type="button" 
