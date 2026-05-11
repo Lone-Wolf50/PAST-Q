@@ -506,234 +506,234 @@ const AdminPapersPage = () => {
 
       {/* ── Add / Edit Paper Modal ── */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="glass-card w-full max-w-xl p-6 border-theme-border relative my-8">
-            <button onClick={resetModal} className="absolute top-4 right-4 p-2 text-theme-muted hover:text-theme-primary transition-colors">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-3xl border-theme-border relative flex flex-col max-h-[90vh] overflow-hidden">
+            <button onClick={resetModal} className="absolute top-4 right-4 p-2 text-theme-muted hover:text-theme-primary transition-colors z-10">
               <X className="w-6 h-6" />
             </button>
 
-            {uploadSuccess ? (
-              <div className="flex flex-col items-center justify-center py-10 gap-4">
-                <div className="w-20 h-20 rounded-full bg-emerald-500/15 flex items-center justify-center animate-bounce">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+            <div className="p-6 overflow-y-auto scrollbar-hide">
+              {uploadSuccess ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <div className="w-20 h-20 rounded-full bg-emerald-500/15 flex items-center justify-center animate-bounce">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-theme-primary">Paper Saved!</h2>
+                  <p className="text-theme-muted text-center max-w-sm">The database has been updated and files are synced.</p>
                 </div>
-                <h2 className="text-2xl font-bold text-theme-primary">Paper Saved!</h2>
-                <p className="text-theme-muted text-center max-w-sm">The database has been updated and files are synced.</p>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-3 rounded-2xl bg-indigo-500/10">
-                    <CloudUpload className="w-6 h-6 text-indigo-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-theme-primary">{editingPaper ? 'Edit Paper' : 'Upload Paper'}</h2>
-                    <p className="text-xs text-theme-muted">Configure paper metadata and file hosting.</p>
-                  </div>
-                </div>
-
-                <form className="flex flex-col gap-4" onSubmit={handleSavePaper}>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Title</label>
-                    <input
-                      name="title"
-                      required
-                      defaultValue={editingPaper?.title || ''}
-                      className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none transition-colors"
-                      placeholder="e.g. 2023 Principles of Management"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Subject</label>
-                      <select
-                        name="subject_id"
-                        required
-                        defaultValue={editingPaper?.subject_id || ''}
-                        className="theme-select"
-                      >
-                        <option value="">Select Subject</option>
-                        {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
-                      </select>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="p-3 rounded-2xl bg-indigo-500/10">
+                      <CloudUpload className="w-6 h-6 text-indigo-400" />
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Year</label>
-                      <input
-                        name="year"
-                        required
-                        maxLength={4}
-                        defaultValue={editingPaper?.year || ''}
-                        className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none"
-                        placeholder="2024"
-                      />
+                    <div>
+                      <h2 className="text-2xl font-bold text-theme-primary">{editingPaper ? 'Edit Paper' : 'Upload Paper'}</h2>
+                      <p className="text-xs text-theme-muted">Configure paper metadata and file hosting.</p>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Semester</label>
-                    <select
-                      name="semester"
-                      required
-                      defaultValue={editingPaper?.semester || 'First'}
-                      className="theme-select"
-                    >
-                      <option value="First">First Semester</option>
-                      <option value="Second">Second Semester</option>
-                    </select>
-                  </div>
+                  <form className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-6" onSubmit={handleSavePaper}>
+                    {/* Column 1: Metadata */}
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-theme-muted ml-1">Title</label>
+                        <input
+                          name="title"
+                          required
+                          defaultValue={editingPaper?.title || ''}
+                          className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none transition-colors"
+                          placeholder="e.g. 2023 Principles of Management"
+                        />
+                      </div>
 
-                  <div className="border-t border-theme-border pt-4 mt-1">
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="text-sm font-bold text-theme-primary">PDF Source</label>
-                      <div className="flex bg-theme-surface p-1 rounded-lg border border-theme-border">
-                        <button
-                          type="button"
-                          onClick={() => setUploadMode('file')}
-                          className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", uploadMode === 'file' ? "bg-indigo-500 text-white" : "text-theme-muted")}
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-theme-muted ml-1">Subject</label>
+                        <select
+                          name="subject_id"
+                          required
+                          defaultValue={editingPaper?.subject_id || ''}
+                          className="theme-select"
                         >
-                          FILE UPLOAD
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setUploadMode('url')}
-                          className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", uploadMode === 'url' ? "bg-indigo-500 text-white" : "text-theme-muted")}
-                        >
-                          DIRECT URL
-                        </button>
+                          <option value="">Select Subject</option>
+                          {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-theme-muted ml-1">Year</label>
+                          <input
+                            name="year"
+                            required
+                            maxLength={4}
+                            defaultValue={editingPaper?.year || ''}
+                            className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none"
+                            placeholder="2024"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-theme-muted ml-1">Semester</label>
+                          <select
+                            name="semester"
+                            required
+                            defaultValue={editingPaper?.semester || 'First'}
+                            className="theme-select"
+                          >
+                            <option value="First">First Semester</option>
+                            <option value="Second">Second Semester</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 
-                    {uploadMode === 'file' ? (
-                      <div className="relative group">
-                        <input
-                          type="file"
-                          accept=".pdf"
-                          multiple={!editingPaper}
-                          onChange={(e) => setPdfFiles(Array.from(e.target.files || []))}
-                          className="hidden"
-                          id="pdf-upload"
-                        />
-                        <label
-                          htmlFor="pdf-upload"
-                          className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-theme-border rounded-2xl group-hover:border-indigo-500/40 transition-colors cursor-pointer"
-                        >
-                          <CloudUpload className="w-8 h-8 text-theme-muted group-hover:text-indigo-400 mb-2 transition-colors" />
-                          <span className="text-sm font-semibold text-theme-secondary">{pdfFiles.length > 0 ? `${pdfFiles.length} file(s) selected` : 'Choose PDF file(s)'}</span>
-                          <span className="text-[10px] text-theme-muted mt-1 uppercase font-bold tracking-widest">Max 50MB per file</span>
+                    {/* Column 2: File Sources */}
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-bold text-theme-primary">PDF Source</label>
+                          <div className="flex bg-theme-surface p-1 rounded-lg border border-theme-border scale-90 origin-right">
+                            <button
+                              type="button"
+                              onClick={() => setUploadMode('file')}
+                              className={clsx("px-3 py-1 rounded text-[10px] font-bold transition-all", uploadMode === 'file' ? "bg-indigo-500 text-white" : "text-theme-muted")}
+                            >
+                              FILE
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setUploadMode('url')}
+                              className={clsx("px-3 py-1 rounded text-[10px] font-bold transition-all", uploadMode === 'url' ? "bg-indigo-500 text-white" : "text-theme-muted")}
+                            >
+                              URL
+                            </button>
+                          </div>
+                        </div>
+
+                        {uploadMode === 'file' ? (
+                          <div className="relative group">
+                            <input
+                              type="file"
+                              accept=".pdf"
+                              multiple={!editingPaper}
+                              onChange={(e) => setPdfFiles(Array.from(e.target.files || []))}
+                              className="hidden"
+                              id="pdf-upload"
+                            />
+                            <label
+                              htmlFor="pdf-upload"
+                              className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-theme-border rounded-2xl group-hover:border-indigo-500/40 transition-colors cursor-pointer"
+                            >
+                              <CloudUpload className="w-8 h-8 text-theme-muted group-hover:text-indigo-400 mb-2 transition-colors" />
+                              <span className="text-xs font-semibold text-theme-secondary text-center px-4">
+                                {pdfFiles.length > 0 ? `${pdfFiles.length} file(s) selected` : 'Choose PDF file(s)'}
+                              </span>
+                            </label>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
+                            <input
+                              type="url"
+                              value={externalUrl}
+                              onChange={(e) => setExternalUrl(e.target.value)}
+                              placeholder="https://example.com/paper.pdf"
+                              className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-4 text-theme-primary outline-none focus:border-indigo-500/50"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Answer Key Toggle */}
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-theme-surface/30 border border-theme-border">
+                        <div className="flex items-center gap-3">
+                          <div className={clsx("p-2 rounded-lg", hasAnswers ? "bg-emerald-500/10" : "bg-theme-surface")}>
+                            <FileCheck className={clsx("w-4 h-4", hasAnswers ? "text-emerald-400" : "text-theme-muted")} />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-theme-primary">Answer Key</h4>
+                            <p className="text-[10px] text-theme-muted">Include solved solution</p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" checked={hasAnswers} onChange={(e) => setHasAnswers(e.target.checked)} className="sr-only peer" />
+                          <div className="w-9 h-5 bg-theme-surface rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
                         </label>
                       </div>
-                    ) : (
-                      <div className="relative">
-                        <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-                        <input
-                          type="url"
-                          value={externalUrl}
-                          onChange={(e) => setExternalUrl(e.target.value)}
-                          placeholder="https://example.com/paper.pdf"
-                          className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-4 text-theme-primary outline-none focus:border-indigo-500/50"
-                        />
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Answer Key Toggle */}
-                  <div className="flex items-center justify-between py-3 border-y border-theme-border my-1">
-                    <div className="flex items-center gap-3">
-                      <div className={clsx("p-2 rounded-lg", hasAnswers ? "bg-emerald-500/10" : "bg-theme-surface")}>
-                        <FileCheck className={clsx("w-5 h-5", hasAnswers ? "text-emerald-400" : "text-theme-muted")} />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-theme-primary">Answer Key</h4>
-                        <p className="text-[10px] text-theme-muted">Include a solved solution for this paper.</p>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" checked={hasAnswers} onChange={(e) => setHasAnswers(e.target.checked)} className="sr-only peer" />
-                      <div className="w-11 h-6 bg-theme-surface rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                    </label>
-                  </div>
+                      {/* Answer File Upload (Conditional) */}
+                      {hasAnswers && (
+                        <div className="border border-emerald-500/20 rounded-xl p-4 bg-emerald-500/5 flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Answer Source</label>
+                            <div className="flex bg-theme-surface p-0.5 rounded-md border border-theme-border scale-75 origin-right">
+                              <button
+                                type="button"
+                                onClick={() => setAnswerMode('file')}
+                                className={clsx("px-2 py-0.5 rounded text-[9px] font-bold transition-all", answerMode === 'file' ? "bg-emerald-500 text-white" : "text-theme-muted")}
+                              >
+                                FILE
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAnswerMode('url')}
+                                className={clsx("px-2 py-0.5 rounded text-[9px] font-bold transition-all", answerMode === 'url' ? "bg-emerald-500 text-white" : "text-theme-muted")}
+                              >
+                                URL
+                              </button>
+                            </div>
+                          </div>
 
-                  {/* Answer File Upload (Conditional) */}
-                  {hasAnswers && (
-                    <div className="border border-theme-border rounded-xl p-4 bg-emerald-500/5">
-                      <div className="flex items-center justify-between mb-3">
-                        <label className="text-sm font-bold text-theme-primary">Answer File Source</label>
-                        <div className="flex bg-theme-surface p-1 rounded-lg border border-theme-border">
-                          <button
-                            type="button"
-                            onClick={() => setAnswerMode('file')}
-                            className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", answerMode === 'file' ? "bg-emerald-500 text-white" : "text-theme-muted")}
-                          >
-                            FILE UPLOAD
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAnswerMode('url')}
-                            className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", answerMode === 'url' ? "bg-emerald-500 text-white" : "text-theme-muted")}
-                          >
-                            DIRECT URL
-                          </button>
-                        </div>
-                      </div>
-
-                      {answerMode === 'file' ? (
-                        <div className="relative group">
-                          <input
-                            type="file"
-                            name="answer_file"
-                            accept=".pdf"
-                            className="hidden"
-                            id="answer-pdf-upload"
-                          />
-                          <label
-                            htmlFor="answer-pdf-upload"
-                            className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-emerald-500/30 rounded-2xl hover:border-emerald-500/60 transition-colors cursor-pointer bg-theme-surface"
-                          >
-                            <CloudUpload className="w-6 h-6 text-emerald-400 mb-2" />
-                            <span className="text-sm font-semibold text-theme-secondary">Choose Answer PDF</span>
-                          </label>
-                        </div>
-                      ) : (
-                        <div className="relative">
-                          <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-                          <input
-                            type="url"
-                            name="answer_url"
-                            placeholder="https://example.com/answer.pdf"
-                            className="w-full bg-theme-surface border border-emerald-500/30 rounded-xl py-3 pl-10 pr-4 text-theme-primary outline-none focus:border-emerald-500/60"
-                          />
+                          {answerMode === 'file' ? (
+                            <div className="relative group">
+                              <input type="file" name="answer_file" accept=".pdf" className="hidden" id="answer-pdf-upload" />
+                              <label htmlFor="answer-pdf-upload" className="flex items-center gap-3 px-4 py-3 border border-dashed border-emerald-500/30 rounded-xl hover:border-emerald-500/60 transition-colors cursor-pointer bg-theme-surface">
+                                <CloudUpload className="w-5 h-5 text-emerald-400" />
+                                <span className="text-xs font-semibold text-theme-secondary">Select Answer PDF</span>
+                              </label>
+                            </div>
+                          ) : (
+                            <div className="relative">
+                              <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-theme-muted" />
+                              <input
+                                type="url"
+                                name="answer_url"
+                                placeholder="https://example.com/answer.pdf"
+                                className="w-full bg-theme-surface border border-emerald-500/30 rounded-xl py-2.5 pl-9 pr-4 text-xs text-theme-primary outline-none focus:border-emerald-500/60"
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
 
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={resetModal}
-                      className="px-6 py-3 rounded-xl text-theme-secondary font-bold hover:bg-theme-surface transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isUploading}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] disabled:opacity-50"
-                    >
-                      {isUploading ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                          Saving...
-                        </>
-                      ) : (
-                        <>{editingPaper ? 'Update Paper' : 'Upload Paper'}</>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </>
-            )}
+                    <div className="lg:col-span-2 flex justify-end gap-3 pt-6 border-t border-theme-border mt-2">
+                      <button
+                        type="button"
+                        onClick={resetModal}
+                        className="px-6 py-3 rounded-xl text-theme-secondary font-bold hover:bg-theme-surface transition-all text-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isUploading}
+                        className="flex-1 lg:flex-none lg:min-w-[200px] flex items-center justify-center gap-2 px-8 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] disabled:opacity-50 text-sm"
+                      >
+                        {isUploading ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                            Saving...
+                          </>
+                        ) : (
+                          <>{editingPaper ? 'Update Paper' : 'Upload Paper'}</>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
