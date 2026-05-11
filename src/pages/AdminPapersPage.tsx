@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { 
+import {
   Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Download, Filter,
   ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert
 } from 'lucide-react';
@@ -33,14 +33,14 @@ const AdminPapersPage = () => {
   const [confirm, setConfirm] = useState<{ show: boolean, id: string | null }>({
     show: false, id: null
   });
-  
+
   // Modal Form States
   const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
   const [hasAnswers, setHasAnswers] = useState(false);
   const [answerMode, setAnswerMode] = useState<'file' | 'url'>('file');
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [externalUrl, setExternalUrl] = useState('');
-  
+
   // Filters
   const [filterSubject, setFilterSubject] = useState('');
   const [filterYear, setFilterYear] = useState('');
@@ -181,13 +181,13 @@ const AdminPapersPage = () => {
         payload.append('year', fd.get('year') as string);
         payload.append('semester', fd.get('semester') as string);
         payload.append('has_answers', String(hasAnswers));
-    
+
         if (uploadMode === 'file' && pdfFiles.length > 0) {
           payload.append('file', pdfFiles[0], pdfFiles[0].name);
         } else if (uploadMode === 'url') {
           payload.append('file_url', externalUrl.trim());
         }
-    
+
         if (hasAnswers) {
           const answerFile = fd.get('answer_file') as File;
           const answerUrl = fd.get('answer_url') as string;
@@ -208,7 +208,7 @@ const AdminPapersPage = () => {
             payload.append('semester', fd.get('semester') as string);
             payload.append('has_answers', String(hasAnswers));
             payload.append('file', file, file.name);
-            
+
             if (hasAnswers) {
               const answerFile = fd.get('answer_file') as File;
               const answerUrl = fd.get('answer_url') as string;
@@ -228,7 +228,7 @@ const AdminPapersPage = () => {
           payload.append('semester', fd.get('semester') as string);
           payload.append('has_answers', String(hasAnswers));
           payload.append('file_url', externalUrl.trim());
-          
+
           if (hasAnswers) {
             const answerFile = fd.get('answer_file') as File;
             const answerUrl = fd.get('answer_url') as string;
@@ -241,7 +241,7 @@ const AdminPapersPage = () => {
           await apiFetchMultipart('/hq-management/papers', payload, { token });
         }
       }
-      
+
       setUploadSuccess(true);
       setTimeout(() => {
         resetModal();
@@ -267,7 +267,7 @@ const AdminPapersPage = () => {
   const handleConfirmDelete = async () => {
     const id = confirm.id;
     if (!id) return;
-    
+
     try {
       await apiFetch(`/hq-management/papers/${id}`, { method: 'DELETE', token: localStorage.getItem('admin_token')! });
       setConfirm({ show: false, id: null });
@@ -293,7 +293,7 @@ const AdminPapersPage = () => {
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      
+
       <div className="flex-1 flex flex-col lg:ml-64">
         <header className="sticky top-0 z-20 bg-transparent/80 backdrop-blur-xl border-b border-theme-border px-4 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -310,8 +310,8 @@ const AdminPapersPage = () => {
               </div>
             )}
             <div className="mr-1"><ThemeToggle /></div>
-            <button 
-              onClick={() => { fetchPapers(); fetchSubjects(); }} 
+            <button
+              onClick={() => { fetchPapers(); fetchSubjects(); }}
               className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors group"
               title="Refresh Data"
             >
@@ -326,8 +326,8 @@ const AdminPapersPage = () => {
               <h1 className="text-3xl font-bold text-theme-primary mb-2">Past Papers</h1>
               <p className="text-theme-muted">Manage the database of available past examination papers.</p>
             </div>
-            
-            <button 
+
+            <button
               onClick={() => { resetModal(); setShowModal(true); }}
               className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl transition-all font-semibold shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:scale-[1.02]"
             >
@@ -340,9 +340,9 @@ const AdminPapersPage = () => {
           <div className="glass-card p-4 md:p-6 mb-8 border-theme-border flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-              <input 
-                type="text" 
-                placeholder="Search paper titles..." 
+              <input
+                type="text"
+                placeholder="Search paper titles..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-theme-surface-2 border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary focus:outline-none focus:border-indigo-500/50"
@@ -350,7 +350,7 @@ const AdminPapersPage = () => {
             </div>
             <div className="flex items-center gap-3">
               <Filter className="w-4 h-4 text-theme-muted" />
-              <select 
+              <select
                 value={filterSubject}
                 onChange={(e) => setFilterSubject(e.target.value)}
                 className="theme-select text-sm py-2 px-3"
@@ -358,7 +358,7 @@ const AdminPapersPage = () => {
                 <option value="">All Subjects</option>
                 {subjects.map(s => <option key={s.id} value={s.code}>{s.name}</option>)}
               </select>
-              <select 
+              <select
                 value={filterYear}
                 onChange={(e) => setFilterYear(e.target.value)}
                 className="theme-select text-sm py-2 px-3"
@@ -471,21 +471,21 @@ const AdminPapersPage = () => {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <a 
-                                href={paper.file_url} 
-                                target="_blank" 
-                                rel="noreferrer" 
+                              <a
+                                href={paper.file_url}
+                                target="_blank"
+                                rel="noreferrer"
                                 className="p-2 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-theme-muted hover:text-indigo-400 transition-colors"
                               >
                                 <Download className="w-4 h-4" />
                               </a>
-                              <button 
+                              <button
                                 onClick={() => handleOpenEdit(paper)}
                                 className="p-2 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-theme-muted hover:text-amber-400 transition-colors"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
-                              <button 
+                              <button
                                 onClick={() => handleDeleteClick(paper.id)}
                                 className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
                               >
@@ -535,21 +535,21 @@ const AdminPapersPage = () => {
                 <form className="flex flex-col gap-4" onSubmit={handleSavePaper}>
                   <div className="flex flex-col gap-2">
                     <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Title</label>
-                    <input 
-                      name="title" 
-                      required 
+                    <input
+                      name="title"
+                      required
                       defaultValue={editingPaper?.title || ''}
-                      className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none transition-colors" 
-                      placeholder="e.g. 2023 Principles of Management" 
+                      className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none transition-colors"
+                      placeholder="e.g. 2023 Principles of Management"
                     />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Subject</label>
-                      <select 
-                        name="subject_id" 
-                        required 
+                      <select
+                        name="subject_id"
+                        required
                         defaultValue={editingPaper?.subject_id || ''}
                         className="theme-select"
                       >
@@ -559,22 +559,22 @@ const AdminPapersPage = () => {
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Year</label>
-                      <input 
-                        name="year" 
-                        required 
-                        maxLength={4} 
+                      <input
+                        name="year"
+                        required
+                        maxLength={4}
                         defaultValue={editingPaper?.year || ''}
-                        className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none" 
-                        placeholder="2024" 
+                        className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none"
+                        placeholder="2024"
                       />
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-2">
                     <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Semester</label>
-                    <select 
-                      name="semester" 
-                      required 
+                    <select
+                      name="semester"
+                      required
                       defaultValue={editingPaper?.semester || 'First'}
                       className="theme-select"
                     >
@@ -587,15 +587,15 @@ const AdminPapersPage = () => {
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-sm font-bold text-theme-primary">PDF Source</label>
                       <div className="flex bg-theme-surface p-1 rounded-lg border border-theme-border">
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           onClick={() => setUploadMode('file')}
                           className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", uploadMode === 'file' ? "bg-indigo-500 text-white" : "text-theme-muted")}
                         >
                           FILE UPLOAD
                         </button>
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           onClick={() => setUploadMode('url')}
                           className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", uploadMode === 'url' ? "bg-indigo-500 text-white" : "text-theme-muted")}
                         >
@@ -606,15 +606,15 @@ const AdminPapersPage = () => {
 
                     {uploadMode === 'file' ? (
                       <div className="relative group">
-                        <input 
-                          type="file" 
-                          accept=".pdf" 
+                        <input
+                          type="file"
+                          accept=".pdf"
                           multiple={!editingPaper}
                           onChange={(e) => setPdfFiles(Array.from(e.target.files || []))}
-                          className="hidden" 
-                          id="pdf-upload" 
+                          className="hidden"
+                          id="pdf-upload"
                         />
-                        <label 
+                        <label
                           htmlFor="pdf-upload"
                           className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-theme-border rounded-2xl group-hover:border-indigo-500/40 transition-colors cursor-pointer"
                         >
@@ -626,12 +626,12 @@ const AdminPapersPage = () => {
                     ) : (
                       <div className="relative">
                         <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-                        <input 
-                          type="url" 
+                        <input
+                          type="url"
                           value={externalUrl}
                           onChange={(e) => setExternalUrl(e.target.value)}
-                          placeholder="https://example.com/paper.pdf" 
-                          className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-4 text-theme-primary outline-none focus:border-indigo-500/50" 
+                          placeholder="https://example.com/paper.pdf"
+                          className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-4 text-theme-primary outline-none focus:border-indigo-500/50"
                         />
                       </div>
                     )}
@@ -660,15 +660,15 @@ const AdminPapersPage = () => {
                       <div className="flex items-center justify-between mb-3">
                         <label className="text-sm font-bold text-theme-primary">Answer File Source</label>
                         <div className="flex bg-theme-surface p-1 rounded-lg border border-theme-border">
-                          <button 
-                            type="button" 
+                          <button
+                            type="button"
                             onClick={() => setAnswerMode('file')}
                             className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", answerMode === 'file' ? "bg-emerald-500 text-white" : "text-theme-muted")}
                           >
                             FILE UPLOAD
                           </button>
-                          <button 
-                            type="button" 
+                          <button
+                            type="button"
                             onClick={() => setAnswerMode('url')}
                             className={clsx("px-3 py-1 rounded text-xs font-bold transition-all", answerMode === 'url' ? "bg-emerald-500 text-white" : "text-theme-muted")}
                           >
@@ -679,14 +679,14 @@ const AdminPapersPage = () => {
 
                       {answerMode === 'file' ? (
                         <div className="relative group">
-                          <input 
-                            type="file" 
+                          <input
+                            type="file"
                             name="answer_file"
-                            accept=".pdf" 
-                            className="hidden" 
-                            id="answer-pdf-upload" 
+                            accept=".pdf"
+                            className="hidden"
+                            id="answer-pdf-upload"
                           />
-                          <label 
+                          <label
                             htmlFor="answer-pdf-upload"
                             className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-emerald-500/30 rounded-2xl hover:border-emerald-500/60 transition-colors cursor-pointer bg-theme-surface"
                           >
@@ -697,11 +697,11 @@ const AdminPapersPage = () => {
                       ) : (
                         <div className="relative">
                           <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-                          <input 
-                            type="url" 
+                          <input
+                            type="url"
                             name="answer_url"
-                            placeholder="https://example.com/answer.pdf" 
-                            className="w-full bg-theme-surface border border-emerald-500/30 rounded-xl py-3 pl-10 pr-4 text-theme-primary outline-none focus:border-emerald-500/60" 
+                            placeholder="https://example.com/answer.pdf"
+                            className="w-full bg-theme-surface border border-emerald-500/30 rounded-xl py-3 pl-10 pr-4 text-theme-primary outline-none focus:border-emerald-500/60"
                           />
                         </div>
                       )}
@@ -709,15 +709,15 @@ const AdminPapersPage = () => {
                   )}
 
                   <div className="flex justify-end gap-3 pt-2">
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={resetModal}
                       className="px-6 py-3 rounded-xl text-theme-secondary font-bold hover:bg-theme-surface transition-all"
                     >
                       Cancel
                     </button>
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       disabled={isUploading}
                       className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] disabled:opacity-50"
                     >
@@ -739,7 +739,7 @@ const AdminPapersPage = () => {
       )}
 
       {/* ── Custom UI Modals ── */}
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={confirm.show}
         onClose={() => setConfirm({ show: false, id: null })}
         onConfirm={handleConfirmDelete}
@@ -749,7 +749,7 @@ const AdminPapersPage = () => {
         variant="danger"
       />
 
-      <AlertModal 
+      <AlertModal
         isOpen={alert.show}
         onClose={() => setAlert({ ...alert, show: false })}
         title={alert.title}
@@ -818,8 +818,8 @@ const AdminPapersPage = () => {
                     <span className={clsx(
                       "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter",
                       ins.difficulty === 'Advanced' ? "bg-red-500/20 text-red-400" :
-                      ins.difficulty === 'Intermediate' ? "bg-amber-500/20 text-amber-400" :
-                      "bg-emerald-500/20 text-emerald-400"
+                        ins.difficulty === 'Intermediate' ? "bg-amber-500/20 text-amber-400" :
+                          "bg-emerald-500/20 text-emerald-400"
                     )}>{ins.difficulty}</span>
                   </div>
 

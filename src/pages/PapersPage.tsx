@@ -36,7 +36,7 @@ const PapersPage = () => {
         setItemsPerPage(5); // 1 x 5
       }
     };
-    
+
     handleResize(); // Initial call
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -89,7 +89,7 @@ const PapersPage = () => {
     if (!token || !isPremium) return;
     apiFetch('/papers/bookmarks/ids', { token: token! })
       .then(res => setBookmarkedIds(new Set(res.ids || [])))
-      .catch(() => {});
+      .catch(() => { });
   }, [token, isPremium]);
 
   // Load streak from session storage (set by AuthContext ping)
@@ -124,12 +124,12 @@ const PapersPage = () => {
         method: 'POST',
         token: token!
       });
-      
+
       if (res.error) {
         alert(res.message || 'Unable to download. Please try again later.');
         return;
       }
-      
+
       if (res.file_url) {
         if (action === 'view') {
           window.open(res.file_url.split('?')[0], '_blank');
@@ -173,7 +173,7 @@ const PapersPage = () => {
     }
     return true;
   });
-  
+
   const totalPages = Math.ceil(filteredPapers.length / itemsPerPage);
   const displayedPapers = filteredPapers.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
@@ -190,8 +190,8 @@ const PapersPage = () => {
                 streak >= 7
                   ? 'bg-orange-500/15 border-orange-500/30 text-orange-400'
                   : streak >= 3
-                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
-                  : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
+                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                    : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
               )}>
                 <Flame className="w-3.5 h-3.5" />
                 {streak} Day{streak !== 1 ? 's' : ''} Streak
@@ -204,11 +204,11 @@ const PapersPage = () => {
         <div className="flex flex-col sm:flex-row flex-nowrap sm:flex-wrap items-start sm:items-center gap-3 w-full md:w-auto">
           <div className="relative w-full sm:w-64 lg:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); setShowSaved(false); }}
-              placeholder="Search papers..." 
+              placeholder="Search papers..."
               className="w-full bg-theme-surface border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary placeholder-gray-500 focus:outline-none focus:border-indigo-400/50 transition-all shadow-sm"
             />
           </div>
@@ -221,7 +221,7 @@ const PapersPage = () => {
               <option value="">All Years</option>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
-            
+
             <select
               value={selectedSemester}
               onChange={(e) => { setSelectedSemester(e.target.value); setPage(1); }}
@@ -239,12 +239,12 @@ const PapersPage = () => {
       <div className="flex gap-3 overflow-x-auto pb-6 mb-8 scrollbar-hide snap-x -mx-4 px-4 md:mx-0 md:px-0 w-[calc(100%+2rem)] md:w-full">
         {/* ⭐ Saved Tab */}
         {isPremium ? (
-          <button 
+          <button
             onClick={() => { setShowSaved(s => !s); setSelectedDepartment(null); setPage(1); }}
             className={clsx(
               "px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0 flex items-center gap-1.5",
               showSaved
-                ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-lg shadow-amber-500/30 scale-105" 
+                ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-lg shadow-amber-500/30 scale-105"
                 : "bg-theme-surface text-amber-400 border-amber-500/20 hover:border-amber-500/40"
             )}
           >
@@ -254,7 +254,7 @@ const PapersPage = () => {
         ) : (
           /* Free users see a locked Saved button */
           <div className="relative group">
-            <button 
+            <button
               className="px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap border border-dashed border-theme-border text-theme-muted/40 flex items-center gap-1.5 cursor-not-allowed snap-center shrink-0"
             >
               <Star className="w-3 h-3" />
@@ -268,12 +268,12 @@ const PapersPage = () => {
         )}
 
         {/* All Subjects */}
-        <button 
+        <button
           onClick={() => { setSelectedDepartment(null); setShowSaved(false); setPage(1); }}
           className={clsx(
             "px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0",
             selectedDepartment === null && !showSaved
-              ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent shadow-lg shadow-indigo-500/30 scale-105" 
+              ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent shadow-lg shadow-indigo-500/30 scale-105"
               : "bg-theme-surface text-theme-muted border-theme-border hover:text-indigo-400"
           )}
         >
@@ -289,13 +289,13 @@ const PapersPage = () => {
           { name: "Logistics", color: "text-amber-400", bg: "bg-amber-500/5", border: "border-amber-500/20", gradient: "from-amber-500 to-orange-500", shadow: "shadow-orange-500/30" },
           { name: "PR", color: "text-rose-400", bg: "bg-rose-500/5", border: "border-rose-500/20", gradient: "from-rose-500 to-red-500", shadow: "shadow-red-500/30" }
         ].map(dept => (
-          <button 
+          <button
             key={dept.name}
             onClick={() => { setSelectedDepartment(dept.name); setShowSaved(false); setPage(1); }}
             className={clsx(
               "px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0 relative overflow-hidden group",
               selectedDepartment === dept.name && !showSaved
-                ? `bg-gradient-to-r ${dept.gradient} text-white border-transparent shadow-lg ${dept.shadow} scale-105` 
+                ? `bg-gradient-to-r ${dept.gradient} text-white border-transparent shadow-lg ${dept.shadow} scale-105`
                 : `${dept.bg} ${dept.color} ${dept.border} hover:border-transparent`
             )}
           >
@@ -312,165 +312,165 @@ const PapersPage = () => {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
         </div>
       ) : (
-      <>
+        <>
 
-      {/* Saved empty state */}
-      {showSaved && filteredPapers.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
-          <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400 border border-amber-500/20">
-            <Star size={28} />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-theme-primary mb-1">No Saved Papers Yet</h3>
-            <p className="text-sm text-theme-muted max-w-xs mx-auto">Star any paper by clicking the ★ icon on the card to save it here for quick access.</p>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        {displayedPapers.map((paper, index) => {
-          const isAnswers = paper.has_answers;
-          const gradients = [
-            "from-indigo-500 via-purple-500 to-pink-500",
-            "from-cyan-500 via-blue-500 to-indigo-500",
-            "from-emerald-500 via-teal-500 to-cyan-500",
-            "from-amber-500 via-orange-500 to-rose-500",
-            "from-fuchsia-500 via-pink-500 to-rose-500"
-          ];
-          const gradient = gradients[index % gradients.length];
-          const isStarred = bookmarkedIds.has(paper.id);
-          
-          return (
-          <div key={paper.id} className="glass-card p-6 group flex flex-col hover:translate-y-[-6px] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_20px_rgba(99,102,241,0.2)] transition-all duration-500 border-theme-border/50 relative overflow-hidden bg-gradient-to-b from-theme-surface to-theme-surface-2">
-            {/* Premium background glow */}
-            <div className={`absolute top-0 right-0 w-40 h-40 bg-gradient-to-br ${gradient} opacity-5 blur-3xl -mr-16 -mt-16 group-hover:opacity-15 transition-opacity duration-700`} />
-            
-            <div className="flex justify-between items-center mb-6 relative z-10">
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${gradient} p-[1px] shadow-lg group-hover:scale-110 transition-transform duration-500`}>
-                  <div className="w-full h-full bg-theme-surface rounded-xl flex items-center justify-center">
-                    <BookOpen className="w-6 h-6 text-transparent" style={{ stroke: 'url(#gradient-icon)' }} />
-                    <svg width="0" height="0">
-                      <linearGradient id="gradient-icon" x1="100%" y1="100%" x2="0%" y2="0%">
-                        <stop stopColor="#818cf8" offset="0%" />
-                        <stop stopColor="#c084fc" offset="50%" />
-                        <stop stopColor="#f472b6" offset="100%" />
-                      </linearGradient>
-                    </svg>
-                  </div>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-lg font-black text-theme-primary leading-none">{paper.year}</span>
-                  <span className="text-[10px] text-theme-muted font-bold tracking-tighter uppercase">Academic Year</span>
-                </div>
+          {/* Saved empty state */}
+          {showSaved && filteredPapers.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+              <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400 border border-amber-500/20">
+                <Star size={28} />
               </div>
-              <div className="flex items-center gap-2">
-                {isAnswers && (
-                  <div className="flex items-center gap-1 text-[9px] font-black text-white bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded-md shadow-lg shadow-emerald-500/20 transform group-hover:scale-105 transition-transform uppercase tracking-tighter">
-                    <div className="w-1 h-1 rounded-full bg-white animate-pulse" />
-                    ANSWERS
-                  </div>
-                )}
-                {/* Bookmark Star */}
-                {isPremium ? (
-                  <button
-                    onClick={(e) => handleToggleBookmark(e, paper.id)}
-                    disabled={bookmarkLoading === paper.id}
-                    className={clsx(
-                      'w-8 h-8 flex items-center justify-center rounded-lg border transition-all',
-                      isStarred
-                        ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
-                        : 'bg-theme-surface border-theme-border text-theme-muted hover:text-amber-400 hover:border-amber-500/30 opacity-100 lg:opacity-0 lg:group-hover:opacity-100'
-                    )}
-                    title={isStarred ? 'Remove bookmark' : 'Save this paper'}
-                  >
-                    <Star className={clsx('w-4 h-4', isStarred && 'fill-amber-400')} strokeWidth={2.5} />
-                  </button>
-                ) : (
-                  <div className="w-8 h-8 flex items-center justify-center rounded-lg border border-dashed border-theme-border/40 text-theme-muted/30 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity cursor-not-allowed" title="Upgrade to save papers">
-                    <Star className="w-4 h-4" strokeWidth={2.5} />
-                  </div>
-                )}
+              <div>
+                <h3 className="text-lg font-bold text-theme-primary mb-1">No Saved Papers Yet</h3>
+                <p className="text-sm text-theme-muted max-w-xs mx-auto">Star any paper by clicking the ★ icon on the card to save it here for quick access.</p>
               </div>
             </div>
-            
-            <div className="relative z-10 mb-6 flex-grow">
-              <h3 className="text-base md:text-lg font-bold text-theme-primary mb-3 leading-tight group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-indigo-400 group-hover:to-purple-400 transition-all duration-300">
-                {paper.title || paper.upsa_subjects?.name}
-              </h3>
-              <div className="inline-flex items-center px-2 py-0.5 rounded bg-theme-surface border border-theme-border text-[9px] font-black tracking-widest text-indigo-400 uppercase">
-                {paper.upsa_subjects?.code || 'GEN 000'}
-              </div>
-            </div>
-  
-            <div className="mt-auto pt-5 border-t border-theme-border/30 flex items-center justify-between relative z-10">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-theme-surface border border-theme-border flex items-center justify-center">
-                   <span className="text-[10px] font-black text-theme-secondary">{paper.semester === 'First' ? 'S1' : 'S2'}</span>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {displayedPapers.map((paper, index) => {
+              const isAnswers = paper.has_answers;
+              const gradients = [
+                "from-indigo-500 via-purple-500 to-pink-500",
+                "from-cyan-500 via-blue-500 to-indigo-500",
+                "from-emerald-500 via-teal-500 to-cyan-500",
+                "from-amber-500 via-orange-500 to-rose-500",
+                "from-fuchsia-500 via-pink-500 to-rose-500"
+              ];
+              const gradient = gradients[index % gradients.length];
+              const isStarred = bookmarkedIds.has(paper.id);
+
+              return (
+                <div key={paper.id} className="glass-card p-6 group flex flex-col hover:translate-y-[-6px] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_20px_rgba(99,102,241,0.2)] transition-all duration-500 border-theme-border/50 relative overflow-hidden bg-gradient-to-b from-theme-surface to-theme-surface-2">
+                  {/* Premium background glow */}
+                  <div className={`absolute top-0 right-0 w-40 h-40 bg-gradient-to-br ${gradient} opacity-5 blur-3xl -mr-16 -mt-16 group-hover:opacity-15 transition-opacity duration-700`} />
+
+                  <div className="flex justify-between items-center mb-6 relative z-10">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${gradient} p-[1px] shadow-lg group-hover:scale-110 transition-transform duration-500`}>
+                        <div className="w-full h-full bg-theme-surface rounded-xl flex items-center justify-center">
+                          <BookOpen className="w-6 h-6 text-transparent" style={{ stroke: 'url(#gradient-icon)' }} />
+                          <svg width="0" height="0">
+                            <linearGradient id="gradient-icon" x1="100%" y1="100%" x2="0%" y2="0%">
+                              <stop stopColor="#818cf8" offset="0%" />
+                              <stop stopColor="#c084fc" offset="50%" />
+                              <stop stopColor="#f472b6" offset="100%" />
+                            </linearGradient>
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-lg font-black text-theme-primary leading-none">{paper.year}</span>
+                        <span className="text-[10px] text-theme-muted font-bold tracking-tighter uppercase">Academic Year</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isAnswers && (
+                        <div className="flex items-center gap-1 text-[9px] font-black text-white bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded-md shadow-lg shadow-emerald-500/20 transform group-hover:scale-105 transition-transform uppercase tracking-tighter">
+                          <div className="w-1 h-1 rounded-full bg-white animate-pulse" />
+                          ANSWERS
+                        </div>
+                      )}
+                      {/* Bookmark Star */}
+                      {isPremium ? (
+                        <button
+                          onClick={(e) => handleToggleBookmark(e, paper.id)}
+                          disabled={bookmarkLoading === paper.id}
+                          className={clsx(
+                            'w-8 h-8 flex items-center justify-center rounded-lg border transition-all',
+                            isStarred
+                              ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+                              : 'bg-theme-surface border-theme-border text-theme-muted hover:text-amber-400 hover:border-amber-500/30 opacity-100 lg:opacity-0 lg:group-hover:opacity-100'
+                          )}
+                          title={isStarred ? 'Remove bookmark' : 'Save this paper'}
+                        >
+                          <Star className={clsx('w-4 h-4', isStarred && 'fill-amber-400')} strokeWidth={2.5} />
+                        </button>
+                      ) : (
+                        <div className="w-8 h-8 flex items-center justify-center rounded-lg border border-dashed border-theme-border/40 text-theme-muted/30 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity cursor-not-allowed" title="Upgrade to save papers">
+                          <Star className="w-4 h-4" strokeWidth={2.5} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="relative z-10 mb-6 flex-grow">
+                    <h3 className="text-base md:text-lg font-bold text-theme-primary mb-3 leading-tight group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-indigo-400 group-hover:to-purple-400 transition-all duration-300">
+                      {paper.title || paper.upsa_subjects?.name}
+                    </h3>
+                    <div className="inline-flex items-center px-2 py-0.5 rounded bg-theme-surface border border-theme-border text-[9px] font-black tracking-widest text-indigo-400 uppercase">
+                      {paper.upsa_subjects?.code || 'GEN 000'}
+                    </div>
+                  </div>
+
+                  <div className="mt-auto pt-5 border-t border-theme-border/30 flex items-center justify-between relative z-10">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-theme-surface border border-theme-border flex items-center justify-center">
+                        <span className="text-[10px] font-black text-theme-secondary">{paper.semester === 'First' ? 'S1' : 'S2'}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-theme-muted uppercase tracking-tight">{paper.semester} Semester</span>
+                    </div>
+                    <div className="flex gap-2">
+                      {paper.has_answers && paper.answer_url && (
+                        <a
+                          href={paper.answer_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 hover:text-white hover:bg-emerald-500 transition-all shadow-sm hover:shadow-md"
+                          title="View Answer Key"
+                        >
+                          <FileCheck className="w-5 h-5" />
+                        </a>
+                      )}
+                      <Link
+                        to={`/papers/${paper.id}`}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-theme-surface border border-theme-border text-theme-secondary hover:text-indigo-400 hover:border-indigo-500/30 transition-all shadow-sm hover:shadow-md"
+                        title="View Paper"
+                      >
+                        <Eye className="w-5 h-5" />
+                      </Link>
+                      <button
+                        onClick={() => handleDownload(paper.id, 'download')}
+                        className={`w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white transition-all shadow-lg hover:shadow-xl hover:scale-105`}
+                        title="Download PDF"
+                      >
+                        <Download className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                  </div>
                 </div>
-                <span className="text-[10px] font-bold text-theme-muted uppercase tracking-tight">{paper.semester} Semester</span>
-              </div>
-              <div className="flex gap-2">
-                {paper.has_answers && paper.answer_url && (
-                  <a
-                    href={paper.answer_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 hover:text-white hover:bg-emerald-500 transition-all shadow-sm hover:shadow-md"
-                    title="View Answer Key"
-                  >
-                    <FileCheck className="w-5 h-5" />
-                  </a>
-                )}
-                <Link 
-                  to={`/papers/${paper.id}`}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-theme-surface border border-theme-border text-theme-secondary hover:text-indigo-400 hover:border-indigo-500/30 transition-all shadow-sm hover:shadow-md"
-                  title="View Paper"
-                >
-                  <Eye className="w-5 h-5" />
-                </Link>
-                <button 
-                  onClick={() => handleDownload(paper.id, 'download')}
-                  className={`w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white transition-all shadow-lg hover:shadow-xl hover:scale-105`}
-                  title="Download PDF"
-                >
-                  <Download className="w-5 h-5" />
-                </button>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="mt-12 flex items-center justify-center gap-3 md:gap-6">
+              <button
+                disabled={page === 1}
+                onClick={() => { setPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="px-4 md:px-6 py-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 text-xs md:text-sm shadow-sm"
+              >
+                <ChevronLeft className="w-4 h-4" /> Previous
+              </button>
+
+              <div className="flex items-center gap-2 px-3 md:px-5 py-2 bg-theme-surface/50 border border-theme-border rounded-xl shadow-inner">
+                <span className="hidden sm:inline text-[9px] font-black text-theme-muted uppercase tracking-widest">Page</span>
+                <span className="text-sm font-black text-indigo-400">{page}</span>
+                <span className="text-[9px] font-black text-theme-muted uppercase tracking-widest">/</span>
+                <span className="text-sm font-bold text-theme-primary">{totalPages}</span>
               </div>
 
+              <button
+                disabled={page === totalPages}
+                onClick={() => { setPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="px-4 md:px-6 py-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 text-xs md:text-sm shadow-sm"
+              >
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-          </div>
-          );
-        })}
-      </div>
-      
-      {totalPages > 1 && (
-        <div className="mt-12 flex items-center justify-center gap-3 md:gap-6">
-          <button
-            disabled={page === 1}
-            onClick={() => { setPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            className="px-4 md:px-6 py-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 text-xs md:text-sm shadow-sm"
-          >
-            <ChevronLeft className="w-4 h-4" /> Previous
-          </button>
-          
-          <div className="flex items-center gap-2 px-3 md:px-5 py-2 bg-theme-surface/50 border border-theme-border rounded-xl shadow-inner">
-            <span className="hidden sm:inline text-[9px] font-black text-theme-muted uppercase tracking-widest">Page</span>
-            <span className="text-sm font-black text-indigo-400">{page}</span>
-            <span className="text-[9px] font-black text-theme-muted uppercase tracking-widest">/</span>
-            <span className="text-sm font-bold text-theme-primary">{totalPages}</span>
-          </div>
-
-          <button
-            disabled={page === totalPages}
-            onClick={() => { setPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            className="px-4 md:px-6 py-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 text-xs md:text-sm shadow-sm"
-          >
-            Next <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-      </>
+          )}
+        </>
       )}
     </div>
   );

@@ -127,7 +127,7 @@ router.get('/papers', async (_req: AuthRequest, res: Response) => {
       upsa_paper_insights: undefined
     }));
 
-    res.status(200).json({ 
+    res.status(200).json({
       papers: papersWithStatus,
       ai_health: getAIHealth()
     });
@@ -494,18 +494,18 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     // Process sales data for charts
     const salesByPeriod: Record<string, number> = {};
     const revenueByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
-    
+
     transactions.forEach((t: any) => {
       if (t.status === 'success') {
         let periodKey: string;
         const d = new Date(t.created_at);
-        
+
         if (range === 'daily' || range === 'weekly') {
           periodKey = d.toISOString().split('T')[0]; // Daily
         } else {
           periodKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`; // Monthly
         }
-        
+
         salesByPeriod[periodKey] = (salesByPeriod[periodKey] || 0) + (Number(t.amount) || 0);
 
         // Revenue by plan (we assume the plan is in the transaction metadata or we can infer it)
@@ -561,11 +561,11 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     (usersForGrowth || []).forEach((u: any) => {
       const d = new Date(u.created_at);
       let periodKey: string;
-        if (range === 'daily' || range === 'weekly') {
-          periodKey = d.toISOString().split('T')[0]; // Daily granularity
-        } else {
-          periodKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`; // Monthly granularity
-        }
+      if (range === 'daily' || range === 'weekly') {
+        periodKey = d.toISOString().split('T')[0]; // Daily granularity
+      } else {
+        periodKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`; // Monthly granularity
+      }
 
       if (!growthByPeriod[periodKey]) {
         growthByPeriod[periodKey] = { date: periodKey, free: 0, basic: 0, plus: 0, pro: 0 };
@@ -643,11 +643,11 @@ router.post('/ai-config', async (req: AuthRequest, res: Response) => {
   const { globalAiBlock, globalBanner, globalBannerActive } = req.body;
   try {
     const currentData = fs.existsSync(aiConfigPath) ? JSON.parse(fs.readFileSync(aiConfigPath, 'utf8')) : {};
-    
+
     if (typeof globalAiBlock === 'boolean') currentData.globalAiBlock = globalAiBlock;
     if (typeof globalBanner === 'string') currentData.globalBanner = globalBanner;
     if (typeof globalBannerActive === 'boolean') currentData.globalBannerActive = globalBannerActive;
-    
+
     fs.writeFileSync(aiConfigPath, JSON.stringify(currentData, null, 2));
     res.status(200).json({ success: true, ...currentData });
   } catch (err: any) {

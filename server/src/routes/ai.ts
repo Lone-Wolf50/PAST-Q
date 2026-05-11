@@ -37,10 +37,10 @@ const checkAiEnabled = async (req: AuthRequest, res: any, next: any) => {
   }
 
   if (isGlobalBlock) {
-    return res.status(403).json({ 
-      error: 'ai_disabled', 
+    return res.status(403).json({
+      error: 'ai_disabled',
       isMaintenance: true,
-      message: 'Our AI Tutor is currently undergoing routine maintenance and upgrades. Please check back later!' 
+      message: 'Our AI Tutor is currently undergoing routine maintenance and upgrades. Please check back later!'
     });
   }
 
@@ -53,10 +53,10 @@ const checkAiEnabled = async (req: AuthRequest, res: any, next: any) => {
       .single();
 
     if (accessError || userAccess?.ai_enabled === false) {
-      return res.status(403).json({ 
-        error: 'ai_disabled', 
+      return res.status(403).json({
+        error: 'ai_disabled',
         isMaintenance: true,
-        message: 'Our AI Tutor is currently recharging and performing routine maintenance to better serve you. Please check back later!' 
+        message: 'Our AI Tutor is currently recharging and performing routine maintenance to better serve you. Please check back later!'
       });
     }
     next();
@@ -134,7 +134,7 @@ router.get('/usage', protect, async (req: AuthRequest, res: any) => {
       .select('plan')
       .eq('id', req.user?.id)
       .single();
-    
+
     const userPlan = (userData?.plan || 'Free').toLowerCase();
     let usageCount = 0;
 
@@ -266,7 +266,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         try {
           // Check if already generating or exists
           if (isProcessing(paperId)) return;
-          
+
           const { data: existing } = await supabase
             .from('upsa_paper_insights')
             .select('id')
@@ -338,7 +338,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         .from('upsa_ai_queries')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', req.user?.id);
-      
+
       if ((totalQueries || 0) >= 10) {
         return res.json({ reply: "You've reached your **10 query limit** for this week on the Basic plan. Upgrade to **Plus or Pro** for unlimited queries!" });
       }
@@ -352,9 +352,9 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           .eq('has_file', true);
 
         if ((fileCount || 0) >= 5) {
-          return res.status(403).json({ 
-            error: 'file_limit_reached', 
-            message: "You've reached the **5 file upload limit** on the Basic plan. Upgrade to **Plus** to continue uploading files!" 
+          return res.status(403).json({
+            error: 'file_limit_reached',
+            message: "You've reached the **5 file upload limit** on the Basic plan. Upgrade to **Plus** to continue uploading files!"
           });
         }
       }
@@ -398,7 +398,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       }
     }
     const userParts: any[] = [];
-    
+
     let extractedText = "";
     if (activeFileData) {
       try {
@@ -440,7 +440,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           contents,
           config: { systemInstruction },
         });
-        break; 
+        break;
       } catch (err: any) {
         lastError = err;
         const body = (() => { try { return JSON.parse(err.message); } catch { return null; } })();
@@ -472,7 +472,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           // We pass a note in the user message if a paper/file was attached.
           const userMsgForPuter = extractedText
             ? `[Note: A PDF document was attached. Here is its extracted text content for your reference:\n\n${extractedText.substring(0, 10000)}]\n\n${message}`
-            : activeFileData 
+            : activeFileData
               ? `[Note: A PDF document was attached but could not be processed. Please answer based on your general knowledge.]\n\n${message}`
               : message;
 
@@ -534,7 +534,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       (async () => {
         try {
           await supabase.from('upsa_ai_messages').insert([
-            { conversation_id: conversationId, role: 'user',      content: message },
+            { conversation_id: conversationId, role: 'user', content: message },
             { conversation_id: conversationId, role: 'assistant', content: replyText },
           ]);
           await supabase

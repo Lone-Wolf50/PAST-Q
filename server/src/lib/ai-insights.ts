@@ -92,14 +92,14 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       console.warn(`[AI Insights] PDF text extraction failed: ${pdfErr.message}. Will rely on title/metadata only.`);
     }
 
-    const geminiPrompt = extractedText 
+    const geminiPrompt = extractedText
       ? `[Extracted Paper Content]\n${extractedText.substring(0, 35000)}\n\n${prompt}`
       : `[PDF content unavailable for paper: "${paperTitle}"]\n\n${prompt}`;
 
     for (const modelName of modelsToTry) {
       try {
         console.log(`[AI Insights] Trying model: ${modelName}`);
-        
+
         // 60-second timeout per model
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('AI Request Timeout')), 60000)
@@ -163,13 +163,13 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
             Please provide your BEST academic expert analysis based on the ${extractedText ? 'extracted text above' : `paper title: "${paperTitle}"`}.
             Return ONLY the JSON object. Do not include markdown code blocks.
           `.trim();
-          
+
           const puterResponse = await askPuter(
             "You are an expert academic tutor providing structured paper analysis.",
             [],
             puterPrompt
           );
-          
+
           if (puterResponse) {
             responseText = puterResponse;
             console.log(`[AI Insights] Puter.js fallback succeeded for paper: "${paperTitle}"`);
@@ -228,14 +228,14 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       console.error('[AI Insights] Regex extraction failed, using raw response.');
       jsonStr = responseText.trim();
     }
-    
+
     let insights;
     try {
       insights = JSON.parse(jsonStr);
     } catch (parseErr: any) {
       console.error('[AI Insights] JSON Parse Error:', parseErr.message);
       console.error('[AI Insights] Failed JSON String:', jsonStr.substring(0, 500) + '...');
-      
+
       await supabase.from('upsa_admin_notifications').insert({
         title: '⚠️ AI Analysis Failed',
         message: `Could not parse AI response for paper: "${paperTitle}". Technical error: ${parseErr.message}`,
@@ -268,7 +268,7 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       console.log(`[AI Insights] ✅ SUCCESS: Insights for "${paperTitle}" are now PERMANENTLY saved in the database.`);
       console.log(`[AI Insights] ℹ️  All future students who view this paper will now see these answers instantly.`);
       console.log('────────────────────────────────────────────────────────────');
-      
+
       await supabase.from('upsa_admin_notifications').insert({
         title: '✅ AI Insights Ready',
         message: `AI Analysis is complete for "${paperTitle}". Student insights are now live and cached for everyone.`,
