@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import validator from 'validator';
 import { supabase } from '../lib/supabase';
 import { sendOtpEmail } from '../lib/mailer';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ const authLimiter = rateLimit({
 });
 
 // ─── Helpers ─────────────────────────────────────────────────
-const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 const otpExpiry = () => new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
 /**
@@ -120,7 +121,15 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    await sendOtpEmail(email, otp, 'verify');
+    try {
+      await sendOtpEmail(email, otp, 'verify');
+    } catch (emailErr) {
+      console.error('[register] Email sending failed:', emailErr);
+      // Rollback: delete the unverified user from the database since the email failed to send
+      await supabase.from('upsa_users').delete().eq('id', user.id);
+      res.status(500).json({ error: 'Failed to send verification email. Please check your email address and try again.' });
+      return;
+    }
 
     res.status(201).json({ message: 'Account created. Please check your email for the verification code.' });
   } catch (err) {

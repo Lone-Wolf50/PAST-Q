@@ -17,6 +17,10 @@ import streaksRouter from './routes/streaks';
 dotenv.config();
 
 const app = express();
+
+// Trust the first proxy (Render) to allow express-rate-limit to read the correct IP
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 5000;
 
 // ── Security Middlewares ───────────────────────────────────────────────────────
