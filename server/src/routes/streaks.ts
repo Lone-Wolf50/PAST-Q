@@ -62,7 +62,7 @@ router.post('/ping', protect, async (req: AuthRequest, res: Response) => {
 
     res.status(200).json({ streak: newStreak, isNewDay: true });
   } catch (err) {
-    console.error('[streaks POST /ping]', err);
+
     res.status(500).json({ error: 'Failed to update streak.' });
   }
 });

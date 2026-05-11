@@ -23,7 +23,7 @@ router.post('/contact', async (req, res) => {
     const userPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
     if (!userPass) {
-      console.error('❌ [Support] Missing email password in .env (SMTP_PASS or EMAIL_PASS)');
+
       return res.status(500).json({ error: 'Email configuration error.' });
     }
 
@@ -53,11 +53,10 @@ ${message}
 
     // 4. Send
     await transporter.sendMail(mailOptions);
-    console.log(`✅ [Support] Email sent from ${email} via ${userEmail}`);
 
     res.status(200).json({ message: 'Your message has been sent successfully!' });
   } catch (error: any) {
-    console.error('❌ [Support] Email Error:', error.message || error);
+
     res.status(500).json({ error: `Email Error: ${error.message || 'Check SMTP settings'}` });
   }
 });

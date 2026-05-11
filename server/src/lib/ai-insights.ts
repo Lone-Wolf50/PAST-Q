@@ -26,23 +26,23 @@ export const isProcessing = (paperId: string) => processingMap.has(paperId);
 export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, paperTitle: string) {
   // Prevent duplicate concurrent runs for the same paper
   if (isProcessing(paperId)) {
-    console.log(`[AI Insights] Already processing paperId=${paperId}, skipping.`);
+
     return;
   }
 
   // ── Circuit breaker: don't even try if quota is known-exhausted ──────────
   const health = getAIHealth();
   if (health.status === 'limited') {
-    console.warn(`[AI Insights] Skipping "${paperTitle}" — AI quota is limited until ${health.backOnlineAt}`);
+
     return;
   }
 
   markProcessingStarted(paperId);
 
   try {
-    console.log(`[AI Insights] Starting for: ${paperTitle} (id=${paperId})`);
+
     if (!process.env.GEMINI_API_KEY) {
-      console.error('[AI Insights] GEMINI_API_KEY missing');
+
       markProcessingDone(paperId);
       return;
     }
@@ -83,13 +83,13 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
     // ── Global PDF Extraction ───────────────────────────────────────────────
     let extractedText = "";
     try {
-      console.log(`[AI Insights] Extracting text from PDF buffer (${pdfBuffer?.length || 0} bytes) for AI models...`);
+
       const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
       const pdfData = await pdfParser(pdfBuffer);
       extractedText = pdfData.text || "";
-      console.log(`[AI Insights] Successfully extracted ${extractedText.length} characters of text.`);
+
     } catch (pdfErr: any) {
-      console.warn(`[AI Insights] PDF text extraction failed: ${pdfErr.message}. Will rely on title/metadata only.`);
+
     }
 
     const geminiPrompt = extractedText
@@ -98,7 +98,6 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
 
     for (const modelName of modelsToTry) {
       try {
-        console.log(`[AI Insights] Trying model: ${modelName}`);
 
         // 60-second timeout per model
         const timeoutPromise = new Promise((_, reject) =>
@@ -119,7 +118,7 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
 
         const res: any = await Promise.race([aiPromise, timeoutPromise]);
         result = res;
-        console.log(`[AI Insights] Model ${modelName} succeeded.`);
+
         break; // Success!
       } catch (err: any) {
         lastError = err;
@@ -128,32 +127,32 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
         const code = parsed?.error?.code ?? err.status;
 
         if (code === 429) {
-          console.warn(`[AI Insights] Quota exceeded for ${modelName}. Trying next fallback...`);
+
           // Note: we no longer break here. We will try 1.5-flash just in case it works.
           quotaExhausted = true;
           continue;
         }
         if (code === 404) {
-          console.warn(`[AI Insights] Model not found: ${modelName}. Trying next fallback...`);
+
           continue;
         }
         if (err.message === 'AI Request Timeout') {
-          console.warn(`[AI Insights] Timeout for ${modelName}. Trying next fallback...`);
+
           continue;
         }
-        console.error(`[AI Insights] Model ${modelName} failed:`, err.message);
+
         break;
       }
     }
 
     if (!result) {
       if (quotaExhausted) {
-        console.warn(`[AI Insights] Gemini quota exhausted for all models. Checking Puter.js...`);
+
       }
 
       // ── Puter.js Fallback for Insights ──────────────────────────────────
       if (isPuterAvailable()) {
-        console.log(`[AI Insights] Attempting Puter.js fallback for paper: "${paperTitle}"`);
+
         try {
           const puterPrompt = `
             ${prompt}
@@ -172,19 +171,19 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
 
           if (puterResponse) {
             responseText = puterResponse;
-            console.log(`[AI Insights] Puter.js fallback succeeded for paper: "${paperTitle}"`);
+
             // Reset health — Puter is serving fine
             setAIHealth({ status: 'online', backOnlineAt: null, lastError: null });
           }
         } catch (puterErr: any) {
-          console.error(`[AI Insights] Puter.js fallback also failed:`, puterErr.message);
+
         }
       }
 
       if (!responseText) {
         // BOTH Gemini and Puter failed — activate circuit breaker
         if (quotaExhausted) {
-          console.error('[AI Insights] All providers exhausted — activating circuit breaker for 10m.');
+
           setAIHealth({
             status: 'limited',
             backOnlineAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
@@ -210,12 +209,10 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
     }
 
     if (!responseText) {
-      console.error('[AI Insights] responseText is null, skipping extraction.');
+
       markProcessingDone(paperId);
       return;
     }
-
-    console.log(`[AI Insights] Got response (length: ${responseText.length})`);
 
     // Robust JSON extraction
     let jsonStr = '';
@@ -225,7 +222,7 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       // Remove any markdown formatting if present
       jsonStr = jsonStr.replace(/```json|```/g, '').trim();
     } catch (extractErr) {
-      console.error('[AI Insights] Regex extraction failed, using raw response.');
+
       jsonStr = responseText.trim();
     }
 
@@ -233,8 +230,7 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
     try {
       insights = JSON.parse(jsonStr);
     } catch (parseErr: any) {
-      console.error('[AI Insights] JSON Parse Error:', parseErr.message);
-      console.error('[AI Insights] Failed JSON String:', jsonStr.substring(0, 500) + '...');
+
 
       await supabase.from('upsa_admin_notifications').insert({
         title: '⚠️ AI Analysis Failed',
@@ -257,17 +253,16 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       });
 
     if (error) {
-      console.error(`[AI Insights] ❌ Database error saving insights for "${paperTitle}":`, error.message);
+
       await supabase.from('upsa_admin_notifications').insert({
         title: '⚠️ Database Error',
         message: `Failed to save insights for paper: "${paperTitle}". ${error.message}`,
         is_read: false
       });
     } else {
-      console.log('────────────────────────────────────────────────────────────');
-      console.log(`[AI Insights] ✅ SUCCESS: Insights for "${paperTitle}" are now PERMANENTLY saved in the database.`);
-      console.log(`[AI Insights] ℹ️  All future students who view this paper will now see these answers instantly.`);
-      console.log('────────────────────────────────────────────────────────────');
+
+
+
 
       await supabase.from('upsa_admin_notifications').insert({
         title: '✅ AI Insights Ready',
@@ -276,7 +271,7 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       });
     }
   } catch (err: any) {
-    console.error('[AI Insights] Unexpected error:', err?.message || err);
+
     await supabase.from('upsa_admin_notifications').insert({
       title: '❌ Unexpected AI Error',
       message: `A critical error occurred while analyzing "${paperTitle}". Please check server logs.`,

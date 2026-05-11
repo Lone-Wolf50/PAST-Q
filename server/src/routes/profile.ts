@@ -118,7 +118,7 @@ router.post('/me/avatar', async (req: AuthRequest, res: Response) => {
       });
 
     if (uploadError) {
-      console.error('[avatar upload] Supabase storage error:', uploadError.message);
+
       res.status(500).json({ error: `Storage error: ${uploadError.message}` });
       return;
     }
@@ -133,14 +133,14 @@ router.post('/me/avatar', async (req: AuthRequest, res: Response) => {
       .eq('id', userId);
 
     if (dbError) {
-      console.error('[avatar upload] DB update error:', dbError.message);
+
       res.status(500).json({ error: `DB error: ${dbError.message}` });
       return;
     }
 
     res.status(200).json({ avatar_url: publicUrl, message: 'Avatar updated successfully.' });
   } catch (err: any) {
-    console.error('[avatar upload] Unexpected error:', err?.message, err?.stack);
+
     res.status(500).json({ error: err?.message || 'Failed to upload avatar.' });
   }
 });
@@ -162,7 +162,7 @@ router.delete('/me/avatar', async (req: AuthRequest, res: Response) => {
           .from('avatars')
           .remove([`${userId}/${fileName}`]);
         if (removeError) {
-          console.error('[avatar delete] Storage remove error:', removeError.message);
+
         }
       }
     }
@@ -170,7 +170,7 @@ router.delete('/me/avatar', async (req: AuthRequest, res: Response) => {
     await supabase.from('upsa_users').update({ avatar_url: null }).eq('id', userId);
     res.status(200).json({ message: 'Avatar deleted successfully.' });
   } catch (err: any) {
-    console.error('[avatar delete] Unexpected error:', err?.message);
+
     res.status(500).json({ error: 'Failed to delete avatar.' });
   }
 });
@@ -262,7 +262,7 @@ router.delete('/me', async (req: AuthRequest, res: Response) => {
         deleted_at: new Date().toISOString()
       });
       if (archiveError) {
-        console.error('[Archive Deletion Error]:', archiveError);
+
       }
     }
 

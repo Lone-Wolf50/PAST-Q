@@ -33,7 +33,7 @@ const checkAiEnabled = async (req: AuthRequest, res: any, next: any) => {
       }
     }
   } catch (err) {
-    console.error('Failed to read ai-config.json', err);
+
   }
 
   if (isGlobalBlock) {
@@ -274,7 +274,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
             .single();
 
           if (!existing) {
-            console.log(`[AI Chat] Global insights missing for paperId=${paperId}. Starting generation...`);
+
             const { data: paper } = await supabase
               .from('upsa_papers')
               .select('id, title, file_url')
@@ -282,25 +282,23 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
               .single();
 
             if (paper?.file_url) {
-              console.log(`[AI Chat] Fetching PDF from R2: ${paper.file_url}`);
+
               const pdfResponse = await fetch(paper.file_url);
               if (pdfResponse.ok) {
                 const arrayBuffer = await pdfResponse.arrayBuffer();
-                console.log(`[AI Chat] PDF fetched successfully (${arrayBuffer.byteLength} bytes). Triggering generatePaperInsights...`);
-                generatePaperInsights(paper.id, Buffer.from(arrayBuffer), paper.title).catch(e => {
-                  console.error('[AI Chat] Background insight generation failed:', e);
-                });
+
+                generatePaperInsights(paper.id, Buffer.from(arrayBuffer), paper.title).catch(() => {});
               } else {
-                console.error(`[AI Chat] Failed to fetch PDF: ${pdfResponse.status} ${pdfResponse.statusText}`);
+
               }
             } else {
-              console.warn(`[AI Chat] Paper file_url is missing for paperId=${paperId}`);
+
             }
           } else {
-            console.log(`[AI Chat] Global insights already exist for paperId=${paperId}. Skipping generation.`);
+
           }
-        } catch (err) {
-          console.error('[AI Chat] Insight auto-check failed:', err);
+        } catch {
+
         }
       })();
     }
@@ -382,7 +380,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           }
         }
       } catch (err) {
-        console.error('[AI Chat] Failed to fetch paper context from R2:', err);
+
       }
     }
 
@@ -402,14 +400,14 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     let extractedText = "";
     if (activeFileData) {
       try {
-        console.log('[AI Chat] Extracting text from PDF for AI models...');
+
         const pdfBuffer = Buffer.from(activeFileData, 'base64');
         const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
         const pdfData = await pdfParser(pdfBuffer);
         extractedText = pdfData.text || "";
-        console.log(`[AI Chat] Extracted ${extractedText.length} chars of text.`);
+
       } catch (pdfErr: any) {
-        console.warn('[AI Chat] PDF extraction failed:', pdfErr.message);
+
       }
     }
 
@@ -446,11 +444,11 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         const body = (() => { try { return JSON.parse(err.message); } catch { return null; } })();
         const code = body?.error?.code ?? err.status;
         if (code === 429) {
-          console.warn(`[AI Chat] Quota exceeded on ${model}, trying next model...`);
+
           continue; // try the next model
         }
         if (code === 404) {
-          console.warn(`[AI Chat] Model not found: ${model}, trying next model...`);
+
           continue; // model not available — try the next one
         }
         throw err; // any other error — re-throw immediately
@@ -463,7 +461,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     if (!response) {
       // All Gemini models exhausted — try Puter.js fallback before giving up
       if (isPuterAvailable()) {
-        console.log('[AI Chat] All Gemini models exhausted. Attempting Puter.js fallback...');
+
         try {
           const historyForPuter = (history && Array.isArray(history))
             ? history.map((m: any) => ({ role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', content: m.content }))
@@ -478,17 +476,17 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
 
           puterReplyText = await askPuter(systemInstruction, historyForPuter, userMsgForPuter);
           usedPuterFallback = true;
-          console.log('[AI Chat] Puter.js fallback succeeded.');
+
           // Reset health — Puter is serving fine even if Gemini is limited
           setAIHealth({ status: 'online', backOnlineAt: null, lastError: null });
         } catch (puterErr: any) {
-          console.error('[AI Chat] Puter.js fallback also failed:', puterErr?.message);
+
         }
       }
 
       if (!usedPuterFallback) {
         // Both Gemini and Puter have failed — set health to limited and surface a quota message
-        console.error('[AI Chat] All AI providers exhausted. Last error:', lastError?.message);
+
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(0, 0, 0, 0);
@@ -524,7 +522,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       total_tokens: response?.usageMetadata?.totalTokenCount || 0,
       has_file: !!fileData
     }).then(({ error }) => {
-      if (error) console.error('[AI Stats Log Error]:', error);
+      if (error) {}
     });
 
     // ── Persist messages for Plus/Pro users when a conversationId is supplied ──
@@ -543,7 +541,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
             .eq('id', conversationId)
             .eq('user_id', req.user?.id);
         } catch (saveErr) {
-          console.error('[AI History] Failed to save messages:', saveErr);
+
         }
       })();
     }
@@ -551,9 +549,9 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     res.json({ reply: replyText });
   } catch (error: any) {
     // Log the full error shape so we can debug 500s quickly
-    console.error('[AI Chat Error] status:', error?.status ?? 'unknown');
-    console.error('[AI Chat Error] message:', error?.message ?? error);
-    if (error?.errorDetails) console.error('[AI Chat Error] details:', JSON.stringify(error.errorDetails, null, 2));
+
+
+    if (error?.errorDetails) {}
 
     // Attempt to parse the Gemini error body (it may be a JSON string in error.message)
     let parsedBody: any = null;

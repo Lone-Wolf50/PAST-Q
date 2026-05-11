@@ -33,7 +33,7 @@ const AdminPaymentsPage = () => {
       setPayments(payRes.transactions || []);
       setStats(statRes);
     } catch (err) {
-      console.error(err);
+
     } finally {
       setLoading(false);
     }
@@ -61,7 +61,7 @@ const AdminPaymentsPage = () => {
       setAlert({ show: true, title: 'User Deactivated', message: 'The user account has been successfully deactivated.', variant: 'success' });
       fetchData();
     } catch (err: any) {
-      console.error(err);
+
       setAlert({
         show: true,
         title: 'Action Failed',

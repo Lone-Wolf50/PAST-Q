@@ -32,7 +32,7 @@ const AdminUsersPage = () => {
       const res = await apiFetch('/hq-management/users', { token });
       setUsers(res.users || []);
     } catch (err: any) {
-      console.error(err?.message || err);
+
     } finally {
       setLoading(false);
     }
@@ -55,7 +55,7 @@ const AdminUsersPage = () => {
       });
       // Optionally show a toast here instead of a blocking alert
     } catch (err: any) {
-      console.error(err?.message || err);
+
       setUsers(previousUsers); // Rollback on error
       setAlert({
         show: true,
@@ -77,7 +77,7 @@ const AdminUsersPage = () => {
         token: localStorage.getItem('admin_token')!
       });
     } catch (err: any) {
-      console.error(err?.message || err);
+
       setUsers(previousUsers); // Rollback
       setAlert({
         show: true,
@@ -99,7 +99,7 @@ const AdminUsersPage = () => {
         token: localStorage.getItem('admin_token')!
       });
     } catch (err: any) {
-      console.error(err?.message || err);
+
       setUsers(previousUsers);
       setAlert({
         show: true,
@@ -129,7 +129,7 @@ const AdminUsersPage = () => {
       }
       setConfirm({ show: false, id: null, action: null });
     } catch (err: any) {
-      console.error(err?.message || err);
+
       setAlert({
         show: true,
         title: 'Action Failed',

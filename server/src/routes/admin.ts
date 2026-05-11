@@ -132,7 +132,7 @@ router.get('/papers', async (_req: AuthRequest, res: Response) => {
       ai_health: getAIHealth()
     });
   } catch (err: any) {
-    console.error('[admin GET /papers] Error:', err);
+
     res.status(500).json({ error: err.message || 'Failed to fetch papers.' });
   }
 });
@@ -152,7 +152,7 @@ router.get('/papers/:id/insights', async (req: AuthRequest, res: Response) => {
     }
     res.status(200).json({ insights: data });
   } catch (err: any) {
-    console.error('[admin GET /papers/:id/insights]', err);
+
     res.status(500).json({ error: 'Failed to fetch insights.' });
   }
 });
@@ -217,7 +217,7 @@ router.post(
 
       res.status(201).json({ paper: data, file_url: finalFileUrl });
     } catch (e: any) {
-      console.error('[admin POST /papers]', e);
+
       res.status(500).json({ error: e.message || 'Failed to upload paper.' });
     }
   }
@@ -275,7 +275,7 @@ router.patch(
       if (error) throw error;
       res.status(200).json({ paper: data });
     } catch (e: any) {
-      console.error('[admin PATCH /papers/:id]', e);
+
       res.status(500).json({ error: e.message || 'Failed to update paper.' });
     }
   }
@@ -613,7 +613,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       aiUsageByPlan,
     });
   } catch (err: any) {
-    console.error('[admin GET /stats]', err);
+
     res.status(500).json({ error: 'Failed to fetch stats.' });
   }
 });

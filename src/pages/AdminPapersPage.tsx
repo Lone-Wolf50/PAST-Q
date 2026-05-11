@@ -72,7 +72,7 @@ const AdminPapersPage = () => {
       setPapers(res.papers || []);
       if (res.ai_health) setAiHealth(res.ai_health);
     } catch (err) {
-      console.error(err);
+
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,7 @@ const AdminPapersPage = () => {
       const res = await apiFetch('/hq-management/subjects', { token });
       setSubjects(res.subjects || []);
     } catch (err) {
-      console.error(err);
+
     }
   };
 
@@ -272,7 +272,7 @@ const AdminPapersPage = () => {
         fetchPapers();
       }, 1200);
     } catch (err: any) {
-      console.error(err);
+
       setAlert({
         show: true,
         title: 'Upload Failed',
@@ -297,7 +297,7 @@ const AdminPapersPage = () => {
       setConfirm({ show: false, id: null });
       fetchPapers();
     } catch (err: any) {
-      console.error(err);
+
       setAlert({
         show: true,
         title: 'Delete Failed',

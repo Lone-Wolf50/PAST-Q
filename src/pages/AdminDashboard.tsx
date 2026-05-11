@@ -50,7 +50,6 @@ const AdminDashboard = () => {
         }
       }
     } catch (err: any) {
-      console.error('Failed to load dashboard data:', err?.message || 'Unknown error');
     }
   };
 
@@ -71,7 +70,6 @@ const AdminDashboard = () => {
         body: { globalAiBlock: newState }
       });
     } catch (err) {
-      console.error('Failed to toggle global AI block:', err);
       setGlobalAiBlock(!globalAiBlock); // revert on error
     }
   };
@@ -88,7 +86,6 @@ const AdminDashboard = () => {
       });
       setTimeout(() => setIsBannerSaving(false), 2000);
     } catch (err) {
-      console.error('Failed to save global banner:', err);
       setGlobalBannerActive(!isActive); // revert
       setIsBannerSaving(false);
     }

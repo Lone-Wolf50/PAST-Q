@@ -116,7 +116,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
       .single();
 
     if (error || !user) {
-      console.error('[register] Supabase insert error:', JSON.stringify(error, null, 2));
+
       res.status(500).json({ error: 'Failed to create account. Please try again.', detail: error?.message });
       return;
     }
@@ -124,7 +124,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
     try {
       await sendOtpEmail(email, otp, 'verify');
     } catch (emailErr) {
-      console.error('[register] Email sending failed:', emailErr);
+
       // Rollback: delete the unverified user from the database since the email failed to send
       await supabase.from('upsa_users').delete().eq('id', user.id);
       res.status(500).json({ error: 'Failed to send verification email. Please check your email address and try again.' });
@@ -133,7 +133,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
 
     res.status(201).json({ message: 'Account created. Please check your email for the verification code.' });
   } catch (err) {
-    console.error('[register]', err);
+
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -187,7 +187,7 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
 
     res.status(200).json({ message: 'Email verified successfully. You can now log in.' });
   } catch (err) {
-    console.error('[verify-email]', err);
+
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -270,7 +270,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('[login]', err);
+
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -312,7 +312,7 @@ router.post('/forgot-password', authLimiter, async (req: Request, res: Response)
 
     res.status(200).json(genericResponse);
   } catch (err) {
-    console.error('[forgot-password]', err);
+
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -372,7 +372,7 @@ router.post('/reset-password', authLimiter, async (req: Request, res: Response) 
 
     res.status(200).json({ message: 'Password reset successfully. You can now log in.' });
   } catch (err) {
-    console.error('[reset-password]', err);
+
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -416,7 +416,7 @@ router.post('/resend-otp', authLimiter, async (req: Request, res: Response) => {
 
     res.status(200).json({ message: 'A new verification code has been sent to your email.' });
   } catch (err) {
-    console.error('[resend-otp]', err);
+
     res.status(500).json({ error: 'Internal server error.' });
   }
 });

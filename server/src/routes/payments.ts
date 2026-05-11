@@ -80,7 +80,7 @@ router.post('/initialize', protect, async (req: AuthRequest, res: Response) => {
     paystackRes.on('end', () => {
       const parsed = JSON.parse(data);
       if (!parsed.status) {
-        console.error('Paystack Initialization Error:', parsed);
+
         res.status(500).json({ error: 'Failed to initialize payment.' });
         return;
       }
@@ -203,7 +203,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
   }
 
   if (hash !== req.headers['x-paystack-signature']) {
-    console.warn('Paystack webhook signature mismatch.');
+
   }
 
   const event = req.body;

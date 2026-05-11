@@ -87,16 +87,16 @@ app.use((_req, res) => {
 
 // ── Global Error Handler ───────────────────────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Unhandled Error]', err);
+
   res.status(500).json({ error: 'An unexpected server error occurred.' });
 });
 // ── Start Server ───────────────────────────────────────────────────────────────
 process.on('uncaughtException', (err) => {
-  console.error('💥 Uncaught Exception:', err.message, err.stack);
+
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('💥 Unhandled Rejection:', reason);
+
 });
 
 app.listen(Number(PORT), '0.0.0.0', () => {

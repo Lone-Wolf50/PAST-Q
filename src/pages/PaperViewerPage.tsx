@@ -45,7 +45,7 @@ const PaperViewerPage = () => {
           const dl = await apiFetch(`/papers/${id}/download`, { method: 'POST', token: token! });
           setViewUrl(dl.file_url);
         } catch (dlErr: any) {
-          console.warn('[PaperViewer] Failed to get view URL:', dlErr);
+
         }
       } catch (err: any) {
         setError(err.message || 'Failed to load paper.');

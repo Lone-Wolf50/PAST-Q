@@ -30,7 +30,7 @@ const AdminSubjectsPage = () => {
       const res = await apiFetch('/hq-management/subjects', { token });
       setSubjects(res.subjects || []);
     } catch (err) {
-      console.error(err);
+
     } finally {
       setLoading(false);
     }
@@ -56,7 +56,7 @@ const AdminSubjectsPage = () => {
       setConfirm({ show: false, id: null });
       fetchSubjects();
     } catch (err: any) {
-      console.error(err);
+
       setAlert({
         show: true,
         title: 'Delete Failed',
@@ -105,7 +105,7 @@ const AdminSubjectsPage = () => {
       setEditingSubject(null);
       fetchSubjects();
     } catch (err: any) {
-      console.error(err);
+
       setAlert({
         show: true,
         title: 'Save Failed',

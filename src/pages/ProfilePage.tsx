@@ -39,7 +39,7 @@ const ProfilePage = () => {
           }
         }
       } catch (err) {
-        console.error("Failed to load profile", err);
+
       }
     };
     fetchProfile();
@@ -107,7 +107,7 @@ const ProfilePage = () => {
       setAvatarBase64(null);
       setIsAvatarDeleted(false);
     } catch (err: any) {
-      console.error(err);
+
       setMessage(err.message || 'Failed to update profile.');
     } finally {
       setIsSaving(false);

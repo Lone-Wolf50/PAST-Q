@@ -25,7 +25,7 @@ router.get('/subjects/public', async (_req: Request, res: Response) => {
 
     res.status(200).json({ subjects });
   } catch (err) {
-    console.error('[papers GET /subjects/public]', err);
+
     res.status(500).json({ error: 'Failed to fetch subjects.' });
   }
 });
@@ -65,7 +65,7 @@ router.get('/', protect, async (req: AuthRequest, res: Response) => {
 
     res.status(200).json({ papers: sanitizedPapers, total: count, page: pageNum, limit: limitNum });
   } catch (err) {
-    console.error('[papers GET /]', err);
+
     res.status(500).json({ error: 'Failed to fetch papers.' });
   }
 });
@@ -93,9 +93,9 @@ router.get('/:id', protect, async (req: AuthRequest, res: Response) => {
 
     // ── Insight cache logging ──────────────────────────────────────────────
     if (insightsData) {
-      console.log(`[Papers] ✅ Serving CACHED insights from DB for paper "${paper.title}" (id=${id}) → Student: ${user.id} (${user.plan} plan)`);
+
     } else {
-      console.log(`[Papers] ℹ️  No insights in DB yet for paper "${paper.title}" (id=${id}) — will be generated on first AI Chat visit.`);
+
     }
 
     const responseData = {
@@ -109,7 +109,7 @@ router.get('/:id', protect, async (req: AuthRequest, res: Response) => {
 
     res.status(200).json({ paper: responseData });
   } catch (err) {
-    console.error('[papers GET /:id]', err);
+
     res.status(500).json({ error: 'Failed to fetch paper.' });
   }
 });
@@ -192,7 +192,7 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
 
     res.status(200).json({ file_url: paper.file_url });
   } catch (err) {
-    console.error('[papers POST /:id/download]', err);
+
     res.status(500).json({ error: 'Failed to process download request.' });
   }
 });
@@ -218,7 +218,7 @@ router.get('/subjects/all', protect, async (_req: AuthRequest, res: Response) =>
 
     res.status(200).json({ subjects });
   } catch (err) {
-    console.error('[papers GET /subjects/all]', err);
+
     res.status(500).json({ error: 'Failed to fetch subjects.' });
   }
 });
@@ -245,7 +245,7 @@ router.get('/bookmarks/ids', protect, async (req: AuthRequest, res: Response) =>
     if (error) throw error;
     res.status(200).json({ ids: (data || []).map((b: any) => b.paper_id) });
   } catch (err) {
-    console.error('[papers GET /bookmarks/ids]', err);
+
     res.status(500).json({ error: 'Failed to fetch bookmarks.' });
   }
 });
@@ -271,7 +271,7 @@ router.get('/bookmarks', protect, async (req: AuthRequest, res: Response) => {
     const papers = (data || []).map((b: any) => b.upsa_papers).filter(Boolean);
     res.status(200).json({ papers });
   } catch (err) {
-    console.error('[papers GET /bookmarks]', err);
+
     res.status(500).json({ error: 'Failed to fetch bookmarks.' });
   }
 });
@@ -308,7 +308,7 @@ router.post('/:id/bookmark', protect, async (req: AuthRequest, res: Response) =>
       res.status(200).json({ bookmarked: true });
     }
   } catch (err) {
-    console.error('[papers POST /:id/bookmark]', err);
+
     res.status(500).json({ error: 'Failed to update bookmark.' });
   }
 });
@@ -364,7 +364,7 @@ router.post('/:id/report', protect, async (req: AuthRequest, res: Response) => {
 
     res.status(201).json({ message: 'Report submitted. Thank you for helping us improve!' });
   } catch (err) {
-    console.error('[papers POST /:id/report]', err);
+
     res.status(500).json({ error: 'Failed to submit report.' });
   }
 });

@@ -31,7 +31,6 @@ const LandingPage = () => {
           setTotalPapers(total);
         }
       } catch (err) {
-        console.error(err);
       }
     };
     fetchStats();

@@ -13,20 +13,20 @@ export const GlobalBanner = () => {
 
     apiFetch('/public/site-config')
       .then(data => {
-        console.log('[GlobalBanner] Fetched config:', data);
+
         if (data.globalBannerActive && data.globalBanner) {
           if (dismissedBanner !== data.globalBanner) {
-            console.log('[GlobalBanner] Setting banner visible:', data.globalBanner);
+
             setBanner(data.globalBanner);
             setIsVisible(true);
           } else {
-            console.log('[GlobalBanner] Banner is active but was previously dismissed.');
+
           }
         } else {
-          console.log('[GlobalBanner] Banner is not active or empty.');
+
         }
       })
-      .catch(err => console.error('[GlobalBanner] Failed to load config:', err));
+      .catch(() => {});
   }, []);
 
   if (!isVisible || isDismissed) return null;

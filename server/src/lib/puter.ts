@@ -25,15 +25,15 @@ let puterInstance: any = null;
  */
 function getPuter(): any | null {
   if (!process.env.PUTER_AUTH_TOKEN) {
-    console.warn('[Puter] PUTER_AUTH_TOKEN is not set. Puter fallback disabled.');
+
     return null;
   }
   if (!puterInstance) {
     try {
       puterInstance = init(process.env.PUTER_AUTH_TOKEN);
-      console.log('[Puter] Instance initialized successfully.');
+
     } catch (err) {
-      console.error('[Puter] Failed to initialize:', err);
+
       return null;
     }
   }
@@ -70,8 +70,6 @@ export async function askPuter(
     { role: 'user', content: userMessage },
   ];
 
-  console.log(`[Puter] Sending request to model: ${PUTER_FALLBACK_MODEL}`);
-
   const response = await puter.ai.chat(messages, { model: PUTER_FALLBACK_MODEL });
 
   // Puter resolves with { message: { role, content } }
@@ -85,7 +83,6 @@ export async function askPuter(
     throw new Error('[Puter] Received an empty or unrecognized response from Puter AI.');
   }
 
-  console.log(`[Puter] Response received (${text.length} chars).`);
   return text;
 }
 

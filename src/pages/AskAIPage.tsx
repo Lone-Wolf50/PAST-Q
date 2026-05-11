@@ -119,7 +119,7 @@ const AskAIPage = () => {
           const res = await apiFetch(`/papers/${initialPaperId}`, { token });
           setSelectedFileName(res.paper.title);
         } catch (err) {
-          console.error('Failed to fetch paper context:', err);
+
         }
       };
       fetchPaperMeta();
@@ -169,7 +169,7 @@ const AskAIPage = () => {
           updateUser({ plan: latestUser.plan });
         }
       } catch (err) {
-        console.warn('Failed to refresh profile:', err);
+
       }
     };
     refreshProfile();
@@ -197,7 +197,7 @@ const AskAIPage = () => {
         const res = await apiFetch('/ai/usage', { token });
         setUsageCount(res.usageCount);
       } catch (err) {
-        console.warn('Failed to fetch AI usage:', err);
+
       }
     };
     fetchUsage();
@@ -255,7 +255,7 @@ const AskAIPage = () => {
       if (err?.status === 403 || err?.body?.error === 'history_unavailable') {
         setConversations([]);
       } else {
-        console.error('[AskAI] Failed to fetch history:', err);
+
       }
     } finally {
       setIsHistoryLoading(false);
@@ -413,7 +413,7 @@ const AskAIPage = () => {
             localStorage.setItem(`pastq_paper_conv_${activePaperId}`, convId!);
           }
         } catch (err) {
-          console.error('[AskAI] Failed to create conversation:', err);
+
           // If creation fails, we still allow the chat but it won't be saved
         }
       }

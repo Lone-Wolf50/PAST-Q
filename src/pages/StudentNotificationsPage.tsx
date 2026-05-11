@@ -29,7 +29,7 @@ const StudentNotificationsPage = () => {
       const res = await apiFetch('/profile/notifications', { token: token! });
       setNotifications(res.notifications || []);
     } catch (err) {
-      console.error('Failed to fetch notifications:', err);
+
     } finally {
       setLoading(false);
     }
@@ -44,7 +44,7 @@ const StudentNotificationsPage = () => {
       await apiFetch('/profile/notifications/read-all', { method: 'PATCH', token: token! });
       setNotifications(notifications.map(n => ({ ...n, is_read: true })));
     } catch (err) {
-      console.error(err);
+
     }
   };
 
@@ -53,7 +53,7 @@ const StudentNotificationsPage = () => {
       await apiFetch(`/profile/notifications/${id}/read`, { method: 'PATCH', token: token! });
       setNotifications(notifications.map(n => n.id === id ? { ...n, is_read: true } : n));
     } catch (err) {
-      console.error(err);
+
     }
   };
 

@@ -18,7 +18,7 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
     if (error) throw error;
     res.status(200).json({ users: data });
   } catch (err) {
-    console.error('[users GET /]', err);
+
     res.status(500).json({ error: 'Failed to fetch users.' });
   }
 });
@@ -43,7 +43,7 @@ router.patch('/:id/plan', async (req: AuthRequest, res: Response) => {
     if (error) throw error;
     res.status(200).json({ message: `User plan updated to ${plan}.` });
   } catch (err) {
-    console.error('[users PATCH /:id/plan]', err);
+
     res.status(500).json({ error: 'Failed to update user plan.' });
   }
 });
@@ -61,7 +61,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     if (error) throw error;
     res.status(200).json({ message: 'User account deleted successfully.' });
   } catch (err) {
-    console.error('[users DELETE /:id]', err);
+
     res.status(500).json({ error: 'Failed to delete user.' });
   }
 });

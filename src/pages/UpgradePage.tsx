@@ -56,7 +56,7 @@ const UpgradePage = () => {
                 setLoading(false);
                 isProcessing.current = false;
               } catch (err: any) {
-                console.error('Payment verification failed:', err?.message || 'Unknown error');
+
                 isProcessing.current = false;
                 window.location.href = '/profile?error=verification_failed';
               }

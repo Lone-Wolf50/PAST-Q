@@ -13,8 +13,7 @@ const AdminNotificationsPage = () => {
       if (!token) return;
       const res = await apiFetch('/hq-management/notifications', { token });
       setNotifications(res.notifications || []);
-    } catch (err) {
-      console.error(err);
+    } catch {
     }
   };
 
@@ -26,21 +25,21 @@ const AdminNotificationsPage = () => {
     try {
       await apiFetch(`/hq-management/notifications/${id}`, { method: 'PATCH', token: localStorage.getItem('admin_token')! });
       fetchNotifications();
-    } catch (err) { console.error(err); }
+    } catch { /* console log removed */ }
   };
 
   const markAllRead = async () => {
     try {
       await apiFetch('/hq-management/notifications/read-all', { method: 'PATCH', token: localStorage.getItem('admin_token')! });
       fetchNotifications();
-    } catch (err) { console.error(err); }
+    } catch { /* console log removed */ }
   };
 
   const deleteNotification = async (id: string) => {
     try {
       await apiFetch(`/hq-management/notifications/${id}`, { method: 'DELETE', token: localStorage.getItem('admin_token')! });
       fetchNotifications();
-    } catch (err) { console.error(err); }
+    } catch { /* console log removed */ }
   };
 
   return (
