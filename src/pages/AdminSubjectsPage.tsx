@@ -71,7 +71,21 @@ const AdminSubjectsPage = () => {
     const fd = new FormData(e.currentTarget);
     const token = localStorage.getItem('admin_token')!;
     
-    if (!fd.get('name') || !fd.get('code')) return;
+    const name = fd.get('name') as string;
+    const code = fd.get('code') as string;
+    if (!name || !code) return;
+
+    // Duplicate Check
+    const isDuplicate = subjects.some(s => s.code.toLowerCase() === code.toLowerCase() && s.id !== editingSubject?.id);
+    if (isDuplicate) {
+      setAlert({
+        show: true,
+        title: 'Subject Already Exists',
+        message: `The subject code "${code.toUpperCase()}" is already registered in your catalogue. Please check the existing subjects or use a different code.`,
+        variant: 'info'
+      });
+      return;
+    }
 
     try {
       if (editingSubject) {

@@ -172,6 +172,30 @@ const AdminPapersPage = () => {
     if (!token) return;
 
     const fd = new FormData(e.currentTarget);
+    const title = fd.get('title') as string;
+    const subjectId = fd.get('subject_id') as string;
+    const year = fd.get('year') as string;
+    const semester = fd.get('semester') as string;
+
+    // Duplicate Detection
+    const isDuplicate = papers.some(p => 
+      p.title.toLowerCase() === title.toLowerCase() && 
+      p.subject_id === subjectId && 
+      String(p.year) === String(year) && 
+      p.semester === semester && 
+      p.id !== editingPaper?.id
+    );
+
+    if (isDuplicate) {
+      setAlert({
+        show: true,
+        title: 'Paper Already Exists',
+        message: `This paper ("${title}" - ${semester} ${year}) has already been uploaded for this subject. Please double-check your records.`,
+        variant: 'info'
+      });
+      return;
+    }
+
     setIsUploading(true);
     try {
       if (editingPaper) {
@@ -387,7 +411,7 @@ const AdminPapersPage = () => {
                         </div>
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-theme-primary line-clamp-1">{paper.title}</span>
-                          <span className="text-[10px] text-theme-muted font-bold uppercase tracking-wider">{paper.upsa_subjects?.code || 'N/A'}</span>
+                          <span className="text-[10px] text-theme-muted font-bold uppercase tracking-wider">{paper.upsa_subjects?.name || 'Unknown Subject'}</span>
                         </div>
                       </div>
                       <div className="flex flex-col items-end bg-theme-surface/50 px-2 py-1 rounded-lg border border-theme-border">
