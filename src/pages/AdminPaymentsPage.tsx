@@ -160,7 +160,60 @@ const AdminPaymentsPage = () => {
             </div>
           </div>
 
-          <div className="glass-card border-theme-border overflow-hidden">
+          {/* Mobile Cards View (Visible on mobile only) */}
+          <div className="grid grid-cols-1 gap-4 lg:hidden">
+            {loading ? (
+              <div className="glass-card p-12 text-center text-theme-muted">Loading transactions...</div>
+            ) : filteredPayments.length === 0 ? (
+              <div className="glass-card p-12 text-center text-theme-muted">No records found.</div>
+            ) : (
+              filteredPayments.map((payment) => (
+                <div key={payment.id} className="glass-card p-5 border-theme-border flex flex-col gap-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-bold text-theme-primary">{payment.upsa_users?.full_name}</span>
+                      <span className="text-[10px] text-theme-muted font-mono tracking-tighter">{payment.reference}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-sm font-black text-theme-primary">GH₵{payment.amount}</span>
+                      <span className="text-[9px] font-bold uppercase text-indigo-400 tracking-wider">{payment.plan}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between py-3 border-y border-theme-border/50">
+                    <div className="flex items-center gap-3">
+                      {payment.status === 'success' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[9px] font-bold border border-emerald-500/20">
+                          <CheckCircle2 className="w-2.5 h-2.5" /> SUCCESS
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-[9px] font-bold border border-red-500/20">
+                          <XCircle className="w-2.5 h-2.5" /> FAILED
+                        </span>
+                      )}
+                      <span className="text-[10px] text-theme-muted font-bold">
+                        {new Date(payment.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                      </span>
+                    </div>
+
+                    {payment.status === 'failed' && payment.upsa_users?.status !== 'deactivated' ? (
+                      <button 
+                        onClick={() => handleDeactivateClick(payment.user_id)}
+                        className="p-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20"
+                      >
+                        <UserX className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <span className="text-theme-muted text-[10px] font-bold uppercase tracking-widest">-</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table (Hidden on mobile) */}
+          <div className="hidden lg:block glass-card border-theme-border overflow-hidden">
             <div className="p-6 border-b border-theme-border flex flex-col lg:flex-row justify-between items-center gap-4">
               <div className="relative flex-1 w-full lg:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />

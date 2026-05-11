@@ -217,7 +217,106 @@ const AdminUsersPage = () => {
             </div>
           </div>
 
-          <div className="glass-card border-theme-border overflow-hidden">
+          {/* Mobile Cards View (Visible on mobile only) */}
+          <div className="grid grid-cols-1 gap-4 lg:hidden">
+            {loading ? (
+              <div className="glass-card p-12 text-center text-theme-muted">Loading user database...</div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="glass-card p-12 text-center text-theme-muted">No users found.</div>
+            ) : (
+              filteredUsers.map((user) => (
+                <div key={user.id} className="glass-card p-5 border-theme-border flex flex-col gap-4 relative overflow-hidden">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 shadow-inner">
+                      <UserIcon className="w-6 h-6 text-indigo-400" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-theme-primary">{user.full_name}</span>
+                      <span className="text-[10px] text-theme-muted font-mono tracking-tighter line-clamp-1">{user.email}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 py-4 border-y border-theme-border/50">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">Subscription</span>
+                      <select
+                        value={user.plan}
+                        onChange={(e) => updateUserPlan(user.id, e.target.value)}
+                        className={clsx(
+                          "px-2 py-1 rounded-lg text-[10px] font-bold uppercase border cursor-pointer outline-none transition-colors w-full",
+                          user.plan === 'pro' ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                          user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
+                          user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                          "bg-theme-surface text-theme-muted border-theme-border"
+                        )}
+                      >
+                        <option value="free" className="text-theme-primary bg-theme-base">FREE</option>
+                        <option value="basic" className="text-theme-primary bg-theme-base">BASIC</option>
+                        <option value="plus" className="text-theme-primary bg-theme-base">PLUS</option>
+                        <option value="pro" className="text-theme-primary bg-theme-base">PRO</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 items-end">
+                      <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">AI Tutor</span>
+                      <button
+                        onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
+                        className={clsx(
+                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
+                          (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
+                        )}
+                      >
+                        <span
+                          className={clsx(
+                            "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+                            (user.ai_enabled ?? true) ? "translate-x-4.5" : "translate-x-1"
+                          )}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5">
+                        {user.status === 'active' ? (
+                          <span className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold">
+                            <CheckCircle2 className="w-3 h-3" /> ACTIVE
+                          </span>
+                        ) : user.status === 'suspended' ? (
+                          <span className="flex items-center gap-1 text-amber-400 text-[10px] font-bold">
+                            <Ban className="w-3 h-3" /> SUSPENDED
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-red-400 text-[10px] font-bold">
+                            <UserX className="w-3 h-3" /> INACTIVE
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[9px] text-theme-muted font-bold">
+                        JOINED {new Date(user.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {user.status === 'active' ? (
+                        <button onClick={() => updateUserStatus(user.id, 'suspended')} className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20"><Ban className="w-4 h-4" /></button>
+                      ) : (
+                        <button onClick={() => updateUserStatus(user.id, 'active')} className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /></button>
+                      )}
+                      {user.status !== 'deactivated' && (
+                        <button onClick={() => updateUserStatus(user.id, 'deactivated')} className="p-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20"><UserX className="w-4 h-4" /></button>
+                      )}
+                      <button onClick={() => handleDeleteClick(user.id)} className="p-2 rounded-lg bg-theme-surface border border-theme-border text-theme-muted hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table (Hidden on mobile) */}
+          <div className="hidden lg:block glass-card border-theme-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
@@ -232,9 +331,9 @@ const AdminUsersPage = () => {
                 </thead>
                 <tbody className="divide-y divide-theme-border">
                   {loading ? (
-                    <tr><td colSpan={5} className="py-20 text-center text-theme-muted">Loading user database...</td></tr>
+                    <tr><td colSpan={6} className="py-20 text-center text-theme-muted">Loading user database...</td></tr>
                   ) : filteredUsers.length === 0 ? (
-                    <tr><td colSpan={5} className="py-20 text-center text-theme-muted">No users found.</td></tr>
+                    <tr><td colSpan={6} className="py-20 text-center text-theme-muted">No users found.</td></tr>
                   ) : (
                     filteredUsers.map((user) => (
                       <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
