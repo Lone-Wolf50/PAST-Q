@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, BookOpen, Download, Eye, Star, Flame, FileCheck } from 'lucide-react';
+import { Search, BookOpen, Download, Eye, Star, Flame, FileCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useLocation, Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
@@ -174,7 +174,8 @@ const PapersPage = () => {
     return true;
   });
   
-  const displayedPapers = filteredPapers.slice(0, page * itemsPerPage);
+  const totalPages = Math.ceil(filteredPapers.length / itemsPerPage);
+  const displayedPapers = filteredPapers.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   return (
     <div className="w-full flex-grow flex flex-col px-4 md:px-8 max-w-7xl mx-auto py-8">
@@ -443,13 +444,29 @@ const PapersPage = () => {
         })}
       </div>
       
-      {filteredPapers.length > page * itemsPerPage && (
-        <div className="mt-10 flex justify-center">
+      {totalPages > 1 && (
+        <div className="mt-12 flex items-center justify-center gap-3 md:gap-6">
           <button
-            onClick={() => setPage(p => p + 1)}
-            className="px-6 py-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-primary font-medium hover:bg-theme-surface-2 transition-colors"
+            disabled={page === 1}
+            onClick={() => { setPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            className="px-4 md:px-6 py-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 text-xs md:text-sm shadow-sm"
           >
-            Load More
+            <ChevronLeft className="w-4 h-4" /> Previous
+          </button>
+          
+          <div className="flex items-center gap-2 px-3 md:px-5 py-2 bg-theme-surface/50 border border-theme-border rounded-xl shadow-inner">
+            <span className="hidden sm:inline text-[9px] font-black text-theme-muted uppercase tracking-widest">Page</span>
+            <span className="text-sm font-black text-indigo-400">{page}</span>
+            <span className="text-[9px] font-black text-theme-muted uppercase tracking-widest">/</span>
+            <span className="text-sm font-bold text-theme-primary">{totalPages}</span>
+          </div>
+
+          <button
+            disabled={page === totalPages}
+            onClick={() => { setPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            className="px-4 md:px-6 py-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 text-xs md:text-sm shadow-sm"
+          >
+            Next <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       )}
