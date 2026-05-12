@@ -225,7 +225,7 @@ router.post('/me/change-password', async (req: AuthRequest, res: Response) => {
 router.get('/delete-word', (req: AuthRequest, res: Response) => {
   const words = ['PENCIL', 'ERASER', 'LAPTOP', 'CAMPUS', 'DEGREE', 'STUDENT', 'LIBRARY', 'EXAMS'];
   const word = words[Math.floor(Math.random() * words.length)] + '-' + Math.floor(1000 + Math.random() * 9000);
-  const token = jwt.sign({ delete_word: word, id: req.user!.id }, process.env.JWT_SECRET || 'secret', { expiresIn: '15m' });
+  const token = jwt.sign({ delete_word: word, id: req.user!.id }, process.env.JWT_SECRET!, { expiresIn: '15m' });
   res.status(200).json({ word, token });
 });
 
@@ -240,7 +240,7 @@ router.delete('/me', async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
     if (decoded.id !== userId || decoded.delete_word !== confirmation_word) {
       res.status(400).json({ error: 'Invalid or expired confirmation word.' });
       return;

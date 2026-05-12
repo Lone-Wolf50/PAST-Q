@@ -12,6 +12,8 @@ export interface AuthRequest extends Request {
  */
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
+  console.log(`[AUTH DEBUG] ${req.method} ${req.originalUrl} - Auth Header: ${authHeader ? (authHeader.startsWith('Bearer ') ? 'Bearer [REDACTED]' : 'Invalid Format') : 'Missing'}`);
+
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.warn(`🔐 Auth failed: No Bearer token provided for ${req.method} ${req.originalUrl}`);

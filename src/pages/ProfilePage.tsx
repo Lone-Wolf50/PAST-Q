@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 
 const ProfilePage = () => {
-  const { user, updateUser, logout } = useAuth();
+  const { user, token, updateUser, logout } = useAuth();
   const [name, setName] = useState(user?.full_name || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
@@ -20,8 +20,8 @@ const ProfilePage = () => {
     // Fetch latest profile to get avatar_url if any
     const fetchProfile = async () => {
       try {
-        const token = localStorage.getItem('token') || undefined;
-        const res = await apiFetch('/profile/me', { token });
+        // Use token from context instead of manual localStorage read
+        const res = await apiFetch('/profile/me', { token: token || undefined });
         if (res.user) {
           setName(res.user.full_name);
           setAvatarUrl(res.user.avatar_url || '');
@@ -76,12 +76,10 @@ const ProfilePage = () => {
     setIsSaving(true);
     setMessage('');
     try {
-      const token = localStorage.getItem('token') || undefined;
-      
       // Update Name
       await apiFetch('/profile/me', {
         method: 'PATCH',
-        token,
+        token: token || undefined,
         body: { full_name: name }
       });
 
@@ -89,12 +87,12 @@ const ProfilePage = () => {
 
       // Update Avatar
       if (isAvatarDeleted) {
-        await apiFetch('/profile/me/avatar', { method: 'DELETE', token });
+        await apiFetch('/profile/me/avatar', { method: 'DELETE', token: token || undefined });
         finalAvatarUrl = '';
       } else if (avatarBase64) {
         const res = await apiFetch('/profile/me/avatar', {
           method: 'POST',
-          token,
+          token: token || undefined,
           body: { avatar_base64: avatarBase64 }
         });
         if (res.avatar_url) finalAvatarUrl = res.avatar_url;
