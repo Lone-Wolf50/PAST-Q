@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock, Eye, EyeOff, ShieldAlert, Mail } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 const AdminLoginPage = () => {
   const [email, setEmail] = useState('');
@@ -15,26 +16,20 @@ const AdminLoginPage = () => {
     setError('');
     setLoading(true);
 
-    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
     try {
-      const res = await fetch(`${BASE_URL}/hq-management/auth/login`, {
+      const data = await apiFetch('/hq-management/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: { email, password }
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Invalid credentials.');
-        return;
-      }
 
       localStorage.setItem('admin_token', data.token);
       navigate('/hq-portal');
-    } catch {
-      setError('Cannot reach the server. Make sure the backend is running on port 5000.');
+    } catch (err: any) {
+      if (err.status === 404) {
+        setError('Cannot reach the server. Endpoint not found.');
+      } else {
+        setError(err.message || 'Cannot reach the server. Make sure the backend is running.');
+      }
     } finally {
       setLoading(false);
     }
