@@ -14,6 +14,7 @@ const AdminSubjectsPage = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingSubject, setEditingSubject] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
 
   // UI States
   const [alert, setAlert] = useState<{ show: boolean, title: string, message: string, variant: 'success' | 'error' | 'info' }>({
@@ -87,6 +88,7 @@ const AdminSubjectsPage = () => {
       return;
     }
 
+    setSaving(true);
     try {
       if (editingSubject) {
         await apiFetch(`/hq-management/subjects/${editingSubject.id}`, {
@@ -112,6 +114,8 @@ const AdminSubjectsPage = () => {
         message: err.message || 'Failed to save subject. Please check if the subject code already exists.',
         variant: 'error'
       });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -123,7 +127,7 @@ const AdminSubjectsPage = () => {
   const filteredSubjects = subjects.filter(s => 
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     s.code.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
@@ -335,7 +339,12 @@ const AdminSubjectsPage = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-8 py-2.5 rounded-xl text-white bg-indigo-500 hover:bg-indigo-600 font-bold shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all">
+                <button 
+                  type="submit" 
+                  disabled={saving}
+                  className="px-8 py-2.5 rounded-xl text-white bg-indigo-500 hover:bg-indigo-600 font-bold shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {saving && <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
                   {editingSubject ? 'Update Subject' : 'Save Subject'}
                 </button>
               </div>
