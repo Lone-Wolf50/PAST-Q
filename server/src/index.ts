@@ -45,7 +45,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 });
-app.use('/api/', apiLimiter);
+app.use('/api', apiLimiter);
 
 // ── Health Check ───────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
@@ -81,14 +81,18 @@ app.use('/api/support', supportRouter);
 app.use('/api/streaks', streaksRouter);
 
 // ── 404 Handler ────────────────────────────────────────────────────────────────
-app.use((_req, res) => {
+app.use((req, res) => {
+  console.log(`🔍 404: ${req.method} ${req.url}`);
   res.status(404).json({ error: 'Route not found.' });
 });
 
 // ── Global Error Handler ───────────────────────────────────────────────────────
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-
-  res.status(500).json({ error: 'An unexpected server error occurred.' });
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('❌ GLOBAL ERROR:', err);
+  res.status(500).json({ 
+    error: 'An unexpected server error occurred.',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined 
+  });
 });
 // ── Start Server ───────────────────────────────────────────────────────────────
 process.on('uncaughtException', (err) => {

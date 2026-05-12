@@ -89,26 +89,30 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
   }
 
   try {
-    const { data: existing } = await supabase
+    console.log(`📝 Registering user: ${email}`);
+    const { data: existing, error: existingErr } = await supabase
       .from('upsa_users')
       .select('id, is_verified')
       .eq('email', email)
       .single();
 
     if (existing) {
+      console.log(`⚠️ User already exists: ${email} (verified: ${existing.is_verified})`);
       if (existing.is_verified) {
         res.status(409).json({ error: 'An account with this email already exists.' });
         return;
       } else {
-        // Delete the unverified account so they can try again
+        console.log(`🗑️ Deleting unverified user: ${existing.id}`);
         await supabase.from('upsa_users').delete().eq('id', existing.id);
       }
     }
 
+    console.log(`🔐 Hashing password...`);
     const password_hash = await bcrypt.hash(password, 12);
     const otp = generateOtp();
     const otp_expires_at = otpExpiry();
 
+    console.log(`💾 Inserting user into DB...`);
     const { data: user, error } = await supabase
       .from('upsa_users')
       .insert({ full_name, email, password_hash, otp, otp_expires_at, is_verified: false })
@@ -116,25 +120,27 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
       .single();
 
     if (error || !user) {
-
+      console.error('❌ DB Error during registration:', error);
       res.status(500).json({ error: 'Failed to create account. Please try again.', detail: error?.message });
       return;
     }
 
+    console.log(`📧 Sending verification email to ${email}...`);
     try {
       await sendOtpEmail(email, otp, 'verify');
-    } catch (emailErr) {
-
+      console.log(`✅ Email sent successfully.`);
+    } catch (emailErr: any) {
+      console.error('❌ Email Error:', emailErr);
       // Rollback: delete the unverified user from the database since the email failed to send
       await supabase.from('upsa_users').delete().eq('id', user.id);
-      res.status(500).json({ error: 'Failed to send verification email. Please check your email address and try again.' });
+      res.status(500).json({ error: 'Failed to send verification email. Please check your email address and try again.', detail: emailErr.message });
       return;
     }
 
     res.status(201).json({ message: 'Account created. Please check your email for the verification code.' });
-  } catch (err) {
-
-    res.status(500).json({ error: 'Internal server error.' });
+  } catch (err: any) {
+    console.error('❌ Unexpected Registration Error:', err);
+    res.status(500).json({ error: 'Internal server error.', detail: err.message });
   }
 });
 
