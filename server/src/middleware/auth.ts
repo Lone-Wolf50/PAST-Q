@@ -14,6 +14,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.warn(`🔐 Auth failed: No Bearer token provided for ${req.method} ${req.originalUrl}`);
     res.status(401).json({ error: 'Not authorized. No token provided.' });
     return;
   }
@@ -21,6 +22,10 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
   const token = authHeader.split(' ')[1];
 
   try {
+    if (!process.env.JWT_SECRET) {
+      console.error('❌ JWT_SECRET is NOT defined in environment variables!');
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
       id: string;
       email: string;
@@ -44,12 +49,14 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       .single();
 
     if (error || !user) {
+      console.warn(`🔐 Auth failed: User account not found for ID ${decoded.id}`);
       res.status(401).json({ error: 'User account not found.' });
       return;
     }
 
     if (decoded.session_version !== undefined && user.session_version !== undefined) {
       if (decoded.session_version !== user.session_version) {
+        console.warn(`🔐 Auth failed: Session version mismatch for user ${decoded.email}`);
         res.status(401).json({ code: 'SESSION_EXPIRED', error: 'Session expired' });
         return;
       }
@@ -67,7 +74,8 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 
     req.user = decoded;
     next();
-  } catch (err) {
+  } catch (err: any) {
+    console.error(`🔐 JWT Verification Error for ${req.method} ${req.originalUrl}:`, err.message);
     res.status(401).json({ error: 'Not authorized. Token is invalid or expired.' });
   }
 };

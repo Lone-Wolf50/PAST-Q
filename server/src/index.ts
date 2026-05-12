@@ -57,6 +57,15 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
+// ── Root Route ────────────────────────────────────────────────────────────────
+app.get('/', (_req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'PastQ API is online and healthy.',
+    docs: 'https://past-q-server.vercel.app/api/health'
+  });
+});
+
 // ── Health Check ───────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok', message: 'PastQ API is running' });
@@ -92,8 +101,13 @@ app.use('/api/streaks', streaksRouter);
 
 // ── 404 Handler ────────────────────────────────────────────────────────────────
 app.use((req, res) => {
-  console.log(`🔍 404: ${req.method} ${req.url}`);
-  res.status(404).json({ error: 'Route not found.' });
+  const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+  console.log(`🔍 404: ${req.method} ${fullUrl}`);
+  res.status(404).json({ 
+    error: 'Route not found.',
+    method: req.method,
+    path: req.originalUrl
+  });
 });
 
 // ── Global Error Handler ───────────────────────────────────────────────────────
