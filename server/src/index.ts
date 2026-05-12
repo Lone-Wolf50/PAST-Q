@@ -17,7 +17,7 @@ import streaksRouter from './routes/streaks';
 dotenv.config();
 
 const app = express();
-export { app };
+
 
 
 // Trust the first proxy (Render) to allow express-rate-limit to read the correct IP
@@ -61,8 +61,8 @@ app.use('/api', apiLimiter);
 
 // ── Root Route ────────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
+  res.status(200).json({
+    status: 'ok',
     message: 'PastQ API is online and healthy.',
     docs: 'https://past-q-server.vercel.app/api/health'
   });
@@ -105,7 +105,7 @@ app.use('/api/streaks', streaksRouter);
 app.use((req, res) => {
   const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
   console.log(`🔍 404: ${req.method} ${fullUrl}`);
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Route not found.',
     method: req.method,
     path: req.originalUrl
@@ -115,9 +115,9 @@ app.use((req, res) => {
 // ── Global Error Handler ───────────────────────────────────────────────────────
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('❌ GLOBAL ERROR:', err);
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'An unexpected server error occurred.',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined 
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 // ── Start Server ───────────────────────────────────────────────────────────────
@@ -129,9 +129,15 @@ process.on('unhandledRejection', (reason) => {
 
 });
 
-app.listen(Number(PORT), '0.0.0.0', () => {
-  console.log(`✅  PastQ API running on http://localhost:${PORT}`);
-  console.log(`📡 Network access enabled for mobile testing.`);
-});
+if (process.env.VERCEL !== '1') {
+  app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`✅  PastQ API running on http://localhost:${PORT}`);
+    console.log(`📡 Network access enabled for mobile testing.`);
+  });
+}
+
+
+
+export default app;
 // ── Start Server ───────────────────────────────────────────────────────────────
 
