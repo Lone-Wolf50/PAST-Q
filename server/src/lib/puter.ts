@@ -10,35 +10,9 @@
  * Or use the Puter CLI: npx @heyputer/puter-cli login
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { init } = require('@heyputer/puter.js/src/init.cjs');
-
 // The Puter model to use for fallback. GPT-4o gives excellent academic answers.
 // Alternatives: 'claude-3-5-sonnet', 'claude-3-haiku', 'gpt-4o-mini'
 const PUTER_FALLBACK_MODEL = 'gpt-4o';
-
-let puterInstance: any = null;
-
-/**
- * Lazily initializes and returns the authenticated Puter instance.
- * Returns null if PUTER_AUTH_TOKEN is not configured.
- */
-function getPuter(): any | null {
-  if (!process.env.PUTER_AUTH_TOKEN) {
-
-    return null;
-  }
-  if (!puterInstance) {
-    try {
-      puterInstance = init(process.env.PUTER_AUTH_TOKEN);
-
-    } catch (err) {
-
-      return null;
-    }
-  }
-  return puterInstance;
-}
 
 export interface PuterMessage {
   role: 'user' | 'assistant' | 'system';
@@ -47,6 +21,8 @@ export interface PuterMessage {
 
 /**
  * Sends a chat request to Puter.js and returns the text reply.
+ * Uses a direct fetch call to Puter's OpenAI-compatible endpoint
+ * to avoid ESM/CommonJS dependency issues with the @heyputer/puter.js library.
  *
  * @param systemInstruction - The system prompt for the AI persona.
  * @param history - Prior conversation messages (user/assistant turns).
@@ -58,32 +34,49 @@ export async function askPuter(
   history: PuterMessage[],
   userMessage: string,
 ): Promise<string> {
-  const puter = getPuter();
-  if (!puter) {
+  const token = process.env.PUTER_AUTH_TOKEN;
+  if (!token) {
     throw new Error('Puter fallback is not configured (missing PUTER_AUTH_TOKEN).');
   }
 
-  // Build the messages array in the format Puter expects (OpenAI-compatible)
-  const messages: PuterMessage[] = [
+  // Build the messages array in standard OpenAI format
+  const messages = [
     { role: 'system', content: systemInstruction },
     ...history,
     { role: 'user', content: userMessage },
   ];
 
-  const response = await puter.ai.chat(messages, { model: PUTER_FALLBACK_MODEL });
+  try {
+    const response = await fetch('https://api.puter.com/puterai/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model: PUTER_FALLBACK_MODEL,
+        messages: messages,
+        temperature: 0.7,
+      }),
+    });
 
-  // Puter resolves with { message: { role, content } }
-  const text: string =
-    response?.message?.content ??
-    response?.content ??
-    response?.text ??
-    null;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`[Puter API] ${response.status} ${response.statusText}: ${JSON.stringify(errorData)}`);
+    }
 
-  if (!text) {
-    throw new Error('[Puter] Received an empty or unrecognized response from Puter AI.');
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content;
+
+    if (!text) {
+      throw new Error('[Puter] Received an empty or unrecognized response from Puter AI.');
+    }
+
+    return text;
+  } catch (err: any) {
+    console.error('❌ Puter API Error:', err.message);
+    throw err;
   }
-
-  return text;
 }
 
 export const isPuterAvailable = (): boolean => !!process.env.PUTER_AUTH_TOKEN;
