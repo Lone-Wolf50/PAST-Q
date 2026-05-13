@@ -214,6 +214,36 @@ const AdminPapersPage = () => {
       return;
     }
 
+    // Vercel Serverless Function Payload Limit Check (4.5 MB)
+    const MAX_FILE_SIZE = 4.5 * 1024 * 1024;
+    let isOversized = false;
+    let oversizeMessage = "";
+
+    if (uploadMode === 'file' && pdfFiles.length > 0) {
+      if (pdfFiles.some(f => f.size > MAX_FILE_SIZE)) {
+        isOversized = true;
+        oversizeMessage = "One or more selected PDF files exceeds the 4.5 MB limit for this platform. Please compress the PDF(s) or provide an external URL.";
+      }
+    }
+
+    if (!isOversized && hasAnswers && answerMode === 'file') {
+      const answerFile = fd.get('answer_file') as File;
+      if (answerFile && answerFile.size > MAX_FILE_SIZE) {
+        isOversized = true;
+        oversizeMessage = "The selected Answer PDF file exceeds the 4.5 MB limit for this platform. Please compress the PDF or provide an external URL.";
+      }
+    }
+
+    if (isOversized) {
+      setAlert({
+        show: true,
+        title: 'File Too Large',
+        message: oversizeMessage,
+        variant: 'error'
+      });
+      return;
+    }
+
     setIsUploading(true);
     try {
       if (editingPaper) {
