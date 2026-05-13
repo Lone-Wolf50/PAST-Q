@@ -36,6 +36,7 @@ const AdminPapersPage = () => {
   const [confirm, setConfirm] = useState<{ show: boolean, id: string | null }>({
     show: false, id: null
   });
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, paper: any | null }>({ show: false, paper: null });
 
   // Modal Form States
   const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
@@ -136,6 +137,9 @@ const AdminPapersPage = () => {
         resetModal();
         setDefaultSubjectId(targetSubject.id);
         setShowModal(true);
+        if (location.state.filterToSubject === location.state.openUploadForSubjectCode) {
+          setFilterSubject(targetSubject.code);
+        }
         // Clear the state so it doesn't reopen on subsequent renders
         window.history.replaceState({}, document.title);
       }
@@ -205,21 +209,16 @@ const AdminPapersPage = () => {
     const semester = fd.get('semester') as string;
 
     // Duplicate Detection
-    const isDuplicate = papers.some(p => 
-      p.title.toLowerCase() === title.toLowerCase() && 
-      p.subject_id === subjectId && 
-      String(p.year) === String(year) && 
-      p.semester === semester && 
+    const duplicatePaper = papers.find(p =>
+      p.title.toLowerCase() === title.toLowerCase() &&
+      p.subject_id === subjectId &&
+      String(p.year) === String(year) &&
+      p.semester === semester &&
       p.id !== editingPaper?.id
     );
 
-    if (isDuplicate) {
-      setAlert({
-        show: true,
-        title: 'Paper Already Exists',
-        message: `This paper ("${title}" - ${semester} ${year}) has already been uploaded for this subject. Please double-check your records.`,
-        variant: 'info'
-      });
+    if (duplicatePaper) {
+      setDuplicatePrompt({ show: true, paper: duplicatePaper });
       return;
     }
 
@@ -424,8 +423,8 @@ const AdminPapersPage = () => {
                     variant: 'info'
                   });
                 } else {
-                  resetModal(); 
-                  setShowModal(true); 
+                  resetModal();
+                  setShowModal(true);
                 }
               }}
               className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl transition-all font-semibold shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:scale-[1.02]"
@@ -504,7 +503,7 @@ const AdminPapersPage = () => {
                           ) : (
                             <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[9px] font-bold border border-blue-500/20">EXTERNAL</span>
                           )}
-                          
+
                           {paper.has_insights ? (
                             <button
                               onClick={() => handleViewInsights(paper)}
@@ -726,6 +725,7 @@ const AdminPapersPage = () => {
             <button onClick={resetModal} className="absolute top-4 right-4 p-2 text-theme-muted hover:text-theme-primary transition-colors z-10">
               <X className="w-6 h-6" />
             </button>
+
 
             <div className="p-6 overflow-y-auto scrollbar-hide">
               {uploadSuccess ? (
@@ -978,6 +978,22 @@ const AdminPapersPage = () => {
       />
 
       {/* ── AI Insight Preview Modal ── */}
+      <ConfirmModal
+        isOpen={duplicatePrompt.show}
+        onClose={() => setDuplicatePrompt({ show: false, paper: null })}
+        onConfirm={() => {
+          const paper = duplicatePrompt.paper;
+          setDuplicatePrompt({ show: false, paper: null });
+          resetModal();
+          handleOpenEdit(paper);
+        }}
+        title="Paper Already Exists"
+        message="This specific paper has already been uploaded. Would you like to view/edit the existing one?"
+        confirmText="Yes, View/Edit"
+        cancelText="Cancel"
+        variant="info"
+      />
+
       {insightModal.show && insightModal.paper && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="glass-card w-full max-w-2xl p-6 border-theme-border relative my-8 flex flex-col gap-6">

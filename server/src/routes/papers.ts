@@ -32,7 +32,7 @@ router.get('/subjects/public', async (_req: Request, res: Response) => {
 
 // ── GET ALL PAPERS (with filters, paginated) ──────────────────────────────────
 router.get('/', protect, async (req: AuthRequest, res: Response) => {
-  const { subject_id, year, semester, search, page = '1', limit = '100' } = req.query;
+  const { subject_id, subject_name, year, semester, search, page = '1', limit = '100' } = req.query;
 
   const pageNum = parseInt(page as string, 10);
   const limitNum = parseInt(limit as string, 10);
@@ -42,11 +42,12 @@ router.get('/', protect, async (req: AuthRequest, res: Response) => {
     let query = supabase
       .from('upsa_papers')
       // Note: we fetch file_url but we'll omit it from the response to enforce download limits
-      .select('id, title, year, semester, has_answers, answer_url, upsa_subjects(name, code)', { count: 'exact' })
+      .select('id, title, year, semester, has_answers, answer_url, upsa_subjects!inner(name, code)', { count: 'exact' })
       .order('year', { ascending: false })
       .range(from, from + limitNum - 1);
 
     if (subject_id) query = query.eq('subject_id', subject_id);
+    if (subject_name) query = query.eq('upsa_subjects.name', subject_name);
     if (year) query = query.eq('year', year);
     if (semester) query = query.eq('semester', semester);
     if (search) query = query.ilike('title', `%${search}%`);

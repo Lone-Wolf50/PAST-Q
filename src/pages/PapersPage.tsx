@@ -25,6 +25,7 @@ const PapersPage = () => {
   const [showSaved, setShowSaved] = useState(false);
   const [page, setPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [totalPapers, setTotalPapers] = useState(0);
 
   useEffect(() => {
     const handleResize = () => {
@@ -45,7 +46,6 @@ const PapersPage = () => {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [bookmarkLoading, setBookmarkLoading] = useState<string | null>(null);
-  const [years, setYears] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [streak, setStreak] = useState<number>(0);
 
@@ -65,12 +65,28 @@ const PapersPage = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const papersData = await apiFetch('/papers?limit=100', { token: token! });
+        
+        if (showSaved) {
+          const res = await apiFetch('/papers/bookmarks', { token: token! });
+          if (res.papers) {
+            setPapers(res.papers);
+            setTotalPapers(res.papers.length);
+          }
+        } else {
+          const params = new URLSearchParams();
+          params.append('page', page.toString());
+          params.append('limit', itemsPerPage.toString());
+          if (selectedYear) params.append('year', selectedYear);
+          if (selectedSemester) params.append('semester', selectedSemester);
+          if (searchQuery) params.append('search', searchQuery);
+          if (selectedSubject) params.append('subject_name', selectedSubject);
 
-        if (papersData.papers) {
-          setPapers(papersData.papers);
-          const uniqueYears = Array.from(new Set(papersData.papers.map((p: any) => p.year))).sort().reverse();
-          setYears(uniqueYears as string[]);
+          const papersData = await apiFetch(`/papers?${params.toString()}`, { token: token! });
+
+          if (papersData.papers) {
+            setPapers(papersData.papers);
+            setTotalPapers(papersData.total || 0);
+          }
         }
       } catch (err) {
 
@@ -82,7 +98,7 @@ const PapersPage = () => {
     if (token) {
       fetchData();
     }
-  }, [token]);
+  }, [token, page, itemsPerPage, selectedYear, selectedSemester, searchQuery, selectedSubject, showSaved]);
 
   // Load bookmark IDs for premium users
   useEffect(() => {
@@ -152,30 +168,15 @@ const PapersPage = () => {
     }
   };
 
-  const filteredPapers = papers.filter(p => {
-    // Saved tab filter
-    if (showSaved && !bookmarkedIds.has(p.id)) return false;
-
-    if (selectedSubject && p.upsa_subjects?.name?.toLowerCase() !== selectedSubject.toLowerCase()) return false;
+  const filteredPapers = papers.filter(() => {
     if (selectedDepartment && selectedDepartment !== 'All Subjects') {
       // placeholder for department-level filtering
-    }
-    if (selectedYear && p.year !== selectedYear) return false;
-    if (selectedSemester && p.semester !== selectedSemester) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const title = p.title?.toLowerCase() || '';
-      const subjName = p.upsa_subjects?.name?.toLowerCase() || '';
-      const subjCode = p.upsa_subjects?.code?.toLowerCase() || '';
-      if (!title.includes(q) && !subjName.includes(q) && !subjCode.includes(q)) {
-        return false;
-      }
     }
     return true;
   });
 
-  const totalPages = Math.ceil(filteredPapers.length / itemsPerPage);
-  const displayedPapers = filteredPapers.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const totalPages = showSaved ? Math.ceil(filteredPapers.length / itemsPerPage) : Math.ceil(totalPapers / itemsPerPage);
+  const displayedPapers = showSaved ? filteredPapers.slice((page - 1) * itemsPerPage, page * itemsPerPage) : filteredPapers;
 
   return (
     <div className="w-full flex-grow flex flex-col px-4 md:px-8 max-w-7xl mx-auto py-8">
@@ -219,7 +220,7 @@ const PapersPage = () => {
               className="theme-select text-[11px] font-bold uppercase tracking-tight py-2.5 px-3 flex-1 sm:flex-none w-1/2 sm:w-[100px]"
             >
               <option value="">All Years</option>
-              {years.map(y => <option key={y} value={y}>{y}</option>)}
+              {[2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
 
             <select

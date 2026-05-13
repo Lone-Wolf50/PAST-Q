@@ -12,6 +12,7 @@ const AdminSubjectsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [postCreatePrompt, setPostCreatePrompt] = useState<{ show: boolean, subjectName: string, subjectCode: string } | null>(null);
   const [emptySubjectWarning, setEmptySubjectWarning] = useState<{ show: boolean, emptySubjects: any[] }>({ show: false, emptySubjects: [] });
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, code: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,20 +83,16 @@ const AdminSubjectsPage = () => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const token = localStorage.getItem('admin_token')!;
-    
+
     const name = fd.get('name') as string;
     const code = fd.get('code') as string;
     if (!name || !code) return;
 
     // Duplicate Check
-    const isDuplicate = subjects.some(s => s.code.toLowerCase() === code.toLowerCase() && s.id !== editingSubject?.id);
-    if (isDuplicate) {
-      setAlert({
-        show: true,
-        title: 'Subject Already Exists',
-        message: `The subject code "${code.toUpperCase()}" is already registered in your catalogue. Please check the existing subjects or use a different code.`,
-        variant: 'info'
-      });
+    const duplicate = subjects.find(s => (s.code.toLowerCase() === code.toLowerCase() || s.name.toLowerCase() === name.toLowerCase()) && s.id !== editingSubject?.id);
+    if (duplicate) {
+      setShowModal(false);
+      setDuplicatePrompt({ show: true, code: duplicate.code });
       return;
     }
 
@@ -118,10 +115,10 @@ const AdminSubjectsPage = () => {
         });
         setShowModal(false);
         fetchSubjects();
-        setPostCreatePrompt({ 
-          show: true, 
-          subjectName: res.subject?.name || (fd.get('name') as string), 
-          subjectCode: res.subject?.code || (fd.get('code') as string) 
+        setPostCreatePrompt({
+          show: true,
+          subjectName: res.subject?.name || (fd.get('name') as string),
+          subjectCode: res.subject?.code || (fd.get('code') as string)
         });
       }
     } catch (err: any) {
@@ -142,8 +139,8 @@ const AdminSubjectsPage = () => {
     setShowModal(true);
   };
 
-  const filteredSubjects = subjects.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredSubjects = subjects.filter(s =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.code.toLowerCase().includes(searchTerm.toLowerCase())
   ).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -154,7 +151,7 @@ const AdminSubjectsPage = () => {
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      
+
       <div className="flex-1 flex flex-col lg:ml-64">
         <header className="sticky top-0 z-20 bg-transparent/80 backdrop-blur-xl border-b border-theme-border px-4 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -163,8 +160,8 @@ const AdminSubjectsPage = () => {
             </button>
             <h1 className="text-lg font-bold text-theme-primary">Subjects</h1>
           </div>
-          <button 
-            onClick={() => fetchSubjects()} 
+          <button
+            onClick={() => fetchSubjects()}
             className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-muted transition-colors group"
             title="Refresh Data"
           >
@@ -178,26 +175,26 @@ const AdminSubjectsPage = () => {
               <h1 className="text-3xl font-bold text-theme-primary mb-2">Subject Catalogue</h1>
               <p className="text-theme-muted">Organize and manage the curriculum subjects for the platform.</p>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Filter subjects..." 
+                  placeholder="Filter subjects..."
                   className="w-full sm:w-64 bg-theme-surface border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary focus:outline-none focus:border-indigo-500/50 transition-all"
                 />
               </div>
-              <button 
-                onClick={() => { 
+              <button
+                onClick={() => {
                   const emptySubjects = subjects.filter(s => (s.count || 0) === 0);
                   if (emptySubjects.length > 0) {
                     setEmptySubjectWarning({ show: true, emptySubjects });
                   } else {
-                    setEditingSubject(null); 
-                    setShowModal(true); 
+                    setEditingSubject(null);
+                    setShowModal(true);
                   }
                 }}
                 className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl transition-all font-semibold shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]"
@@ -210,7 +207,7 @@ const AdminSubjectsPage = () => {
 
           <div className="flex items-center justify-between mb-6">
             <div className="flex bg-theme-surface p-1 rounded-xl border border-theme-border">
-              <button 
+              <button
                 onClick={() => setViewMode('grid')}
                 className={clsx(
                   "p-2 rounded-lg transition-all",
@@ -219,7 +216,7 @@ const AdminSubjectsPage = () => {
               >
                 <LayoutGrid className="w-4 h-4" />
               </button>
-              <button 
+              <button
                 onClick={() => setViewMode('table')}
                 className={clsx(
                   "p-2 rounded-lg transition-all",
@@ -343,7 +340,7 @@ const AdminSubjectsPage = () => {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                
+
                 <div className="flex items-center gap-1.5 overflow-x-auto max-w-[200px] sm:max-w-none px-1 py-1 hide-scrollbar">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
                     if (
@@ -358,8 +355,8 @@ const AdminSubjectsPage = () => {
                           onClick={() => setCurrentPage(page)}
                           className={clsx(
                             "w-10 h-10 rounded-xl text-sm font-bold transition-all border shrink-0",
-                            currentPage === page 
-                              ? "bg-indigo-500 text-white border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)] scale-105" 
+                            currentPage === page
+                              ? "bg-indigo-500 text-white border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)] scale-105"
                               : "bg-theme-surface text-theme-muted border-theme-border hover:bg-theme-surface-2 hover:border-indigo-500/30 hover:text-indigo-400"
                           )}
                         >
@@ -392,40 +389,40 @@ const AdminSubjectsPage = () => {
           <div className="glass-card w-full max-w-md p-8 border-theme-border relative">
             <h2 className="text-2xl font-bold text-theme-primary mb-1">{editingSubject ? 'Edit Subject' : 'Add New Subject'}</h2>
             <p className="text-theme-muted text-sm mb-8">{editingSubject ? 'Update the details for this course.' : 'Define a new subject for the platform catalogue.'}</p>
-            
+
             <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Subject Name</label>
-                <input 
-                  name="name" 
-                  type="text" 
-                  required 
+                <input
+                  name="name"
+                  type="text"
+                  required
                   defaultValue={editingSubject?.name || ''}
-                  className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:outline-none focus:border-indigo-500/50" 
-                  placeholder="e.g. Microeconomics" 
+                  className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:outline-none focus:border-indigo-500/50"
+                  placeholder="e.g. Microeconomics"
                 />
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-theme-muted ml-1">Course Code</label>
-                <input 
-                  name="code" 
-                  type="text" 
-                  required 
+                <input
+                  name="code"
+                  type="text"
+                  required
                   defaultValue={editingSubject?.code || ''}
-                  className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary uppercase font-mono focus:outline-none focus:border-indigo-500/50" 
-                  placeholder="e.g. ECON201" 
+                  className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary uppercase font-mono focus:outline-none focus:border-indigo-500/50"
+                  placeholder="e.g. ECON201"
                 />
               </div>
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-theme-border">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setShowModal(false)}
                   className="px-6 py-2.5 rounded-xl text-theme-secondary font-semibold hover:bg-theme-surface transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={saving}
                   className="px-8 py-2.5 rounded-xl text-white bg-indigo-500 hover:bg-indigo-600 font-bold shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
@@ -439,7 +436,7 @@ const AdminSubjectsPage = () => {
       )}
 
       {/* ── Custom UI Modals ── */}
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={confirm.show}
         onClose={() => setConfirm({ show: false, id: null })}
         onConfirm={handleConfirmDelete}
@@ -449,7 +446,7 @@ const AdminSubjectsPage = () => {
         variant="danger"
       />
 
-      <AlertModal 
+      <AlertModal
         isOpen={alert.show}
         onClose={() => setAlert({ ...alert, show: false })}
         title={alert.title}
@@ -468,13 +465,13 @@ const AdminSubjectsPage = () => {
               <strong>{postCreatePrompt.subjectName}</strong> ({postCreatePrompt.subjectCode}) was successfully added to the catalogue. Would you like to upload papers for it now?
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button 
+              <button
                 onClick={() => setPostCreatePrompt(null)}
                 className="px-6 py-2.5 rounded-xl text-theme-secondary font-semibold hover:bg-theme-surface transition-colors w-full sm:w-auto border border-theme-border"
               >
                 Maybe Later
               </button>
-              <button 
+              <button
                 onClick={() => {
                   setPostCreatePrompt(null);
                   navigate('/hq-portal/papers', { state: { openUploadForSubjectCode: postCreatePrompt.subjectCode } });
@@ -489,7 +486,7 @@ const AdminSubjectsPage = () => {
         </div>
       )}
 
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={emptySubjectWarning.show}
         onClose={() => setEmptySubjectWarning({ show: false, emptySubjects: [] })}
         onConfirm={() => {
@@ -502,6 +499,21 @@ const AdminSubjectsPage = () => {
         confirmText="Yes, Create New Subject"
         cancelText="Cancel"
         variant="warning"
+      />
+
+      <ConfirmModal
+        isOpen={duplicatePrompt?.show || false}
+        onClose={() => setDuplicatePrompt(null)}
+        onConfirm={() => {
+          const code = duplicatePrompt?.code;
+          setDuplicatePrompt(null);
+          navigate('/hq-portal/papers', { state: { openUploadForSubjectCode: code, filterToSubject: code } });
+        }}
+        title="Subject Already Exists"
+        message="This subject is already in your catalogue. Would you like to go to the Papers page to manage its contents?"
+        confirmText="Yes, Go to Papers"
+        cancelText="Cancel"
+        variant="info"
       />
     </div>
   );
