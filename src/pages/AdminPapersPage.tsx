@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Download, Filter,
-  ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert
+  ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
@@ -46,6 +47,14 @@ const AdminPapersPage = () => {
   // Filters
   const [filterSubject, setFilterSubject] = useState('');
   const [filterYear, setFilterYear] = useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const papersPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterSubject, filterYear]);
 
   // Editing state
   const [editingPaper, setEditingPaper] = useState<any>(null);
@@ -362,6 +371,12 @@ const AdminPapersPage = () => {
     return matchSearch && matchSubject && matchYear;
   });
 
+  const totalPages = Math.ceil(filteredPapers.length / papersPerPage);
+  const paginatedPapers = filteredPapers.slice(
+    (currentPage - 1) * papersPerPage,
+    currentPage * papersPerPage
+  );
+
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -445,10 +460,10 @@ const AdminPapersPage = () => {
           <div className="grid grid-cols-1 gap-4 lg:hidden">
             {loading ? (
               <div className="glass-card p-12 text-center text-theme-muted">Loading papers...</div>
-            ) : filteredPapers.length === 0 ? (
+            ) : paginatedPapers.length === 0 ? (
               <div className="glass-card p-12 text-center text-theme-muted">No papers found.</div>
             ) : (
-              filteredPapers.map((paper) => {
+              paginatedPapers.map((paper) => {
                 const isR2 = paper.file_url?.includes('.r2.dev') || paper.file_url?.includes('.cloudflarestorage.com');
                 return (
                   <div key={paper.id} className="glass-card p-5 border-theme-border flex flex-col gap-5 relative overflow-hidden group">
@@ -546,10 +561,10 @@ const AdminPapersPage = () => {
                 <tbody className="divide-y divide-theme-border">
                   {loading ? (
                     <tr><td colSpan={7} className="py-20 text-center text-theme-muted">Loading papers...</td></tr>
-                  ) : filteredPapers.length === 0 ? (
+                  ) : paginatedPapers.length === 0 ? (
                     <tr><td colSpan={7} className="py-20 text-center text-theme-muted">No papers found matching filters.</td></tr>
                   ) : (
-                    filteredPapers.map((paper) => {
+                    paginatedPapers.map((paper) => {
                       const isR2 = paper.file_url?.includes('.r2.dev') || paper.file_url?.includes('.cloudflarestorage.com');
                       return (
                         <tr key={paper.id} className="hover:bg-theme-surface/50 transition-colors">
@@ -661,6 +676,34 @@ const AdminPapersPage = () => {
               </table>
             </div>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 glass-card p-4 border-theme-border">
+              <span className="text-sm text-theme-muted">
+                Showing <span className="font-bold text-theme-primary">{((currentPage - 1) * papersPerPage) + 1}</span> to <span className="font-bold text-theme-primary">{Math.min(currentPage * papersPerPage, filteredPapers.length)}</span> of <span className="font-bold text-theme-primary">{filteredPapers.length}</span> papers
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 border border-theme-border disabled:opacity-50 disabled:hover:bg-theme-surface text-sm font-bold text-theme-primary transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Prev
+                </button>
+                <span className="text-sm font-bold text-theme-primary">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 border border-theme-border disabled:opacity-50 disabled:hover:bg-theme-surface text-sm font-bold text-theme-primary transition-all"
+                >
+                  Next <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
