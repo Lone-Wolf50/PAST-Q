@@ -230,7 +230,39 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* Key Motivation / Community Section */}
+      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mb-20">
+        <div className="relative py-20 px-8 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 overflow-hidden text-center">
+          <div className="absolute top-0 left-1/4 w-64 h-64 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
+          <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-purple-500/10 rounded-full blur-[100px] pointer-events-none" />
+          
+          <div className="relative z-10 max-w-3xl mx-auto">
+            <h2 className="text-4xl md:text-6xl font-black text-theme-primary mb-6 tracking-tight leading-tight">
+              The <span className="gradient-text">Future of Learning</span> <br className="hidden md:block" /> is in your hands.
+            </h2>
+            <p className="text-lg md:text-xl text-theme-muted mb-8 leading-relaxed">
+              We're building more than just a past paper repository. We're building a community of excellence where every UPSA student has the tools to succeed.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-6">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-theme-surface border border-theme-border shadow-sm">
+                <div className="w-2 h-2 rounded-full bg-indigo-400" />
+                <span className="text-sm font-semibold text-theme-secondary">24/7 AI Support</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-theme-surface border border-theme-border shadow-sm">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-sm font-semibold text-theme-secondary">Verified Content</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-theme-surface border border-theme-border shadow-sm">
+                <div className="w-2 h-2 rounded-full bg-purple-400" />
+                <span className="text-sm font-semibold text-theme-secondary">Zero Downtime</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Final CTA */}
+
       {!isLoggedIn && (
         <section className="w-full px-4 md:px-8 max-w-5xl mx-auto mb-32">
           <div className="glass-card p-12 text-center border-indigo-500/20 relative overflow-hidden">
