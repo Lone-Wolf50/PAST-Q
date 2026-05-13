@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import {
   Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Download, Filter,
   ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert,
@@ -415,7 +415,19 @@ const AdminPapersPage = () => {
             </div>
 
             <button
-              onClick={() => { resetModal(); setShowModal(true); }}
+              onClick={() => {
+                if (subjects.length === 0) {
+                  setAlert({
+                    show: true,
+                    title: 'No Subjects Found',
+                    message: 'You haven\'t created any subjects yet. Please go to the Subjects page to create one first.',
+                    variant: 'info'
+                  });
+                } else {
+                  resetModal(); 
+                  setShowModal(true); 
+                }
+              }}
               className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl transition-all font-semibold shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:scale-[1.02]"
             >
               <Plus className="w-5 h-5" />
@@ -751,7 +763,12 @@ const AdminPapersPage = () => {
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-theme-muted ml-1">Subject</label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-theme-muted ml-1">Subject</label>
+                          <Link to="/hq-management/subjects" className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors">
+                            Missing subject? Add it here.
+                          </Link>
+                        </div>
                         <select
                           name="subject_id"
                           required
