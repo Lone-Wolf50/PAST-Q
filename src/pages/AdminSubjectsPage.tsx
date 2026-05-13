@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, Menu, BookOpen, Clock, FileStack, LayoutGrid, List, RotateCw, CheckCircle2, CloudUpload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Menu, BookOpen, Clock, FileStack, LayoutGrid, List, RotateCw, CheckCircle2, CloudUpload, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import AdminSidebar from '../components/AdminSidebar';
@@ -19,6 +19,13 @@ const AdminSubjectsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingSubject, setEditingSubject] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
+
+  // Reset page when searching
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // UI States
   const [alert, setAlert] = useState<{ show: boolean, title: string, message: string, variant: 'success' | 'error' | 'info' }>({
@@ -140,6 +147,10 @@ const AdminSubjectsPage = () => {
     s.code.toLowerCase().includes(searchTerm.toLowerCase())
   ).sort((a, b) => a.name.localeCompare(b.name));
 
+  const totalPages = Math.ceil(filteredSubjects.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedSubjects = filteredSubjects.slice(startIndex, startIndex + itemsPerPage);
+
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -228,7 +239,7 @@ const AdminSubjectsPage = () => {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredSubjects.map((subject) => (
+              {paginatedSubjects.map((subject) => (
                 <div key={subject.id} className="glass-card group p-6 border-theme-border hover:border-indigo-500/30 transition-all duration-300 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                     <button onClick={() => openEditModal(subject)} className="p-2 rounded-lg bg-theme-surface/80 border border-theme-border text-theme-secondary hover:text-indigo-400 transition-colors">
@@ -284,7 +295,7 @@ const AdminSubjectsPage = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSubjects.map((subject) => (
+                    {paginatedSubjects.map((subject) => (
                       <tr key={subject.id} className="border-b border-theme-border last:border-0 hover:bg-theme-surface transition-colors">
                         <td className="px-6 py-4">
                           <span className="text-sm font-semibold text-theme-primary">{subject.name}</span>
@@ -314,6 +325,61 @@ const AdminSubjectsPage = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {!loading && totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between mt-8 bg-theme-surface/50 border border-theme-border p-4 rounded-2xl gap-4">
+              <span className="text-sm text-theme-muted">
+                Showing <span className="font-bold text-theme-primary">{startIndex + 1}</span> to <span className="font-bold text-theme-primary">{Math.min(startIndex + itemsPerPage, filteredSubjects.length)}</span> of <span className="font-bold text-theme-primary">{filteredSubjects.length}</span> subjects
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-secondary disabled:opacity-50 disabled:cursor-not-allowed border border-theme-border transition-all hover:border-indigo-500/30"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                
+                <div className="flex items-center gap-1.5 overflow-x-auto max-w-[200px] sm:max-w-none px-1 py-1 hide-scrollbar">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                    if (
+                      totalPages <= 7 ||
+                      page === 1 ||
+                      page === totalPages ||
+                      (page >= currentPage - 1 && page <= currentPage + 1)
+                    ) {
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={clsx(
+                            "w-10 h-10 rounded-xl text-sm font-bold transition-all border shrink-0",
+                            currentPage === page 
+                              ? "bg-indigo-500 text-white border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)] scale-105" 
+                              : "bg-theme-surface text-theme-muted border-theme-border hover:bg-theme-surface-2 hover:border-indigo-500/30 hover:text-indigo-400"
+                          )}
+                        >
+                          {page}
+                        </button>
+                      );
+                    } else if (page === currentPage - 2 || page === currentPage + 2) {
+                      return <span key={page} className="text-theme-muted px-1 shrink-0">...</span>;
+                    }
+                    return null;
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-xl bg-theme-surface hover:bg-theme-surface-2 text-theme-secondary disabled:opacity-50 disabled:cursor-not-allowed border border-theme-border transition-all hover:border-indigo-500/30"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
             </div>
           )}
