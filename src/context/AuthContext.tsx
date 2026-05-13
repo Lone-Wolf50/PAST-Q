@@ -62,14 +62,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      // If a new login happened in another tab (on the same device), log this one out
-      if (e.key === 'last_login_id' && e.newValue) {
-        logout();
-      }
-      // Sync logout across tabs if the token is cleared
-      if (e.key === 'token' && !e.newValue) {
-        setToken(null);
-        setUser(null);
+      // Sync login/logout state across tabs
+      if (e.key === 'token') {
+        if (!e.newValue) {
+          setToken(null);
+          setUser(null);
+        } else {
+          setToken(e.newValue);
+          const storedUser = getStorage().getItem('user');
+          if (storedUser) setUser(JSON.parse(storedUser));
+        }
       }
     };
 
@@ -131,8 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       storage.setItem('last_visit', Date.now().toString());
     }
     
-    // Trigger a signal to other tabs using localStorage (cross-tab sync on same device)
-    localStorage.setItem('last_login_id', Date.now().toString());
+    // The 'token' storage event will automatically sync the login to other tabs
     
     setToken(newToken);
     setUser(newUser);

@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, ChevronDown, BookOpen, Shield, HelpCircle, Zap, FileText } from 'lucide-react';
+import { Mail, BookOpen, Shield, HelpCircle, Zap, FileText } from 'lucide-react';
 import { clsx } from 'clsx';
 import ContactModal from './ContactModal';
-
-import Popover from './ui/Popover';
+import { useAuth } from '../context/AuthContext';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 const FOOTER_SECTIONS = (openContact: (subj?: string) => void) => [
@@ -178,94 +177,9 @@ const FOOTER_SECTIONS = (openContact: (subj?: string) => void) => [
   },
 ];
 
-// ── Accordion Item (mobile & desktop friendly) ────────────────────────────────
-const AccordionSection = ({ section }: { section: any }) => {
-  // Desktop is open by default, mobile is an accordion
-  const isDesktop = window.innerWidth >= 1024;
-  const [open, setOpen] = useState(isDesktop);
-  const Icon = section.icon;
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 1024) setOpen(true);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="glass-card border-theme-border p-2 h-full flex flex-col">
-        <button
-          onClick={() => !isDesktop && setOpen(!open)}
-          className={clsx(
-            "w-full flex items-center justify-between p-4 text-left group transition-all",
-            isDesktop ? "cursor-default" : "cursor-pointer"
-          )}
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
-              <Icon className="w-4 h-4 text-indigo-400" />
-            </div>
-            <span className="text-sm font-bold text-theme-primary tracking-tight">{section.title}</span>
-          </div>
-          {!isDesktop && (
-            <ChevronDown
-              className={clsx(
-                'w-4 h-4 text-theme-muted transition-transform duration-500',
-                open && 'rotate-180'
-              )}
-            />
-          )}
-        </button>
-
-        {/* Animated accordion body */}
-        <div
-          className={clsx(
-            'overflow-hidden transition-all duration-500 ease-in-out',
-            open ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
-          )}
-        >
-          <div className="flex flex-col gap-1 p-4 pt-0 border-t border-theme-border/50 mt-2">
-            {section.links.map((link: any) => {
-              const content = (
-                <div className="group flex flex-col gap-0.5 py-2 px-3 rounded-xl hover:bg-theme-surface transition-colors w-full text-left">
-                  <span className="text-sm font-medium text-theme-secondary group-hover:text-theme-primary transition-colors">{link.label}</span>
-                  <span className="text-[10px] text-theme-muted group-hover:text-theme-secondary transition-colors">{link.desc}</span>
-                </div>
-              );
-
-              if (link.popover) {
-                return (
-                  <Popover 
-                    key={link.label}
-                    title={link.popover.title}
-                    description={link.popover.content}
-                    align="start"
-                    trigger={content}
-                  />
-                );
-              }
-
-              return link.href ? (
-                <Link key={link.label} to={link.href} className="w-full">
-                  {content}
-                </Link>
-              ) : (
-                <button key={link.label} onClick={link.onClick} className="w-full">
-                  {content}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // ── Main Footer ────────────────────────────────────────────────────────────────
 const Footer = () => {
+  const { isLoggedIn } = useAuth();
   const [contactOpen, setContactOpen] = useState(false);
   const [contactSubject, setContactSubject] = useState('General Support');
   const [subscriberEmail, setSubscriberEmail] = useState('');
@@ -361,30 +275,78 @@ const Footer = () => {
           </div>
         </div>
 
-        {/* ── All Devices: Responsive Accordion Grid ── */}
-        <div className="px-6 md:px-12 py-10 relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
-            {FOOTER_SECTIONS(openContact).map((section) => (
-              <AccordionSection key={section.title} section={section} />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Highlight Info Bar ── */}
-        <div className="mx-6 md:mx-12 mb-8 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative z-10">
-          <div className="flex items-start gap-3">
-            <FileText className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-theme-primary">Free access to 5 papers every month</p>
-              <p className="text-xs text-theme-muted mt-0.5">No credit card needed. Upgrade anytime to unlock unlimited access and AI tutoring.</p>
+        {/* ── Highlight Info Bar (Moved Above Grid) ── */}
+        {!isLoggedIn ? (
+          <div className="mx-6 md:mx-12 mt-8 mb-2 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative z-10">
+            <div className="flex items-start gap-3">
+              <FileText className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-theme-primary">Free access to 5 papers every month</p>
+                <p className="text-xs text-theme-muted mt-0.5">No credit card needed. Upgrade anytime to unlock unlimited access and AI tutoring.</p>
+              </div>
             </div>
+            <Link
+              to="/register"
+              className="shrink-0 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold transition-colors shadow-lg shadow-indigo-500/20"
+            >
+              Get Started Free
+            </Link>
           </div>
-          <Link
-            to="/register"
-            className="shrink-0 px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold transition-colors"
-          >
-            Get Started Free
-          </Link>
+        ) : (
+          <div className="mx-6 md:mx-12 mt-8 mb-2 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative z-10">
+            <div className="flex items-start gap-3">
+              <Zap className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5 animate-pulse" />
+              <div>
+                <p className="text-sm font-medium text-theme-primary">Your Study Hub is Active</p>
+                <p className="text-xs text-theme-muted mt-0.5">Keep your streak alive. Dive into past papers and ace your next exam.</p>
+              </div>
+            </div>
+            <Link
+              to="/papers"
+              className="shrink-0 px-4 py-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white text-xs font-semibold transition-all shadow-lg"
+            >
+              Resume Studying
+            </Link>
+          </div>
+        )}
+
+        {/* ── All Devices: Premium Clean Grid ── */}
+        <div className="px-6 md:px-12 py-8 relative z-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10 md:gap-8">
+            {FOOTER_SECTIONS(openContact).map((section) => {
+              const Icon = section.icon;
+              return (
+                <div key={section.title} className="flex flex-col">
+                  <div className="flex items-center gap-2 mb-4 md:mb-6">
+                    <div className="p-1.5 rounded-md bg-indigo-500/10">
+                      <Icon className="w-3.5 h-3.5 text-indigo-400" />
+                    </div>
+                    <span className="text-sm font-bold text-theme-primary">{section.title}</span>
+                  </div>
+                  <div className="flex flex-col gap-3 md:gap-4">
+                    {section.links.map((link: any) => {
+                      const content = (
+                        <div className="group flex flex-col text-left">
+                          <span className="text-[13px] font-medium text-theme-muted group-hover:text-indigo-400 transition-colors">{link.label}</span>
+                          <span className="text-[10px] text-theme-muted/50 mt-0.5 group-hover:text-theme-muted transition-colors">{link.desc}</span>
+                        </div>
+                      );
+
+                      return link.href ? (
+                        <Link key={link.label} to={link.href} className="w-full inline-block">
+                          {content}
+                        </Link>
+                      ) : (
+                        <button key={link.label} onClick={link.onClick} className="w-full text-left">
+                          {content}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* ── Bottom Bar ── */}

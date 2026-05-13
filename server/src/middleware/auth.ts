@@ -56,9 +56,9 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       return;
     }
 
-    if (decoded.session_version !== undefined && user.session_version !== undefined) {
-      if (decoded.session_version !== user.session_version) {
-        console.warn(`🔐 Auth failed: Session version mismatch for user ${decoded.email}`);
+    if (decoded.session_version !== undefined && user.session_version !== undefined && user.session_version !== null) {
+      if (String(decoded.session_version) !== String(user.session_version)) {
+        console.warn(`🔐 Auth failed: Session version mismatch for user ${decoded.email}. Expected ${user.session_version}, got ${decoded.session_version}`);
         res.status(401).json({ code: 'SESSION_EXPIRED', error: 'Session expired' });
         return;
       }

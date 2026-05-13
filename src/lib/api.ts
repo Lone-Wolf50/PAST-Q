@@ -7,8 +7,12 @@ interface ApiOptions {
   token?: string;
 }
 
-const checkSessionExpiry = (res: Response) => {
-  if (res.status === 401) {
+const checkSessionExpiry = (res: Response, wasAuthenticated: boolean) => {
+  // Only fire session_expired if the request was made with a token.
+  // This prevents login failures (401 from bad credentials) from being
+  // mistaken for session revocations, which would erroneously log the
+  // user "out" of a session they never had.
+  if (res.status === 401 && wasAuthenticated) {
     window.dispatchEvent(new CustomEvent('session_expired'));
   }
 };
@@ -25,7 +29,7 @@ export async function apiFetch(path: string, { method = 'GET', body, token }: Ap
 
   const data = await res.json();
   if (!res.ok) {
-    checkSessionExpiry(res);
+    checkSessionExpiry(res, !!token);
     const err = new Error(data.message || data.error || 'Something went wrong.') as any;
     err.status = res.status;
     err.body = data; // preserve full structured body for callers
@@ -54,7 +58,7 @@ export async function apiFetchMultipart(
 
   const data = await res.json();
   if (!res.ok) {
-    checkSessionExpiry(res);
+    checkSessionExpiry(res, !!token);
     throw new Error(data.error || 'Something went wrong.');
   }
   return data;
