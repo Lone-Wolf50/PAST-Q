@@ -26,14 +26,19 @@ const checkAiEnabled = async (req: AuthRequest, res: any, next: any) => {
   // 1. Check Global AI Block
   let isGlobalBlock = process.env.GLOBAL_AI_BLOCK === 'true';
   try {
-    if (fs.existsSync(aiConfigPath)) {
-      const data = JSON.parse(fs.readFileSync(aiConfigPath, 'utf8'));
-      if (typeof data.globalAiBlock === 'boolean') {
-        isGlobalBlock = data.globalAiBlock;
+    const { data, error } = await supabase
+      .from('upsa_app_config')
+      .select('global_ai_block')
+      .eq('id', 1)
+      .single();
+    
+    if (!error && data) {
+      if (typeof data.global_ai_block === 'boolean') {
+        isGlobalBlock = data.global_ai_block;
       }
     }
   } catch (err) {
-
+    // Fall back to env var on error
   }
 
   if (isGlobalBlock) {

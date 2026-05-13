@@ -13,6 +13,7 @@ import adminRouter from './routes/admin';
 import aiRouter from './routes/ai';
 import supportRouter from './routes/support';
 import streaksRouter from './routes/streaks';
+import { supabase } from './lib/supabase';
 
 dotenv.config();
 
@@ -74,14 +75,18 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ── Public Config ──────────────────────────────────────────────────────────────
-app.get('/api/public/site-config', (_req, res) => {
+app.get('/api/public/site-config', async (_req, res) => {
   try {
-    const configPath = require('path').join(__dirname, '../ai-config.json');
-    if (require('fs').existsSync(configPath)) {
-      const data = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+    const { data, error } = await supabase
+      .from('upsa_app_config')
+      .select('global_banner, global_banner_active')
+      .eq('id', 1)
+      .single();
+
+    if (!error && data) {
       res.json({
-        globalBanner: data.globalBanner || '',
-        globalBannerActive: !!data.globalBannerActive,
+        globalBanner: data.global_banner || '',
+        globalBannerActive: !!data.global_banner_active,
       });
     } else {
       res.json({ globalBanner: '', globalBannerActive: false });

@@ -86,6 +86,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
+  // App-Load Token Validation
+  useEffect(() => {
+    const currentToken = getStorage().getItem('token');
+    if (!currentToken) return;
+
+    fetch(`${import.meta.env.VITE_API_URL || ''}/api/profile/me`, {
+      headers: { Authorization: `Bearer ${currentToken}` }
+    })
+      .then(res => {
+        if (res.status === 401) {
+          logout();
+        }
+      })
+      .catch(() => {}); // Ignore network errors
+  }, []);
+
   // Ping streak once per browser session when user is logged in
   useEffect(() => {
     if (!token) return;

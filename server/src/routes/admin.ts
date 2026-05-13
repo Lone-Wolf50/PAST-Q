@@ -618,21 +618,30 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
   }
 });
 
-const aiConfigPath = path.join(__dirname, '../../ai-config.json');
-
 router.get('/ai-config', async (req: AuthRequest, res: Response) => {
   try {
     let globalAiBlock = process.env.GLOBAL_AI_BLOCK === 'true';
     let globalBanner = '';
     let globalBannerActive = false;
-    if (fs.existsSync(aiConfigPath)) {
-      const data = JSON.parse(fs.readFileSync(aiConfigPath, 'utf8'));
-      if (typeof data.globalAiBlock === 'boolean') {
-        globalAiBlock = data.globalAiBlock;
+
+    const { data, error } = await supabase
+      .from('upsa_app_config')
+      .select('global_ai_block, global_banner, global_banner_active')
+      .eq('id', 1)
+      .single();
+
+    if (!error && data) {
+      if (typeof data.global_ai_block === 'boolean') {
+        globalAiBlock = data.global_ai_block;
       }
-      if (typeof data.globalBanner === 'string') globalBanner = data.globalBanner;
-      if (typeof data.globalBannerActive === 'boolean') globalBannerActive = data.globalBannerActive;
+      if (typeof data.global_banner === 'string') {
+        globalBanner = data.global_banner;
+      }
+      if (typeof data.global_banner_active === 'boolean') {
+        globalBannerActive = data.global_banner_active;
+      }
     }
+
     res.status(200).json({ globalAiBlock, globalBanner, globalBannerActive });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to read AI config' });
@@ -642,14 +651,39 @@ router.get('/ai-config', async (req: AuthRequest, res: Response) => {
 router.post('/ai-config', async (req: AuthRequest, res: Response) => {
   const { globalAiBlock, globalBanner, globalBannerActive } = req.body;
   try {
-    const currentData = fs.existsSync(aiConfigPath) ? JSON.parse(fs.readFileSync(aiConfigPath, 'utf8')) : {};
+    // Get current config to merge
+    const { data: currentData, error: fetchError } = await supabase
+      .from('upsa_app_config')
+      .select('*')
+      .eq('id', 1)
+      .single();
 
-    if (typeof globalAiBlock === 'boolean') currentData.globalAiBlock = globalAiBlock;
-    if (typeof globalBanner === 'string') currentData.globalBanner = globalBanner;
-    if (typeof globalBannerActive === 'boolean') currentData.globalBannerActive = globalBannerActive;
+    const updates: any = { id: 1 };
+    
+    // We only update what was passed in the request body
+    if (typeof globalAiBlock === 'boolean') updates.global_ai_block = globalAiBlock;
+    else if (currentData) updates.global_ai_block = currentData.global_ai_block;
 
-    fs.writeFileSync(aiConfigPath, JSON.stringify(currentData, null, 2));
-    res.status(200).json({ success: true, ...currentData });
+    if (typeof globalBanner === 'string') updates.global_banner = globalBanner;
+    else if (currentData) updates.global_banner = currentData.global_banner;
+
+    if (typeof globalBannerActive === 'boolean') updates.global_banner_active = globalBannerActive;
+    else if (currentData) updates.global_banner_active = currentData.global_banner_active;
+
+    updates.updated_at = new Date().toISOString();
+
+    const { error: upsertError } = await supabase
+      .from('upsa_app_config')
+      .upsert(updates);
+
+    if (upsertError) throw upsertError;
+
+    res.status(200).json({ 
+      success: true, 
+      globalAiBlock: updates.global_ai_block,
+      globalBanner: updates.global_banner,
+      globalBannerActive: updates.global_banner_active
+    });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to save config' });
   }

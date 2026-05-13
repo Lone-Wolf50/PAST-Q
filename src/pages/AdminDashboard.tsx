@@ -70,7 +70,7 @@ const AdminDashboard = () => {
         body: { globalAiBlock: newState }
       });
     } catch (err) {
-      setGlobalAiBlock(!globalAiBlock); // revert on error
+      setGlobalAiBlock(globalAiBlock); // revert on error using the closure's original value
     }
   };
 

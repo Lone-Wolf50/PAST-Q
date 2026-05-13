@@ -7,8 +7,8 @@ interface ApiOptions {
   token?: string;
 }
 
-const checkSessionExpiry = (res: Response, data: any) => {
-  if (res.status === 401 && data?.code === 'SESSION_EXPIRED') {
+const checkSessionExpiry = (res: Response) => {
+  if (res.status === 401) {
     window.dispatchEvent(new CustomEvent('session_expired'));
   }
 };
@@ -25,7 +25,7 @@ export async function apiFetch(path: string, { method = 'GET', body, token }: Ap
 
   const data = await res.json();
   if (!res.ok) {
-    checkSessionExpiry(res, data);
+    checkSessionExpiry(res);
     const err = new Error(data.message || data.error || 'Something went wrong.') as any;
     err.status = res.status;
     err.body = data; // preserve full structured body for callers
@@ -54,7 +54,7 @@ export async function apiFetchMultipart(
 
   const data = await res.json();
   if (!res.ok) {
-    checkSessionExpiry(res, data);
+    checkSessionExpiry(res);
     throw new Error(data.error || 'Something went wrong.');
   }
   return data;
