@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, Menu, BookOpen, Clock, FileStack, LayoutGrid, List, RotateCw } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Menu, BookOpen, Clock, FileStack, LayoutGrid, List, RotateCw, CheckCircle2, CloudUpload } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
@@ -7,7 +8,10 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
 
 const AdminSubjectsPage = () => {
+  const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
+  const [postCreatePrompt, setPostCreatePrompt] = useState<{ show: boolean, subjectName: string, subjectCode: string } | null>(null);
+  const [emptySubjectWarning, setEmptySubjectWarning] = useState<{ show: boolean, emptySubjects: any[] }>({ show: false, emptySubjects: [] });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,16 +100,23 @@ const AdminSubjectsPage = () => {
           body: { name: fd.get('name'), code: fd.get('code') },
           token
         });
+        setShowModal(false);
+        setEditingSubject(null);
+        fetchSubjects();
       } else {
-        await apiFetch('/hq-management/subjects', {
+        const res = await apiFetch('/hq-management/subjects', {
           method: 'POST',
           body: { name: fd.get('name'), code: fd.get('code') },
           token
         });
+        setShowModal(false);
+        fetchSubjects();
+        setPostCreatePrompt({ 
+          show: true, 
+          subjectName: res.subject?.name || (fd.get('name') as string), 
+          subjectCode: res.subject?.code || (fd.get('code') as string) 
+        });
       }
-      setShowModal(false);
-      setEditingSubject(null);
-      fetchSubjects();
     } catch (err: any) {
 
       setAlert({
@@ -169,7 +180,15 @@ const AdminSubjectsPage = () => {
                 />
               </div>
               <button 
-                onClick={() => { setEditingSubject(null); setShowModal(true); }}
+                onClick={() => { 
+                  const emptySubjects = subjects.filter(s => (s.count || 0) === 0);
+                  if (emptySubjects.length > 0) {
+                    setEmptySubjectWarning({ show: true, emptySubjects });
+                  } else {
+                    setEditingSubject(null); 
+                    setShowModal(true); 
+                  }
+                }}
                 className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl transition-all font-semibold shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Plus className="w-5 h-5" />
@@ -370,6 +389,53 @@ const AdminSubjectsPage = () => {
         title={alert.title}
         message={alert.message}
         variant={alert.variant}
+      />
+
+      {postCreatePrompt?.show && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-md p-8 border-theme-border text-center relative shadow-2xl">
+            <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-bold text-theme-primary mb-2">Subject Created!</h2>
+            <p className="text-theme-muted text-sm mb-8 leading-relaxed">
+              <strong>{postCreatePrompt.subjectName}</strong> ({postCreatePrompt.subjectCode}) was successfully added to the catalogue. Would you like to upload papers for it now?
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button 
+                onClick={() => setPostCreatePrompt(null)}
+                className="px-6 py-2.5 rounded-xl text-theme-secondary font-semibold hover:bg-theme-surface transition-colors w-full sm:w-auto border border-theme-border"
+              >
+                Maybe Later
+              </button>
+              <button 
+                onClick={() => {
+                  setPostCreatePrompt(null);
+                  navigate('/hq-portal/papers', { state: { openUploadForSubjectCode: postCreatePrompt.subjectCode } });
+                }}
+                className="px-6 py-2.5 rounded-xl text-white bg-indigo-500 hover:bg-indigo-600 font-bold shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
+              >
+                <CloudUpload className="w-4 h-4" />
+                Upload Papers Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal 
+        isOpen={emptySubjectWarning.show}
+        onClose={() => setEmptySubjectWarning({ show: false, emptySubjects: [] })}
+        onConfirm={() => {
+          setEmptySubjectWarning({ show: false, emptySubjects: [] });
+          setEditingSubject(null);
+          setShowModal(true);
+        }}
+        title="Empty Subjects Detected"
+        message={`Notice: You have ${emptySubjectWarning.emptySubjects.length} subject(s) (like ${emptySubjectWarning.emptySubjects[0]?.name}) that don't have any papers yet. Are you sure you want to create a new subject before finishing the existing ones?`}
+        confirmText="Yes, Create New Subject"
+        cancelText="Cancel"
+        variant="warning"
       />
     </div>
   );

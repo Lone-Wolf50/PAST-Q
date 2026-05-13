@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Download, Filter,
   ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert
@@ -13,6 +14,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
 
 const AdminPapersPage = () => {
+  const location = useLocation();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -47,6 +49,7 @@ const AdminPapersPage = () => {
 
   // Editing state
   const [editingPaper, setEditingPaper] = useState<any>(null);
+  const [defaultSubjectId, setDefaultSubjectId] = useState<string>('');
 
   // Insight preview modal
   const [insightModal, setInsightModal] = useState<{ show: boolean; paper: any | null; insights: any | null; loading: boolean }>({
@@ -116,6 +119,20 @@ const AdminPapersPage = () => {
     return () => clearInterval(interval);
   }, [papers, aiHealth.status, fetchPapers]);
 
+  // Handle deep linking from Subjects Page
+  useEffect(() => {
+    if (location.state?.openUploadForSubjectCode && subjects.length > 0) {
+      const targetSubject = subjects.find(s => s.code === location.state.openUploadForSubjectCode);
+      if (targetSubject) {
+        resetModal();
+        setDefaultSubjectId(targetSubject.id);
+        setShowModal(true);
+        // Clear the state so it doesn't reopen on subsequent renders
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, subjects]);
+
   // Elapsed-time ticker: updates every second for actively-processing papers
   useEffect(() => {
     if (elapsedRef.current) clearInterval(elapsedRef.current);
@@ -155,6 +172,7 @@ const AdminPapersPage = () => {
     setExternalUrl('');
     setHasAnswers(false);
     setAnswerMode('file');
+    setDefaultSubjectId('');
   };
 
   const handleOpenEdit = (paper: any) => {
@@ -664,7 +682,7 @@ const AdminPapersPage = () => {
                         <select
                           name="subject_id"
                           required
-                          defaultValue={editingPaper?.subject_id || ''}
+                          defaultValue={editingPaper?.subject_id || defaultSubjectId || ''}
                           className="theme-select"
                         >
                           <option value="">Select Subject</option>
