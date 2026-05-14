@@ -12,7 +12,7 @@ const AdminSubjectsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [postCreatePrompt, setPostCreatePrompt] = useState<{ show: boolean, subjectName: string, subjectCode: string } | null>(null);
   const [emptySubjectWarning, setEmptySubjectWarning] = useState<{ show: boolean, emptySubjects: any[] }>({ show: false, emptySubjects: [] });
-  const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, code: string } | null>(null);
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, name: string, code: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,11 +88,11 @@ const AdminSubjectsPage = () => {
     const code = fd.get('code') as string;
     if (!name || !code) return;
 
-    // Duplicate Check
-    const duplicate = subjects.find(s => s.code.toLowerCase() === code.toLowerCase() && s.id !== editingSubject?.id);
+    // Duplicate Check — match on subject name, not course code
+    const duplicate = subjects.find(s => s.name.toLowerCase() === name.toLowerCase() && s.id !== editingSubject?.id);
     if (duplicate) {
       setShowModal(false);
-      setDuplicatePrompt({ show: true, code: duplicate.code });
+      setDuplicatePrompt({ show: true, name: duplicate.name, code: duplicate.code });
       return;
     }
 
@@ -510,7 +510,7 @@ const AdminSubjectsPage = () => {
           navigate('/hq-portal/papers', { state: { openUploadForSubjectCode: code, filterToSubject: code } });
         }}
         title="Subject Already Exists"
-        message="This subject is already in your catalogue. Would you like to go to the Papers page to manage its contents?"
+        message={`"${duplicatePrompt?.name}" is already in your catalogue. Would you like to go to the Papers page to manage its contents?`}
         confirmText="Yes, Go to Papers"
         cancelText="Cancel"
         variant="info"
