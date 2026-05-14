@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
-  Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Download, Filter,
+  Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Filter,
   ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Eye
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
@@ -36,7 +36,7 @@ const AdminPapersPage = () => {
   const [confirm, setConfirm] = useState<{ show: boolean, id: string | null }>({
     show: false, id: null
   });
-  const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, paper: any | null }>({ show: false, paper: null });
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, paper: any | null, continueUpload: (() => void) | null }>({ show: false, paper: null, continueUpload: null });
 
   // Modal Form States
   const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
@@ -197,30 +197,9 @@ const AdminPapersPage = () => {
     setShowModal(true);
   };
 
-  const handleSavePaper = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const processUpload = async (fd: FormData) => {
     const token = localStorage.getItem('admin_token');
     if (!token) return;
-
-    const fd = new FormData(e.currentTarget);
-    const title = fd.get('title') as string;
-    const subjectId = fd.get('subject_id') as string;
-    const year = fd.get('year') as string;
-    const semester = fd.get('semester') as string;
-
-    // Duplicate Detection
-    const duplicatePaper = papers.find(p =>
-      p.title.toLowerCase() === title.toLowerCase() &&
-      p.subject_id === subjectId &&
-      String(p.year) === String(year) &&
-      p.semester === semester &&
-      p.id !== editingPaper?.id
-    );
-
-    if (duplicatePaper) {
-      setDuplicatePrompt({ show: true, paper: duplicatePaper });
-      return;
-    }
 
     // Vercel Serverless Function Payload Limit Check (4.5 MB)
     const MAX_FILE_SIZE = 4.5 * 1024 * 1024;
@@ -338,6 +317,34 @@ const AdminPapersPage = () => {
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleSavePaper = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const token = localStorage.getItem('admin_token');
+    if (!token) return;
+
+    const fd = new FormData(e.currentTarget);
+
+
+    // Duplicate Detection
+    const duplicatePaper = papers.find(p => {
+      if (p.id === editingPaper?.id) return false;
+      
+      const title = (fd.get('title') as string).toLowerCase().trim();
+      const subjectId = fd.get('subject_id') as string;
+      const year = fd.get('year') as string;
+      const semester = fd.get('semester') as string;
+      
+      return p.title.toLowerCase().trim() === title && p.subject_id === subjectId && p.year === year && p.semester === semester;
+    });
+
+    if (duplicatePaper) {
+      setDuplicatePrompt({ show: true, paper: duplicatePaper, continueUpload: () => processUpload(fd) });
+      return;
+    }
+
+    await processUpload(fd);
   };
 
   const handleDeleteClick = (id: string) => {
@@ -530,9 +537,10 @@ const AdminPapersPage = () => {
                           href={paper.file_url}
                           target="_blank"
                           rel="noreferrer"
+                          title="View Paper"
                           className="p-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-muted hover:text-indigo-400 transition-colors"
                         >
-                          <Download className="w-4 h-4" />
+                          <Eye className="w-4 h-4" />
                         </a>
                         <button
                           onClick={() => handleOpenEdit(paper)}
@@ -661,9 +669,10 @@ const AdminPapersPage = () => {
                                 href={paper.file_url}
                                 target="_blank"
                                 rel="noreferrer"
+                                title="View Paper"
                                 className="p-2 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-theme-muted hover:text-indigo-400 transition-colors"
                               >
-                                <Download className="w-4 h-4" />
+                                <Eye className="w-4 h-4" />
                               </a>
                               <button
                                 onClick={() => handleOpenEdit(paper)}
@@ -977,23 +986,82 @@ const AdminPapersPage = () => {
         variant={alert.variant}
       />
 
-      {/* ── AI Insight Preview Modal ── */}
-      <ConfirmModal
-        isOpen={duplicatePrompt.show}
-        onClose={() => setDuplicatePrompt({ show: false, paper: null })}
-        onConfirm={() => {
-          const paper = duplicatePrompt.paper;
-          setDuplicatePrompt({ show: false, paper: null });
-          resetModal();
-          handleOpenEdit(paper);
-        }}
-        title="Paper Already Exists"
-        message="This specific paper has already been uploaded. Would you like to view/edit the existing one?"
-        confirmText="Yes, View/Edit"
-        cancelText="Cancel"
-        variant="info"
-      />
+      {/* ── Duplicate Prompt Modal ── */}
+      {duplicatePrompt.show && duplicatePrompt.paper && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-md border-theme-border relative flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setDuplicatePrompt({ show: false, paper: null, continueUpload: null })}
+              className="absolute top-4 right-4 p-2 text-theme-muted hover:text-theme-primary transition-colors z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                  <ShieldAlert className="w-6 h-6 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-theme-primary">Duplicate Detected</h3>
+                  <p className="text-[10px] uppercase tracking-wider text-theme-muted font-bold">Paper Already Exists</p>
+                </div>
+              </div>
+              
+              <p className="text-sm text-theme-secondary mb-6 leading-relaxed">
+                A paper with the exact same title, subject, and year already exists in the system. Please verify if this is the paper you meant to upload.
+              </p>
 
+              <div className="bg-theme-surface/50 border border-theme-border rounded-xl p-4 mb-6 flex items-center justify-between group">
+                <div className="flex flex-col gap-1 pr-4">
+                  <p className="text-sm font-bold text-theme-primary line-clamp-1">{duplicatePrompt.paper.title}</p>
+                  <div className="flex items-center gap-2 text-xs font-bold text-theme-muted uppercase">
+                    <span className="text-indigo-400">{duplicatePrompt.paper.year}</span>
+                    <span>•</span>
+                    <span>{duplicatePrompt.paper.semester} Sem</span>
+                  </div>
+                </div>
+                <a
+                  href={duplicatePrompt.paper.file_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2.5 shrink-0 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all shadow-lg"
+                  title="View Existing Paper"
+                >
+                  <Eye className="w-5 h-5" />
+                </a>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    const cb = duplicatePrompt.continueUpload;
+                    setDuplicatePrompt({ show: false, paper: null, continueUpload: null });
+                    if (cb) cb();
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] flex justify-center items-center gap-2"
+                >
+                  <CloudUpload className="w-4 h-4" />
+                  Upload Anyway
+                </button>
+                <button
+                  onClick={() => {
+                    const paper = duplicatePrompt.paper;
+                    setDuplicatePrompt({ show: false, paper: null, continueUpload: null });
+                    resetModal();
+                    handleOpenEdit(paper);
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary font-bold transition-all flex justify-center items-center gap-2"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit Existing Paper Instead
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── AI Insight Preview Modal ── */}
       {insightModal.show && insightModal.paper && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="glass-card w-full max-w-2xl p-6 border-theme-border relative my-8 flex flex-col gap-6">

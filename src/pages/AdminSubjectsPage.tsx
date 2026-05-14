@@ -89,7 +89,7 @@ const AdminSubjectsPage = () => {
     if (!name || !code) return;
 
     // Duplicate Check
-    const duplicate = subjects.find(s => (s.code.toLowerCase() === code.toLowerCase() || s.name.toLowerCase() === name.toLowerCase()) && s.id !== editingSubject?.id);
+    const duplicate = subjects.find(s => s.code.toLowerCase() === code.toLowerCase() && s.id !== editingSubject?.id);
     if (duplicate) {
       setShowModal(false);
       setDuplicatePrompt({ show: true, code: duplicate.code });
