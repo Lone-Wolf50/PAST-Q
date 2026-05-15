@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import {
   Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Filter,
   ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert,
-  ChevronLeft, ChevronRight, Eye
+  ChevronLeft, ChevronRight, Eye, Layers
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
@@ -13,12 +13,14 @@ import { apiFetch, apiFetchMultipart } from '../lib/api';
 
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
+import BulkUploadModal from '../components/BulkUploadModal';
 
 const AdminPapersPage = () => {
   const location = useLocation();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
   const [papers, setPapers] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +98,8 @@ const AdminPapersPage = () => {
       const token = localStorage.getItem('admin_token');
       if (!token) return;
       const res = await apiFetch('/hq-management/subjects', { token });
-      setSubjects(res.subjects || []);
+      const sortedSubjects = (res.subjects || []).sort((a: any, b: any) => (a.name || '').trim().localeCompare((b.name || '').trim()));
+      setSubjects(sortedSubjects);
     } catch (err) {
 
     }
@@ -336,7 +339,7 @@ const AdminPapersPage = () => {
       const year = fd.get('year') as string;
       const semester = fd.get('semester') as string;
       
-      return p.title.toLowerCase().trim() === title && p.subject_id === subjectId && p.year === year && p.semester === semester;
+      return p.title.toLowerCase().trim() === title && p.subject_id === subjectId && String(p.year) === String(year) && p.semester === semester;
     });
 
     if (duplicatePaper) {
@@ -420,25 +423,34 @@ const AdminPapersPage = () => {
               <p className="text-theme-muted">Manage the database of available past examination papers.</p>
             </div>
 
-            <button
-              onClick={() => {
-                if (subjects.length === 0) {
-                  setAlert({
-                    show: true,
-                    title: 'No Subjects Found',
-                    message: 'You haven\'t created any subjects yet. Please go to the Subjects page to create one first.',
-                    variant: 'info'
-                  });
-                } else {
-                  resetModal();
-                  setShowModal(true);
-                }
-              }}
-              className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl transition-all font-semibold shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:scale-[1.02]"
-            >
-              <Plus className="w-5 h-5" />
-              Upload New Paper
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowBulkModal(true)}
+                className="flex items-center justify-center gap-2 px-5 py-3 bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary rounded-xl transition-all font-semibold hover:scale-[1.02]"
+              >
+                <Layers className="w-5 h-5 text-indigo-400" />
+                Bulk Upload
+              </button>
+              <button
+                onClick={() => {
+                  if (subjects.length === 0) {
+                    setAlert({
+                      show: true,
+                      title: 'No Subjects Found',
+                      message: 'You haven\'t created any subjects yet. Please go to the Subjects page to create one first.',
+                      variant: 'info'
+                    });
+                  } else {
+                    resetModal();
+                    setShowModal(true);
+                  }
+                }}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl transition-all font-semibold shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:scale-[1.02]"
+              >
+                <Plus className="w-5 h-5" />
+                Upload New Paper
+              </button>
+            </div>
           </div>
 
           {/* Search & Filters */}
@@ -997,29 +1009,31 @@ const AdminPapersPage = () => {
                   <ShieldAlert className="w-6 h-6 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-theme-primary">Duplicate Detected</h3>
-                  <p className="text-[10px] uppercase tracking-wider text-theme-muted font-bold">Paper Already Exists</p>
+                  <h3 className="text-lg font-bold text-theme-primary">Possible Duplicate Found</h3>
+                  <p className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Is This a New Paper or a Copy?</p>
                 </div>
               </div>
-              
-              <p className="text-sm text-theme-secondary mb-6 leading-relaxed">
-                A paper with the exact same title, subject, and year already exists in the system. Please verify if this is the paper you meant to upload.
+
+              <p className="text-sm text-theme-secondary mb-5 leading-relaxed">
+                A paper with the <span className="font-bold text-theme-primary">same title, subject, year, and semester</span> already exists. Are you uploading a genuinely different paper, or did you mean to update the existing one?
               </p>
 
-              <div className="bg-theme-surface/50 border border-theme-border rounded-xl p-4 mb-6 flex items-center justify-between group">
+              <div className="bg-theme-surface/50 border border-amber-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
                 <div className="flex flex-col gap-1 pr-4">
                   <p className="text-sm font-bold text-theme-primary line-clamp-1">{duplicatePrompt.paper.title}</p>
                   <div className="flex items-center gap-2 text-xs font-bold text-theme-muted uppercase">
                     <span className="text-indigo-400">{duplicatePrompt.paper.year}</span>
                     <span>•</span>
                     <span>{duplicatePrompt.paper.semester} Sem</span>
+                    <span>•</span>
+                    <span>{duplicatePrompt.paper.upsa_subjects?.name || 'Unknown Subject'}</span>
                   </div>
                 </div>
                 <a
                   href={duplicatePrompt.paper.file_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="p-2.5 shrink-0 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all shadow-lg"
+                  className="p-2.5 shrink-0 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all"
                   title="View Existing Paper"
                 >
                   <Eye className="w-5 h-5" />
@@ -1033,10 +1047,10 @@ const AdminPapersPage = () => {
                     setDuplicatePrompt({ show: false, paper: null, continueUpload: null });
                     if (cb) cb();
                   }}
-                  className="w-full py-3.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] flex justify-center items-center gap-2"
+                  className="w-full py-3.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] flex justify-center items-center gap-2 text-sm"
                 >
                   <CloudUpload className="w-4 h-4" />
-                  Upload Anyway
+                  No, they're different — Upload It
                 </button>
                 <button
                   onClick={() => {
@@ -1045,10 +1059,17 @@ const AdminPapersPage = () => {
                     resetModal();
                     handleOpenEdit(paper);
                   }}
-                  className="w-full py-3.5 rounded-xl bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary font-bold transition-all flex justify-center items-center gap-2"
+                  className="w-full py-3.5 rounded-xl bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary font-bold transition-all flex justify-center items-center gap-2 text-sm"
                 >
                   <Edit2 className="w-4 h-4" />
-                  Edit Existing Paper Instead
+                  Edit the Existing One Instead
+                </button>
+                <button
+                  onClick={() => setDuplicatePrompt({ show: false, paper: null, continueUpload: null })}
+                  className="w-full py-2.5 rounded-xl text-theme-muted hover:text-theme-primary font-semibold transition-all text-sm flex justify-center items-center gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Cancel Upload
                 </button>
               </div>
             </div>
@@ -1149,6 +1170,16 @@ const AdminPapersPage = () => {
             })()}
           </div>
         </div>
+      )}
+      {/* ── Bulk Upload Modal ── */}
+      {showBulkModal && (
+        <BulkUploadModal
+          subjects={subjects}
+          papers={papers}
+          onClose={() => setShowBulkModal(false)}
+          fetchPapers={fetchPapers}
+          fetchSubjects={fetchSubjects}
+        />
       )}
     </div>
   );
