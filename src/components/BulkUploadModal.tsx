@@ -227,7 +227,17 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   const [doneCount, setDoneCount] = useState(0);
   const [allDone, setAllDone] = useState(false);
   const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, row: BulkRow | null, duplicateInSystem: any | null }>({ show: false, row: null, duplicateInSystem: null });
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleClose = () => {
+    const hasUnuploaded = rows.some(r => r.status === 'idle' || r.status === 'error');
+    if (hasUnuploaded && !allDone) {
+      setShowCloseConfirm(true);
+    } else {
+      onClose();
+    }
+  };
 
   useEffect(() => {
     setSubjects([...initialSubjects].sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim())));
@@ -385,7 +395,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                 <p className="text-xs text-theme-muted">Upload up to {MAX_FILES} papers at once</p>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 text-theme-muted hover:text-theme-primary transition-colors">
+            <button onClick={handleClose} className="p-2 text-theme-muted hover:text-theme-primary transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>
@@ -620,7 +630,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                   </p>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={onClose}
+                      onClick={handleClose}
                       disabled={isUploading}
                       className="px-5 py-2.5 rounded-xl text-theme-secondary hover:bg-theme-surface font-semibold text-sm transition-all disabled:opacity-50"
                     >
@@ -739,6 +749,41 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                   Cancel Upload
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Close Confirmation Modal ── */}
+      {showCloseConfirm && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[70] flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-sm border-theme-border relative flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+                <AlertTriangle className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-theme-primary">Discard Uploads?</h3>
+                <p className="text-[10px] uppercase tracking-wider text-red-400 font-bold">Unsaved Progress</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-theme-secondary mb-6 leading-relaxed">
+              You have un-uploaded papers in your list. Are you sure you want to close? Your work will be lost.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={onClose}
+                className="w-full py-3.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] flex justify-center items-center text-sm"
+              >
+                Yes, Discard Them
+              </button>
+              <button
+                onClick={() => setShowCloseConfirm(false)}
+                className="w-full py-2.5 rounded-xl text-theme-muted hover:text-theme-primary font-semibold transition-all text-sm flex justify-center items-center gap-2"
+              >
+                No, Keep Editing
+              </button>
             </div>
           </div>
         </div>
