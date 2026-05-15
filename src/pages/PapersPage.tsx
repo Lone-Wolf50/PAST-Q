@@ -328,6 +328,38 @@ const PapersPage = () => {
             </div>
           )}
 
+          {/* General empty state */}
+          {!showSaved && displayedPapers.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center gap-6 glass-card border-dashed">
+              <div className="w-20 h-20 bg-indigo-500/10 rounded-3xl flex items-center justify-center text-indigo-400 border border-indigo-500/20 relative">
+                <BookOpen size={32} className="relative z-10" />
+                <div className="absolute inset-0 bg-indigo-500/20 blur-2xl rounded-full animate-pulse" />
+              </div>
+              <div className="space-y-2 px-4">
+                <h3 className="text-2xl font-bold text-theme-primary">No Papers Found</h3>
+                <p className="text-theme-muted max-w-md mx-auto">
+                  We couldn't find any papers matching your current filters or search query. 
+                  Try adjusting your filters or searching for something else.
+                </p>
+              </div>
+              {(selectedYear || selectedSemester || searchQuery || selectedSubject || selectedDepartment) && (
+                <button 
+                  onClick={() => {
+                    setSelectedYear('');
+                    setSelectedSemester('');
+                    setSearchQuery('');
+                    setSelectedSubject(null);
+                    setSelectedDepartment(null);
+                    setPage(1);
+                  }}
+                  className="px-6 py-2.5 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-500/25 active:scale-95"
+                >
+                  Clear All Filters
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {displayedPapers.map((paper, index) => {
               const isAnswers = paper.has_answers;
