@@ -75,12 +75,25 @@ router.post('/subjects', async (req: AuthRequest, res: Response) => {
   const { name, code } = req.body;
   if (!name || !code) { res.status(400).json({ error: 'Name and code are required.' }); return; }
   try {
+    // Only validate uniqueness on name — same code with different name is allowed
+    const { data: existing } = await supabase
+      .from('upsa_subjects')
+      .select('id')
+      .ilike('name', name.trim())
+      .maybeSingle();
+
+    if (existing) {
+      res.status(409).json({ error: `A subject named "${name}" already exists.` });
+      return;
+    }
+
     const { data, error } = await supabase
-      .from('upsa_subjects').insert({ name, code }).select('id, name, code').single();
+      .from('upsa_subjects').insert({ name: name.trim(), code: code.trim() }).select('id, name, code').single();
     if (error) throw error;
     res.status(201).json({ subject: data });
-  } catch {
-    res.status(500).json({ error: 'Failed to create subject.' });
+  } catch (e: any) {
+    console.error('[POST /subjects]', e?.message || e);
+    res.status(500).json({ error: e?.message || 'Failed to create subject.' });
   }
 });
 

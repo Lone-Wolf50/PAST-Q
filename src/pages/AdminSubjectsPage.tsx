@@ -122,13 +122,23 @@ const AdminSubjectsPage = () => {
         });
       }
     } catch (err: any) {
-
-      setAlert({
-        show: true,
-        title: 'Save Failed',
-        message: err.message || 'Failed to save subject. Please check if the subject code already exists.',
-        variant: 'error'
-      });
+      // 409 = server detected a duplicate name or code in the database
+      if (err?.status === 409) {
+        setShowModal(false);
+        setAlert({
+          show: true,
+          title: 'Duplicate Subject',
+          message: err.message || 'A subject with this name or course code already exists.',
+          variant: 'error'
+        });
+      } else {
+        setAlert({
+          show: true,
+          title: 'Save Failed',
+          message: err.message || 'Failed to save subject.',
+          variant: 'error'
+        });
+      }
     } finally {
       setSaving(false);
     }

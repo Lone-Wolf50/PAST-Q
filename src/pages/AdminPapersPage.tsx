@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
   Plus, Search, Edit2, Trash2, Menu, FileText, CheckCircle2, CloudUpload, X, Filter,
   ExternalLink, FileCheck, RotateCw, Sparkles, Loader2, BookOpen, Target, Lightbulb, ShieldAlert,
@@ -772,12 +772,7 @@ const AdminPapersPage = () => {
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-theme-muted ml-1">Subject</label>
-                          <Link to="/hq-management/subjects" className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors">
-                            Missing subject? Add it here.
-                          </Link>
-                        </div>
+                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-theme-muted ml-1">Subject</label>
                         <select
                           name="subject_id"
                           required

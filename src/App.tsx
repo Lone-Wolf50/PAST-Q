@@ -78,7 +78,7 @@ function AppRoutes() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans relative">
-      <GlobalBanner />
+      {!isAdminPath && <GlobalBanner />}
       <InstallPrompt />
       <Routes>
         <Route path="/hq-portal/*" element={null} />

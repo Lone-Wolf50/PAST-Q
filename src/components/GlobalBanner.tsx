@@ -13,17 +13,11 @@ export const GlobalBanner = () => {
 
     apiFetch('/public/site-config')
       .then(data => {
-
         if (data.globalBannerActive && data.globalBanner) {
           if (dismissedBanner !== data.globalBanner) {
-
             setBanner(data.globalBanner);
             setIsVisible(true);
-          } else {
-
           }
-        } else {
-
         }
       })
       .catch(() => {});
@@ -37,33 +31,45 @@ export const GlobalBanner = () => {
   };
 
   return (
-    <div className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 text-white shadow-md relative z-[100]">
-      <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between flex-wrap">
-          <div className="w-0 flex-1 flex items-center gap-3">
-            <span className="flex p-2 rounded-lg bg-white/20 shadow-sm">
-              <Megaphone className="h-5 w-5 text-white" aria-hidden="true" />
-            </span>
-            <p className="font-semibold text-sm truncate">
+    <>
+      <style>{`
+        @keyframes marquee-ltr {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(100vw); }
+        }
+        .banner-marquee {
+          display: inline-block;
+          white-space: nowrap;
+          animation: marquee-ltr 18s linear infinite;
+        }
+      `}</style>
+
+      <div className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 text-white shadow-md sticky top-0 z-[100]">
+        <div className="flex items-center px-4 py-2.5 gap-3">
+          {/* Icon – always visible, never scrolls */}
+          <span className="flex-shrink-0 flex p-2 rounded-lg bg-white/20 shadow-sm">
+            <Megaphone className="h-4 w-4 sm:h-5 sm:w-5 text-white" aria-hidden="true" />
+          </span>
+
+          {/* Scrolling text container */}
+          <div className="flex-1 overflow-hidden min-w-0">
+            <span className="banner-marquee font-semibold text-sm sm:text-base">
               {banner}
-            </p>
+            </span>
           </div>
-          <div className="order-3 mt-2 flex-shrink-0 w-full sm:order-2 sm:mt-0 sm:w-auto">
-            {/* Optional call to action button can go here */}
-          </div>
-          <div className="order-2 flex-shrink-0 sm:order-3 sm:ml-2">
-            <button
-              type="button"
-              onClick={handleDismiss}
-              className="-mr-1 flex p-2 rounded-md hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white transition-colors"
-            >
-              <span className="sr-only">Dismiss</span>
-              <X className="h-5 w-5 text-white" aria-hidden="true" />
-            </button>
-          </div>
+
+          {/* Dismiss button – always visible */}
+          <button
+            type="button"
+            onClick={handleDismiss}
+            aria-label="Dismiss banner"
+            className="flex-shrink-0 flex p-2 rounded-md hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white transition-colors"
+          >
+            <X className="h-4 w-4 sm:h-5 sm:w-5 text-white" aria-hidden="true" />
+          </button>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
