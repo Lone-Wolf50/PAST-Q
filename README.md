@@ -17,6 +17,8 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 - **Smart Extraction**: Automatic PDF-to-text processing for clean, accurate AI responses.
 
 ### 💼 Student Dashboard
+- **Browse & Filter**: Advanced filtering by academic year, semester, and department.
+- **Smart Empty States**: Intuitive "Not Found" feedback with quick-reset filter capabilities for a seamless browsing experience.
 - **Progress Tracking**: Statistics on AI usage, plan status, and study sessions.
 - **Session Management**: Persistent chat histories that allow students to resume their tutoring sessions across different papers.
 - **Premium Tiers**: Role-based access control for Basic, Plus, and Pro subscription plans.
@@ -34,6 +36,7 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 
 ### 🛡️ Admin HQ Portal
 - **Centralized Management**: Full control over papers, subjects, and student records.
+- **Bulk Upload Workflow**: High-efficiency spreadsheet-style interface for uploading hundreds of papers simultaneously with real-time duplicate detection.
 - **AI Health Monitoring**: Real-time status indicators for API quota and processing status.
 - **Live Processing Logs**: Visual feedback for background PDF analysis and insight generation.
 
