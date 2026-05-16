@@ -31,7 +31,7 @@ const checkAiEnabled = async (req: AuthRequest, res: any, next: any) => {
       .select('global_ai_block')
       .eq('id', 1)
       .single();
-    
+
     if (!error && data) {
       if (typeof data.global_ai_block === 'boolean') {
         isGlobalBlock = data.global_ai_block;
@@ -292,7 +292,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
               if (pdfResponse.ok) {
                 const arrayBuffer = await pdfResponse.arrayBuffer();
 
-                generatePaperInsights(paper.id, Buffer.from(arrayBuffer), paper.title).catch(() => {});
+                generatePaperInsights(paper.id, Buffer.from(arrayBuffer), paper.title).catch(() => { });
               } else {
 
               }
@@ -527,7 +527,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       total_tokens: response?.usageMetadata?.totalTokenCount || 0,
       has_file: !!fileData
     }).then(({ error }) => {
-      if (error) {}
+      if (error) { }
     });
 
     // ── Persist messages for Plus/Pro users when a conversationId is supplied ──
@@ -556,7 +556,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     // Log the full error shape so we can debug 500s quickly
 
 
-    if (error?.errorDetails) {}
+    if (error?.errorDetails) { }
 
     // Attempt to parse the Gemini error body (it may be a JSON string in error.message)
     let parsedBody: any = null;

@@ -333,12 +333,12 @@ const AdminPapersPage = () => {
     // Duplicate Detection
     const duplicatePaper = papers.find(p => {
       if (p.id === editingPaper?.id) return false;
-      
+
       const title = (fd.get('title') as string).toLowerCase().trim();
       const subjectId = fd.get('subject_id') as string;
       const year = fd.get('year') as string;
       const semester = fd.get('semester') as string;
-      
+
       return p.title.toLowerCase().trim() === title && p.subject_id === subjectId && String(p.year) === String(year) && p.semester === semester;
     });
 

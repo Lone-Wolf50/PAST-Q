@@ -421,8 +421,8 @@ const AskAIPage = () => {
       const res = await apiFetch('/ai/chat', {
         method: 'POST',
         token: token!,
-        body: { 
-          message: content, 
+        body: {
+          message: content,
           history,
           fileData: fileDataStr || undefined,
           fileMimeType: mimeTypeStr || undefined,
@@ -536,11 +536,11 @@ const AskAIPage = () => {
 
   return (
     <div className="w-full h-[calc(100dvh-72px)] flex overflow-hidden bg-theme-base">
-      
+
       {/* Mobile Drawer Overlay */}
       {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden" 
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -566,13 +566,13 @@ const AskAIPage = () => {
 
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-theme-surface border-2 border-theme-border shadow-inner flex items-center justify-center overflow-hidden">
-               {user?.avatar_url ? (
-                 <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-               ) : (
-                 <div className="w-full h-full bg-gradient-to-tr from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold">
-                   {user?.full_name?.charAt(0).toUpperCase() || 'S'}
-                 </div>
-               )}
+              {user?.avatar_url ? (
+                <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-tr from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold">
+                  {user?.full_name?.charAt(0).toUpperCase() || 'S'}
+                </div>
+              )}
             </div>
             <div className="overflow-hidden">
               <p className="font-semibold text-sm text-theme-primary truncate">{user?.full_name || 'Student'}</p>
@@ -663,23 +663,23 @@ const AskAIPage = () => {
               </Link>
             )}
           </div>
-          
+
           <div className="w-full bg-theme-surface h-1.5 rounded-full overflow-hidden mb-2 border border-theme-border/50">
-              <motion.div 
-                className="bg-indigo-600 h-full shadow-[0_0_8px_rgba(79,70,229,0.5)]"
-                initial={{ width: 0 }}
-                animate={{ 
-                  width: limit === Infinity ? '100%' : `${Math.min((usageCount / limit) * 100, 100)}%`
-                }}
-              />
+            <motion.div
+              className="bg-indigo-600 h-full shadow-[0_0_8px_rgba(79,70,229,0.5)]"
+              initial={{ width: 0 }}
+              animate={{
+                width: limit === Infinity ? '100%' : `${Math.min((usageCount / limit) * 100, 100)}%`
+              }}
+            />
           </div>
-          
+
           <div className="flex justify-between items-center">
             <p className="text-[10px] text-theme-muted font-bold">
               <span className="text-theme-primary">{usageCount}/{limit === Infinity ? '∞' : limit}</span> queries
             </p>
-            <button 
-              onClick={handleReset} 
+            <button
+              onClick={handleReset}
               className="p-1.5 text-theme-muted hover:text-indigo-400 hover:bg-theme-surface rounded-lg border border-transparent hover:border-theme-border transition-all"
               title="Reset session"
             >
@@ -706,12 +706,12 @@ const AskAIPage = () => {
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
             {(plan === 'Plus' || plan === 'Pro') && (
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-500 rounded-xl text-xs font-bold border border-amber-500/20 shadow-sm">
-                 <Sparkles size={14} />
-                 <span>{plan}</span>
+                <Sparkles size={14} />
+                <span>{plan}</span>
               </div>
             )}
             <Link to="/papers" className="px-4 py-2 bg-theme-surface-2 rounded-xl text-xs font-bold border border-theme-border shadow-sm hover:bg-theme-surface transition-colors text-theme-primary">Past Papers</Link>
@@ -722,7 +722,7 @@ const AskAIPage = () => {
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-10 space-y-8 scroll-smooth">
           <AnimatePresence initial={false}>
             {messages.length === 1 && !isLoading && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="max-w-2xl mx-auto mt-12 text-center"
@@ -760,8 +760,8 @@ const AskAIPage = () => {
               >
                 <div className={clsx(
                   "max-w-[85%] p-5 rounded-2xl shadow-md transition-all",
-                  message.role === 'user' 
-                    ? "bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-none shadow-indigo-500/20" 
+                  message.role === 'user'
+                    ? "bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-none shadow-indigo-500/20"
                     : "glass-card border-theme-border rounded-tl-none text-theme-secondary"
                 )}>
                   {message.attachmentName && (
@@ -771,25 +771,25 @@ const AskAIPage = () => {
                     </div>
                   )}
                   <div className={clsx(
-                    message.role === 'user' 
-                      ? "text-white whitespace-pre-wrap text-sm font-medium" 
+                    message.role === 'user'
+                      ? "text-white whitespace-pre-wrap text-sm font-medium"
                       : "prose prose-sm max-w-none prose-headings:text-theme-primary prose-strong:text-theme-primary prose-code:bg-theme-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-indigo-400 prose-code:font-bold dark:prose-invert text-theme-secondary"
                   )}>
                     {message.role === 'user' ? message.content : <Markdown>{message.content}</Markdown>}
                   </div>
                 </div>
                 <div className={clsx(
-                   "text-[10px] text-theme-muted mt-2 font-bold uppercase tracking-wider flex items-center gap-1.5",
-                   message.role === 'user' ? "mr-1" : "ml-1"
+                  "text-[10px] text-theme-muted mt-2 font-bold uppercase tracking-wider flex items-center gap-1.5",
+                  message.role === 'user' ? "mr-1" : "ml-1"
                 )}>
-                   {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                   {message.role === 'assistant' && <span className="opacity-50">• PastQ AI</span>}
+                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {message.role === 'assistant' && <span className="opacity-50">• PastQ AI</span>}
                 </div>
               </motion.div>
             ))}
 
             {isLoading && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex items-start"
@@ -818,16 +818,16 @@ const AskAIPage = () => {
               <div className="mb-3 flex items-center gap-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-3 py-1.5 rounded-lg w-max text-xs font-semibold">
                 <Paperclip size={14} />
                 <span className="truncate max-w-[200px] md:max-w-[300px]">{selectedFileName}</span>
-                <button 
-                  type="button" 
-                  onClick={() => { setSelectedFileName(''); setSelectedFile(null); }} 
+                <button
+                  type="button"
+                  onClick={() => { setSelectedFileName(''); setSelectedFile(null); }}
                   className="hover:text-red-400 ml-1 transition-colors"
                 >
                   <X size={14} />
                 </button>
               </div>
             )}
-            <form 
+            <form
               onSubmit={handleSubmit}
               className={clsx(
                 "relative flex items-center group",
@@ -841,23 +841,23 @@ const AskAIPage = () => {
                 className="w-full bg-theme-surface-2 border border-theme-border p-4 pr-16 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm text-theme-primary font-medium placeholder:text-theme-muted transition-all"
                 disabled={!canSend || isLoading}
               />
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                className="hidden" 
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
                 accept=".pdf,.doc,.docx,.txt"
               />
-              
+
               <div className="absolute right-3 flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={clsx("p-2 transition-colors rounded-xl", selectedFileName ? "text-indigo-400 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-400")}
-                    title="Attach File"
-                  >
-                    <Paperclip size={18} />
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={clsx("p-2 transition-colors rounded-xl", selectedFileName ? "text-indigo-400 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-400")}
+                  title="Attach File"
+                >
+                  <Paperclip size={18} />
+                </button>
                 <button
                   type="submit"
                   disabled={!input.trim() || !canSend || isLoading}
@@ -872,17 +872,17 @@ const AskAIPage = () => {
                 </button>
               </div>
             </form>
-            
+
             <div className="mt-4 flex flex-col items-center gap-1">
-                {!canSend ? (
-                  <Link to="/pricing" className="text-[10px] font-bold text-amber-500 uppercase tracking-widest bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/20 backdrop-blur-sm hover:underline">
-                    Limit Reached • Upgrade to Continue
-                  </Link>
-                ) : (
-                  <p className="text-[10px] text-theme-muted uppercase tracking-widest font-bold">
-                    {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-emerald-400">PastQ Advanced AI v2.0</span>
-                  </p>
-                )}
+              {!canSend ? (
+                <Link to="/pricing" className="text-[10px] font-bold text-amber-500 uppercase tracking-widest bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/20 backdrop-blur-sm hover:underline">
+                  Limit Reached • Upgrade to Continue
+                </Link>
+              ) : (
+                <p className="text-[10px] text-theme-muted uppercase tracking-widest font-bold">
+                  {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-emerald-400">PastQ Advanced AI v2.0</span>
+                </p>
+              )}
             </div>
           </div>
         </footer>
@@ -891,13 +891,13 @@ const AskAIPage = () => {
       {/* Maintenance Modal */}
       <AnimatePresence>
         {isMaintenance && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -916,7 +916,7 @@ const AskAIPage = () => {
                 </div>
 
                 <h2 className="text-3xl font-black text-theme-primary mb-4 tracking-tight">System Maintenance</h2>
-                
+
                 <div className="p-6 bg-theme-surface-2 border border-theme-border rounded-2xl mb-8">
                   <p className="text-sm text-theme-secondary font-medium leading-relaxed">
                     {maintenanceMsg || "Our AI Tutor is currently recharging and performing routine maintenance to better serve you."}
@@ -924,14 +924,14 @@ const AskAIPage = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <Link 
-                    to="/papers" 
+                  <Link
+                    to="/papers"
                     className="flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-500/25 active:scale-95"
                   >
                     Explore Past Papers
                   </Link>
-                  <Link 
-                    to="/" 
+                  <Link
+                    to="/"
                     className="flex items-center justify-center gap-2 w-full py-3 bg-theme-surface-2 hover:bg-theme-surface border border-theme-border text-theme-secondary rounded-2xl font-bold transition-all active:scale-95 text-sm"
                   >
                     Go to Home
@@ -943,7 +943,7 @@ const AskAIPage = () => {
         )}
       </AnimatePresence>
 
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={showConfirmReset}
         onClose={() => setShowConfirmReset(false)}
         onConfirm={confirmReset}

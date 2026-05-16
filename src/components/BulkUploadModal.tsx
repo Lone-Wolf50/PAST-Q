@@ -463,7 +463,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                           <th className="px-4 py-3 font-bold w-24">Year</th>
                           <th className="px-4 py-3 font-bold w-28">Semester</th>
                           <th className="px-4 py-3 font-bold w-12 text-center">Status</th>
-                          <th className="px-4 py-3 font-bold w-10"></th>
+                          <th className="px-4 py-3 font-bold w-20 text-center">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-theme-border">
@@ -583,16 +583,26 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                                 {row.status === 'idle' && titleMatch && !exactDup && <AlertTriangle className="w-4 h-4 text-yellow-500 mx-auto" />}
                               </td>
 
-                              {/* Remove */}
+                              {/* Actions */}
                               <td className="px-4 py-3 text-center">
-                                {(row.status === 'idle' || row.status === 'error') && (
+                                <div className="flex items-center justify-center gap-1">
                                   <button
-                                    onClick={() => removeRow(row.id)}
-                                    className="p-1.5 rounded-lg text-theme-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                    onClick={() => window.open(URL.createObjectURL(row.file), '_blank')}
+                                    className="p-1.5 rounded-lg text-theme-muted hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
+                                    title="Preview file"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <Eye className="w-3.5 h-3.5" />
                                   </button>
-                                )}
+                                  {(row.status === 'idle' || row.status === 'error') && (
+                                    <button
+                                      onClick={() => removeRow(row.id)}
+                                      className="p-1.5 rounded-lg text-theme-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                      title="Remove file"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
