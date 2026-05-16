@@ -312,9 +312,9 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
-    }
+    // NOTE: We intentionally do NOT hard-fail here if GEMINI_API_KEY is missing.
+    // The model loop below will simply skip all Gemini models and fall through to
+    // the Puter.js fallback, which does not require a Gemini key.
 
     // 1. Block file uploads for Free plan
     if (userPlan.toLowerCase() === 'free' && fileData) {
@@ -389,7 +389,8 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       }
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : null;
 
     const contents: any[] = [];
     if (history && Array.isArray(history)) {
@@ -436,28 +437,31 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     let response: any = null;
     let lastError: any = null;
 
-    for (const model of modelsToTry) {
-      try {
-        response = await ai.models.generateContent({
-          model,
-          contents,
-          config: { systemInstruction },
-        });
-        break;
-      } catch (err: any) {
-        lastError = err;
-        const body = (() => { try { return JSON.parse(err.message); } catch { return null; } })();
-        const code = body?.error?.code ?? err.status;
-        if (code === 429) {
-
-          continue; // try the next model
+    if (ai) {
+      for (const model of modelsToTry) {
+        try {
+          response = await ai.models.generateContent({
+            model,
+            contents,
+            config: { systemInstruction },
+          });
+          break;
+        } catch (err: any) {
+          lastError = err;
+          const body = (() => { try { return JSON.parse(err.message); } catch { return null; } })();
+          const code = body?.error?.code ?? err.status;
+          if (code === 429) {
+            continue; // try the next model
+          }
+          if (code === 404) {
+            continue; // model not available — try the next one
+          }
+          throw err; // any other error — re-throw immediately
         }
-        if (code === 404) {
-
-          continue; // model not available — try the next one
-        }
-        throw err; // any other error — re-throw immediately
       }
+    } else {
+      // No Gemini key configured — go straight to Puter fallback
+      lastError = new Error('GEMINI_API_KEY not configured');
     }
 
     let usedPuterFallback = false;
