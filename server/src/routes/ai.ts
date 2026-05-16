@@ -585,13 +585,13 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       });
 
       const friendlyMsg =
-        `⚠️ **System Maintenance**: The AI Tutor is currently recharging its circuits.\n\n` +
-        `We expect to be back online in about **${retryMins} minute${retryMins === 1 ? '' : 's'}**. ` +
-        `While we recharge, we don't want your learning to stop! You can copy your question and try one of our recommended external study partners:\n\n` +
-        `* [Try ChatGPT](https://chat.openai.com)\n` +
-        `* [Try Google Gemini](https://gemini.google.com)\n` +
-        `* [Try Claude](https://claude.ai)\n\n` +
-        `*Tip: If you need help with a specific paper, you can download the PDF first and upload it to them!*`;
+        `⚠️ **System Recharging**: The PastQ AI Tutor is currently performing routine maintenance.\n\n` +
+        `We expect to be back to full capacity in about **${retryMins} minute${retryMins === 1 ? '' : 's'}**. ` +
+        `While we recharge, we don't want your learning to stop! You can copy your question and continue your session on one of our alternate servers:\n\n` +
+        `* [Server Alpha](https://chat.openai.com)\n` +
+        `* [Server Beta](https://gemini.google.com)\n` +
+        `* [Server Gamma](https://claude.ai)\n\n` +
+        `*Tip: If you need help with a specific paper, you can download the PDF first and upload it to the alternate server!*`;
 
       return res.status(429).json({
         error: 'quota_exceeded',
