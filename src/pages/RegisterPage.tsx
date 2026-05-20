@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, ArrowRight, Eye, EyeOff, ShieldCheck, Zap } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
 import { apiFetch } from '../lib/api';
 import { supabase } from '../lib/supabase';
