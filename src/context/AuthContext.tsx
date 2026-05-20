@@ -155,8 +155,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Optional: Also clear the other storage just in case they switch contexts
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
+    sessionStorage.removeItem('dismissed_banner');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('dismissed_banner');
+
+    // Clear all AI chat related storage keys to prevent cross-account leakage
+    localStorage.removeItem('pastq_ai_messages');
+    localStorage.removeItem('pastq_ai_active_conv');
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('pastq_paper_conv_')) {
+        localStorage.removeItem(key);
+      }
+    });
     
     setToken(null);
     setUser(null);

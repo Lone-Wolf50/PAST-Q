@@ -186,14 +186,44 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
       return;
     }
 
+    // Fetch full user details for login token generation
+    const { data: fullUser, error: fullUserError } = await supabase
+      .from('upsa_users')
+      .select('id, full_name, email, plan, role, avatar_url, session_version')
+      .eq('id', user.id)
+      .single();
+
+    if (fullUserError || !fullUser) {
+      res.status(500).json({ error: 'Failed to complete login setup after verification.' });
+      return;
+    }
+
+    const newSessionVersion = (fullUser.session_version || 0) + 1;
+
     await supabase
       .from('upsa_users')
-      .update({ is_verified: true, otp: null, otp_expires_at: null })
+      .update({ is_verified: true, otp: null, otp_expires_at: null, session_version: newSessionVersion })
       .eq('id', user.id);
 
-    res.status(200).json({ message: 'Email verified successfully. You can now log in.' });
-  } catch (err) {
+    const token = jwt.sign(
+      { id: fullUser.id, email: fullUser.email, plan: fullUser.plan, role: fullUser.role || 'student', session_version: newSessionVersion },
+      process.env.JWT_SECRET!,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' } as jwt.SignOptions
+    );
 
+    res.status(200).json({
+      message: 'Email verified successfully.',
+      token,
+      user: {
+        id: fullUser.id,
+        full_name: fullUser.full_name,
+        email: fullUser.email,
+        plan: fullUser.plan,
+        role: fullUser.role || 'student',
+        avatar_url: fullUser.avatar_url,
+      },
+    });
+  } catch (err) {
     res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -427,4 +457,129 @@ router.post('/resend-otp', authLimiter, async (req: Request, res: Response) => {
   }
 });
 
+
+// ─── GOOGLE OAUTH LOGIN ─────────────────────────────────────
+router.post('/google-login', authLimiter, async (req: Request, res: Response) => {
+  const { token } = req.body;
+
+  if (!token || typeof token !== 'string') {
+    res.status(400).json({ error: 'Supabase access token is required.' });
+    return;
+  }
+
+  try {
+    // 1. Verify the token server-side with Supabase — prevents spoofing
+    const { data: { user: googleUser }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !googleUser || !googleUser.email) {
+      console.error('❌ Supabase token verification failed:', authError?.message);
+      res.status(401).json({ error: 'Invalid or expired Google token. Please try again.' });
+      return;
+    }
+
+    const email = googleUser.email.toLowerCase().trim();
+    const full_name = sanitizeText(
+      googleUser.user_metadata?.full_name ||
+      googleUser.user_metadata?.name ||
+      email.split('@')[0]
+    );
+    const avatar_url = googleUser.user_metadata?.avatar_url || googleUser.user_metadata?.picture || null;
+
+    console.log(`🔑 Google OAuth login: ${email}`);
+
+    // 2. Check if user already exists in our table
+    const { data: existingUser } = await supabase
+      .from('upsa_users')
+      .select('id, full_name, email, plan, role, avatar_url, status, session_version, password_hash')
+      .eq('email', email)
+      .single();
+
+    let dbUser: any;
+
+    if (existingUser) {
+      // Check account status
+      if (existingUser.status === 'suspended') {
+        res.status(403).json({ error: 'Your account is suspended. Please contact support.' });
+        return;
+      }
+      if (existingUser.status === 'deactivated') {
+        res.status(403).json({ error: 'This account has been deactivated.' });
+        return;
+      }
+
+      // Increment session_version to invalidate all other active device sessions
+      const newSessionVersion = (existingUser.session_version || 0) + 1;
+
+      // Sync avatar and name from Google if they changed
+      await supabase
+        .from('upsa_users')
+        .update({
+          avatar_url: avatar_url || existingUser.avatar_url,
+          full_name: existingUser.full_name || full_name,
+          is_verified: true,
+          session_version: newSessionVersion,
+        })
+        .eq('id', existingUser.id);
+
+      dbUser = { ...existingUser, session_version: newSessionVersion };
+      console.log(`✅ Existing Google user logged in: ${email} (session v${newSessionVersion})`);
+    } else {
+      // 3. New user — create record in upsa_users
+      // password_hash is null for OAuth users (they never set a password)
+      const { data: newUser, error: insertError } = await supabase
+        .from('upsa_users')
+        .insert({
+          full_name,
+          email,
+          password_hash: null,
+          avatar_url,
+          is_verified: true,
+          plan: 'free',
+          role: 'student',
+          session_version: 1,
+        })
+        .select('id, full_name, email, plan, role, avatar_url, session_version')
+        .single();
+
+      if (insertError || !newUser) {
+        console.error('❌ Failed to create Google OAuth user:', insertError?.message);
+        res.status(500).json({ error: 'Failed to create account. Please try again.' });
+        return;
+      }
+
+      dbUser = newUser;
+      console.log(`🆕 New Google user registered: ${email}`);
+    }
+
+    // 4. Sign our own PastQ JWT with the new session_version
+    const jwtToken = jwt.sign(
+      {
+        id: dbUser.id,
+        email: dbUser.email,
+        plan: dbUser.plan,
+        role: dbUser.role || 'student',
+        session_version: dbUser.session_version,
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' } as jwt.SignOptions
+    );
+
+    res.status(200).json({
+      token: jwtToken,
+      user: {
+        id: dbUser.id,
+        full_name: dbUser.full_name,
+        email: dbUser.email,
+        plan: dbUser.plan,
+        role: dbUser.role || 'student',
+        avatar_url: dbUser.avatar_url,
+      },
+    });
+  } catch (err: any) {
+    console.error('❌ Google OAuth Error:', err);
+    res.status(500).json({ error: 'Internal server error during Google login.' });
+  }
+});
+
 export default router;
+

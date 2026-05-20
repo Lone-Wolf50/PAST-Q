@@ -90,8 +90,14 @@ Direct, highly organized, authoritative yet encouraging. You write like a premiu
 2. **The Breakdown**: Use a logical step-by-step approach.
 3. **The Context**: Explain *why* the answer is correct or how the concept applies to broader theory.
 
-== DOCUMENT ANALYSIS ==
-If a paper or document is provided, treat it as the "Source of Truth." Reference specific sections or questions by name.
+== DOCUMENT ANALYSIS (CRITICAL RULES) ==
+When exam paper text is provided between --- BEGIN EXAM PAPER TEXT --- and --- END EXAM PAPER TEXT --- markers:
+- That text contains the **ACTUAL EXAM QUESTIONS**. Treat every line as the real paper content.
+- **NEVER use your general training knowledge** to answer — your response must be grounded entirely in that text.
+- **Always reproduce the exact question wording** as a blockquote (>) before answering it.
+- Respond to whatever the student requests by working through the relevant question(s) found in the paper text.
+- Reference question numbers and sub-parts exactly as written in the paper.
+- If a question cannot be located in the provided text, say so explicitly.
 `.trim();
 
   const planBehavior: Record<string, string> = {
@@ -334,25 +340,28 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         return res.json({ reply: "You've reached your **5 query limit** for the last 10 hours on the Free plan. Upgrade to **Basic, Plus, or Pro** to keep studying!" });
       }
     }
-
     if (userPlan.toLowerCase() === 'basic') {
-      // Check overall query count (e.g. 10 per week as per metadata, but let's stick to the 10 total for now or simplify)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      
+      // Check overall query count (10 queries per month billing cycle as per UI)
       const { count: totalQueries } = await supabase
         .from('upsa_ai_queries')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', req.user?.id);
+        .eq('user_id', req.user?.id)
+        .gte('created_at', thirtyDaysAgo);
 
       if ((totalQueries || 0) >= 10) {
-        return res.json({ reply: "You've reached your **10 query limit** for this week on the Basic plan. Upgrade to **Plus or Pro** for unlimited queries!" });
+        return res.json({ reply: "You've reached your **10 query limit** for this month on the Basic plan. Upgrade to **Plus or Pro** for unlimited queries!" });
       }
 
-      // Check file upload limit for Basic (5 files)
+      // Check file upload limit for Basic (5 files per month cycle)
       if (fileData) {
         const { count: fileCount } = await supabase
           .from('upsa_ai_queries')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', req.user?.id)
-          .eq('has_file', true);
+          .eq('has_file', true)
+          .gte('created_at', thirtyDaysAgo);
 
         if ((fileCount || 0) >= 5) {
           return res.status(403).json({
@@ -366,26 +375,52 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     // 2. Prepare the payload for Gemini
     let activeFileData = fileData;
     let activeMimeType = fileMimeType || 'application/pdf';
+    // Paper metadata + pre-generated insights — fetched when paperId is provided
+    let paperMeta: { title?: string; subject?: string; year?: string; semester?: string } = {};
+    let paperInsights: any = null;
 
     // If no manual file is uploaded, but a paperId is provided, fetch it from R2
     if (!activeFileData && paperId) {
       try {
-        const { data: paper } = await supabase
-          .from('upsa_papers')
-          .select('file_url')
-          .eq('id', paperId)
-          .single();
+        // Fetch paper metadata and pre-generated insights in parallel
+        const [paperRes, insightsRes] = await Promise.all([
+          supabase
+            .from('upsa_papers')
+            .select('title, year, semester, file_url, upsa_subjects(name)')
+            .eq('id', paperId)
+            .single(),
+          supabase
+            .from('upsa_paper_insights')
+            .select('summary, topics, difficulty, hardest_question, exam_tips')
+            .eq('paper_id', paperId)
+            .single(),
+        ]);
 
-        if (paper?.file_url) {
-          const pdfRes = await fetch(paper.file_url);
-          if (pdfRes.ok) {
-            const arrayBuffer = await pdfRes.arrayBuffer();
-            activeFileData = Buffer.from(arrayBuffer).toString('base64');
-            activeMimeType = 'application/pdf';
+        const paper = paperRes.data;
+        paperInsights = insightsRes.data || null;
+
+        if (paper) {
+          // Store metadata so the Puter fallback can provide academic context
+          paperMeta = {
+            title: paper.title || undefined,
+            subject: (paper.upsa_subjects as any)?.name || undefined,
+            year: paper.year ? String(paper.year) : undefined,
+            semester: paper.semester || undefined,
+          };
+
+          if (paper.file_url) {
+            const pdfRes = await fetch(paper.file_url);
+            if (pdfRes.ok) {
+              const arrayBuffer = await pdfRes.arrayBuffer();
+              activeFileData = Buffer.from(arrayBuffer).toString('base64');
+              activeMimeType = 'application/pdf';
+            } else {
+              console.warn(`[AI /chat] PDF fetch failed: HTTP ${pdfRes.status} for paperId=${paperId}`);
+            }
           }
         }
       } catch (err) {
-
+        console.warn('[AI /chat] Could not fetch PDF for paperId:', paperId, err);
       }
     }
 
@@ -403,22 +438,59 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     }
     const userParts: any[] = [];
 
+    // --- PDF Content Extraction (Token-Efficient Hybrid Strategy) ---
+    // Step 1: Try pdf-parse first — completely free, zero AI tokens consumed.
+    // Step 2: Only if pdf-parse returns empty (scanned/image PDF), fall back to Gemini inlineData.
     let extractedText = "";
-    if (activeFileData) {
-      try {
+    let hasPdfInline = false;
 
-        const pdfBuffer = Buffer.from(activeFileData, 'base64');
+    if (activeFileData) {
+      const pdfBuffer = Buffer.from(activeFileData, 'base64');
+      console.log(`[PDF-PARSE] Buffer size: ${pdfBuffer.length} bytes | Source: ${paperId ? `paperId=${paperId}` : 'manual upload'}`);
+
+      try {
         const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
         const pdfData = await pdfParser(pdfBuffer);
-        extractedText = pdfData.text || "";
+        extractedText = (pdfData.text || "").trim();
 
+        if (extractedText) {
+          console.log(`[PDF-PARSE] ✅ SUCCESS — extracted ${extractedText.length} characters (${pdfData.numpages} pages). Using text injection (no vision tokens).`);
+        } else {
+          console.warn(`[PDF-PARSE] ⚠️  EMPTY — pdf-parse ran without error but returned no text. PDF is likely scanned/image-based or encrypted. Pages: ${pdfData.numpages ?? 'unknown'}.`);
+        }
       } catch (pdfErr: any) {
-
+        console.error(`[PDF-PARSE] ❌ FAILED — pdf-parse threw an error. Cause: ${pdfErr?.message}`);
+        console.error(`[PDF-PARSE]    Error type : ${pdfErr?.name ?? 'Unknown'}`);
+        if (pdfErr?.stack) {
+          console.error(`[PDF-PARSE]    Stack      : ${pdfErr.stack.split('\n').slice(0, 4).join(' | ')}`);
+        }
       }
-    }
 
-    if (extractedText) {
-      userParts.push({ text: `[Attached Document Content]\n${extractedText.substring(0, 35000)}\n\n` });
+      if (extractedText) {
+        // pdf-parse succeeded — inject as plain text (token-efficient, no AI vision tokens used)
+        userParts.push({
+          text:
+            `--- BEGIN EXAM PAPER TEXT ---\n` +
+            `${extractedText.substring(0, 35000)}\n` +
+            `--- END EXAM PAPER TEXT ---\n\n` +
+            `RULES:\n` +
+            `- The text above IS the exam paper containing the actual questions.\n` +
+            `- Answer ONLY from the question text above. Do NOT use general knowledge.\n` +
+            `- Before answering any question, reproduce its exact wording as a blockquote (>).\n`
+        });
+      } else {
+        // pdf-parse returned nothing — fall back to Gemini native vision (higher token cost)
+        console.warn(`[PDF-PARSE] 🔄 FALLBACK — sending raw PDF bytes to Gemini as inlineData (vision tokens will be used).`);
+        userParts.push({
+          inlineData: {
+            mimeType: activeMimeType || 'application/pdf',
+            data: activeFileData,
+          },
+        });
+        hasPdfInline = true;
+      }
+    } else {
+      console.log(`[PDF-PARSE] ⏭️  SKIPPED — no activeFileData available (no paperId PDF fetched and no manual upload).`);
     }
     userParts.push({ text: message });
     contents.push({ role: 'user', parts: userParts });
@@ -471,13 +543,60 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           const historyForPuter = (history && Array.isArray(history))
             ? history.map((m: any) => ({ role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', content: m.content }))
             : [];
-          // Note: Puter does not accept inline file data the same way as Gemini.
-          // We pass a note in the user message if a paper/file was attached.
-          const userMsgForPuter = extractedText
-            ? `[Note: A PDF document was attached. Here is its extracted text content for your reference:\n\n${extractedText.substring(0, 10000)}]\n\n${message}`
-            : activeFileData
-              ? `[Note: A PDF document was attached but could not be processed. Please answer based on your general knowledge.]\n\n${message}`
-              : message;
+          // Puter cannot read binary PDF data. Build the richest context we can:
+          // Priority 1: pdf-parse extracted text (full content)
+          // Priority 2: Pre-generated paper insights (summary, topics, hardest Q, tips)
+          // Priority 3: Paper metadata only (subject, year, semester)
+          // Priority 4: Plain message (general knowledge fallback)
+          let userMsgForPuter: string;
+          if (extractedText) {
+            userMsgForPuter =
+              `--- BEGIN EXAM PAPER TEXT ---\n` +
+              `${extractedText.substring(0, 10000)}\n` +
+              `--- END EXAM PAPER TEXT ---\n\n` +
+              `RULES:\n` +
+              `- The text above IS the exam paper containing the actual questions.\n` +
+              `- Answer ONLY from the question text above. Do NOT use general knowledge.\n` +
+              `- Before answering any question, reproduce its exact wording as a blockquote (>).\n\n` +
+              `Student request: ${message}`;
+          } else if (paperInsights) {
+            // We have pre-generated AI insights for this paper — use them as context
+            const topicsList = Array.isArray(paperInsights.topics)
+              ? paperInsights.topics.join(', ')
+              : (paperInsights.topics || '');
+            const metaLine = [
+              paperMeta.subject  ? `Subject: ${paperMeta.subject}` : null,
+              paperMeta.year     ? `Year: ${paperMeta.year}`       : null,
+              paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
+            ].filter(Boolean).join(' | ');
+            userMsgForPuter =
+              `[Past Exam Paper — AI Analysis Context]\n` +
+              `${metaLine}\n\n` +
+              `PAPER SUMMARY:\n${paperInsights.summary || 'N/A'}\n\n` +
+              `KEY TOPICS COVERED:\n${topicsList || 'N/A'}\n\n` +
+              `DIFFICULTY: ${paperInsights.difficulty || 'N/A'}\n\n` +
+              `HARDEST QUESTION & SOLUTION:\n${paperInsights.hardest_question || 'N/A'}\n\n` +
+              `EXAM TIPS:\n${paperInsights.exam_tips || 'N/A'}\n\n` +
+              `---\n` +
+              `Using the above exam paper analysis as your context, please answer the student's question thoroughly. ` +
+              `Do NOT say you cannot access the PDF.\n\n` +
+              `Student question: ${message}`;
+          } else if (Object.keys(paperMeta).length > 0) {
+            const metaLines = [
+              paperMeta.subject  ? `Subject  : ${paperMeta.subject}`  : null,
+              paperMeta.title    ? `Title    : ${paperMeta.title}`    : null,
+              paperMeta.year     ? `Year     : ${paperMeta.year}`     : null,
+              paperMeta.semester ? `Semester : ${paperMeta.semester}` : null,
+            ].filter(Boolean).join('\n');
+            userMsgForPuter =
+              `[Past Exam Paper — Academic Context]\n` +
+              `The student is studying the following past exam paper:\n${metaLines}\n\n` +
+              `Please answer the student's question using your academic knowledge of this subject. ` +
+              `Do not say you cannot access the PDF — help based on the subject context above.\n\n` +
+              `Student question: ${message}`;
+          } else {
+            userMsgForPuter = message;
+          }
 
           puterReplyText = await askPuter(systemInstruction, historyForPuter, userMsgForPuter);
           usedPuterFallback = true;

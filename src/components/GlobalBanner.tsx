@@ -8,8 +8,8 @@ export const GlobalBanner = () => {
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
-    // Check if dismissed in this session
-    const dismissedBanner = sessionStorage.getItem('dismissed_banner');
+    // Check if dismissed in this session or permanently
+    const dismissedBanner = sessionStorage.getItem('dismissed_banner') || localStorage.getItem('dismissed_banner');
 
     apiFetch('/public/site-config')
       .then(data => {
@@ -27,6 +27,7 @@ export const GlobalBanner = () => {
 
   const handleDismiss = () => {
     sessionStorage.setItem('dismissed_banner', banner);
+    localStorage.setItem('dismissed_banner', banner);
     setIsDismissed(true);
   };
 

@@ -852,9 +852,19 @@ const AskAIPage = () => {
               <div className="absolute right-3 flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={clsx("p-2 transition-colors rounded-xl", selectedFileName ? "text-indigo-400 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-400")}
-                  title="Attach File"
+                  onClick={() => {
+                    if (plan === 'Free') {
+                      alert("Upgrade to Basic to upload and analyze files with AI!");
+                      return;
+                    }
+                    fileInputRef.current?.click();
+                  }}
+                  className={clsx(
+                    "p-2 transition-colors rounded-xl",
+                    selectedFileName ? "text-indigo-400 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-400",
+                    plan === 'Free' && "opacity-50 cursor-not-allowed hover:text-theme-muted"
+                  )}
+                  title={plan === 'Free' ? "Upload blocked on Free plan" : "Attach File"}
                 >
                   <Paperclip size={18} />
                 </button>

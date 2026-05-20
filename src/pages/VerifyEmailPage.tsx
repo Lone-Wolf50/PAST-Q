@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Mail, ArrowRight, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 
 const VerifyEmailPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
 
   // Email is passed via navigate state from RegisterPage
   const email = (location.state as { email?: string })?.email || '';
@@ -68,11 +70,16 @@ const VerifyEmailPage = () => {
     }
     setLoading(true);
     try {
-      await apiFetch('/auth/verify-email', {
+      const res = await apiFetch('/auth/verify-email', {
         method: 'POST',
         body: { email, otp },
       });
-      navigate('/login', { state: { verified: true } });
+      if (res.token && res.user) {
+        login(res.token, res.user);
+        navigate('/papers', { replace: true });
+      } else {
+        navigate('/login', { state: { verified: true } });
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -178,7 +185,7 @@ const VerifyEmailPage = () => {
 
           <div className="mt-6 text-center">
             <Link to="/login" className="text-sm text-theme-muted hover:text-theme-secondary transition-colors">
-              Back to sign in
+              Back to log in
             </Link>
           </div>
         </div>

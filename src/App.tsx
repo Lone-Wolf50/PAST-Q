@@ -21,6 +21,7 @@ import AdminUsersPage from './pages/AdminUsersPage';
 import AdminPaymentsPage from './pages/AdminPaymentsPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import NotFoundPage from './pages/NotFoundPage';
+import AuthCallback from './pages/AuthCallback';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import InstallPrompt from './components/InstallPrompt';
@@ -71,17 +72,18 @@ function AppRoutes() {
     return () => window.removeEventListener('session_expired', handleSessionExpired);
   }, []);
 
-  const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+  const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/auth/callback'];
   const isAdminPath = location.pathname.startsWith('/hq-portal');
   const isLandingPage = location.pathname === '/';
   const shouldHideFooter = (isLoggedIn && !isLandingPage) || isAdminPath || hideFooterRoutes.includes(location.pathname);
 
   return (
     <div className="min-h-screen flex flex-col font-sans relative">
-      {!isAdminPath && <GlobalBanner />}
+      {!isAdminPath && location.pathname !== '/auth/callback' && <GlobalBanner />}
       <InstallPrompt />
       <Routes>
         <Route path="/hq-portal/*" element={null} />
+        <Route path="/auth/callback" element={null} />
         <Route path="*" element={<Navbar />} />
       </Routes>
       <main className={`flex-grow flex flex-col ${isLoggedIn ? 'pb-24 md:pb-0' : ''}`}>
@@ -92,6 +94,7 @@ function AppRoutes() {
           <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
           <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
           <Route path="/reset-password" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
           <Route path="/pricing" element={<PricingPage />} />

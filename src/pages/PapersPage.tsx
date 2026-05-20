@@ -169,9 +169,8 @@ const PapersPage = () => {
   };
 
   const filteredPapers = papers.filter(() => {
-    if (selectedDepartment && selectedDepartment !== 'All Subjects') {
-      // placeholder for department-level filtering
-    }
+    // Tabs are active and clickable, but they do not filter papers as requested:
+    // "when they click nothing should work not even papers not found"
     return true;
   });
 
@@ -189,12 +188,12 @@ const PapersPage = () => {
               <div className={clsx(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black border transition-all',
                 streak >= 7
-                  ? 'bg-orange-500/15 border-orange-500/30 text-orange-400'
+                  ? 'bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 border-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse font-extrabold'
                   : streak >= 3
                     ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
                     : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
               )}>
-                <Flame className="w-3.5 h-3.5" />
+                <Flame className={clsx("w-3.5 h-3.5", streak >= 7 && "animate-[bounce_1.2s_infinite] text-yellow-200 drop-shadow-[0_0_4px_rgba(255,255,255,0.8)]")} />
                 {streak} Day{streak !== 1 ? 's' : ''} Streak
               </div>
             )}

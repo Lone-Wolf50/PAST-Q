@@ -94,7 +94,7 @@ const AdminSidebar = ({ open, onClose }: AdminSidebarProps) => {
               className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-red-400/70 hover:text-red-400 hover:bg-red-500/5 transition-all"
             >
               <LogOut className="w-5 h-5" />
-              <span className="font-semibold text-sm">Sign Out</span>
+              <span className="font-semibold text-sm">Log Out</span>
             </button>
           </div>
         </div>

@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, BookOpen, Shield, HelpCircle, Zap, FileText, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import ContactModal from './ContactModal';
 import { Modal } from './ui/Modal';
 import { useAuth } from '../context/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface FooterLink {
@@ -130,7 +131,6 @@ function AccordionSection({
   onToggle: () => void;
 }) {
   const Icon = section.icon;
-  const bodyRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="border-b border-theme-border last:border-b-0">
@@ -153,21 +153,24 @@ function AccordionSection({
         />
       </button>
 
-      {/* Animated body — grid-rows trick is reliable across all browsers */}
-      <div
-        className={clsx(
-          'grid transition-[grid-template-rows] duration-300 ease-in-out',
-          isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+      {/* Animated body — Framer Motion transition is hardware-accelerated and butter-smooth on mobile */}
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="pb-4 flex flex-col gap-3 pl-1 pt-1">
+              {section.links.map((link) => (
+                <LinkRow key={link.label} link={link} />
+              ))}
+            </div>
+          </motion.div>
         )}
-      >
-        <div className="overflow-hidden">
-          <div ref={bodyRef} className="pb-4 flex flex-col gap-3 pl-1">
-            {section.links.map((link) => (
-              <LinkRow key={link.label} link={link} />
-            ))}
-          </div>
-        </div>
-      </div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -232,7 +235,7 @@ const Footer = () => {
               <div className="flex items-center gap-4 mt-3">
                 {[
                   { v: '10k+', l: 'Students' },
-                  { v: '1,200+', l: 'Papers' },
+                  { v: '1,500+', l: 'Papers' },
                   { v: '50+', l: 'Subjects' },
                 ].map((s) => (
                   <div key={s.l} className="flex items-baseline gap-1">

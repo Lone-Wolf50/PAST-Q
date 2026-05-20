@@ -3,6 +3,7 @@ import { User, Mail, CreditCard, LogOut, ShieldAlert, Bell, Camera, Trash2, Spar
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
+import { clsx } from 'clsx';
 
 const ProfilePage = () => {
   const { user, token, updateUser, logout } = useAuth();
@@ -137,7 +138,7 @@ const ProfilePage = () => {
           <div className="h-px bg-theme-surface-2 my-2" />
           <button onClick={logout} className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-theme-surface text-red-400 hover:text-red-300 transition-colors text-left w-full">
             <LogOut className="w-5 h-5" />
-            Sign Out
+            Log Out
           </button>
         </div>
 
@@ -431,21 +432,33 @@ const ProfilePage = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-6">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
                 {/* Flame display */}
-                <div className="flex flex-col items-center">
-                  <div className={`w-20 h-20 rounded-2xl flex items-center justify-center border ${
-                    streak > 0
-                      ? 'bg-gradient-to-br from-orange-500/20 to-amber-500/10 border-orange-500/30 text-orange-400'
-                      : 'bg-theme-surface border-theme-border text-theme-muted/30'
-                  }`}>
-                    <Flame className="w-10 h-10" />
+                <div className={clsx("flex flex-col items-center", streak >= 7 && "relative")}>
+                  {streak >= 7 && (
+                    <div className="absolute inset-0 bg-red-600/30 blur-2xl rounded-full animate-pulse pointer-events-none" />
+                  )}
+                  <div className={clsx(
+                    'w-20 h-20 rounded-2xl flex items-center justify-center border transition-all duration-500 relative',
+                    streak >= 7
+                      ? 'bg-gradient-to-br from-red-500 via-orange-500 to-yellow-500 border-red-400 text-white shadow-[0_0_30px_rgba(239,68,68,0.6)] animate-pulse'
+                      : streak > 0
+                        ? 'bg-gradient-to-br from-orange-500/20 to-amber-500/10 border-orange-500/30 text-orange-400'
+                        : 'bg-theme-surface border-theme-border text-theme-muted/30'
+                  )}>
+                    {streak >= 7 && (
+                      <>
+                        <span className="absolute inset-0 rounded-2xl border border-red-400 animate-ping opacity-75 pointer-events-none" />
+                        <Flame className="w-10 h-10 animate-bounce text-yellow-200 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
+                      </>
+                    )}
+                    {streak < 7 && <Flame className="w-10 h-10" />}
                   </div>
                   <span className="text-[10px] text-theme-muted font-bold mt-2 uppercase tracking-wider">Today</span>
                 </div>
 
-                <div className="flex-1">
-                  <div className="flex items-baseline gap-2 mb-2">
+                <div className="flex-1 w-full">
+                  <div className="flex items-baseline justify-center sm:justify-start gap-2 mb-2">
                     <span className="text-5xl font-black text-theme-primary tracking-tight">{streak}</span>
                     <span className="text-sm font-bold text-theme-muted">day{streak !== 1 ? 's' : ''}</span>
                   </div>
@@ -459,7 +472,7 @@ const ProfilePage = () => {
                       : 'Incredible dedication! Keep it up! 🏆'}
                   </p>
                   {/* Mini streak dots */}
-                  <div className="flex gap-1.5 mt-3">
+                  <div className="flex gap-1.5 mt-3 justify-center sm:justify-start">
                     {Array.from({ length: 7 }).map((_, i) => (
                       <div
                         key={i}
@@ -471,7 +484,7 @@ const ProfilePage = () => {
                       />
                     ))}
                   </div>
-                  <p className="text-[10px] text-theme-muted mt-1.5">7-day goal</p>
+                  <p className="text-[10px] text-theme-muted mt-1.5 text-center sm:text-left">7-day goal</p>
                 </div>
               </div>
             </div>

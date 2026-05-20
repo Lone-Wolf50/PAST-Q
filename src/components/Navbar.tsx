@@ -109,7 +109,7 @@ const Navbar = () => {
                 Log in
               </Link>
               <Link to="/register" className="hidden md:flex px-4 py-2 rounded-full text-sm font-medium text-theme-primary bg-theme-surface-2 hover:bg-theme-surface-2 border border-theme-border transition-colors">
-                Sign up
+                Register
               </Link>
               {/* Mobile Combined Glassmorphic Button */}
               <Link to="/register" className="md:hidden relative inline-flex h-9 items-center justify-center overflow-hidden rounded-xl p-[1px] group shadow-[0_0_15px_rgba(99,102,241,0.3)]">

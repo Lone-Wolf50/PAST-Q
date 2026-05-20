@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Sparkles, Layout, Zap, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../lib/api';
 
 const CAROUSEL_WORDS = ["breakthrough.", "A+ Grade.", "study hack.", "past paper."];
 
@@ -19,22 +18,7 @@ const HERO_IMAGES = [
 const LandingPage = () => {
   const [wordIndex, setWordIndex] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
-  const [totalPapers, setTotalPapers] = useState(0);
   const { isLoggedIn } = useAuth();
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const res = await apiFetch('/papers/subjects/public');
-        if (res.subjects) {
-          const total = res.subjects.reduce((sum: number, s: any) => sum + (s.count || 0), 0);
-          setTotalPapers(total);
-        }
-      } catch (err) {
-      }
-    };
-    fetchStats();
-  }, []);
 
   useEffect(() => {
     const wordInterval = setInterval(() => {
@@ -83,7 +67,7 @@ const LandingPage = () => {
           <div className="flex flex-wrap items-center gap-4">
             {[
               { label: `All Departments`, color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
-              { label: `${totalPapers > 0 ? totalPapers.toLocaleString() : '1,500+'} Papers`, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+              { label: `1,500+ Papers`, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
               { label: '20 Years', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
             ].map((stat) => (
               <div key={stat.label} className={clsx("flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold border", stat.color)}>
