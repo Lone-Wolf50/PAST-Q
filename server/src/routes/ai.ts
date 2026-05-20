@@ -450,13 +450,9 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           lastError = err;
           const body = (() => { try { return JSON.parse(err.message); } catch { return null; } })();
           const code = body?.error?.code ?? err.status;
-          if (code === 429) {
-            continue; // try the next model
-          }
-          if (code === 404) {
-            continue; // model not available — try the next one
-          }
-          throw err; // any other error — re-throw immediately
+          console.warn(`[AI] Model "${model}" failed (code=${code})`);
+          // Always continue to the next model — let Puter be the final fallback
+          continue;
         }
       }
     } else {
@@ -557,10 +553,8 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
 
     res.json({ reply: replyText });
   } catch (error: any) {
-    // Log the full error shape so we can debug 500s quickly
-
-
-    if (error?.errorDetails) { }
+    // Log safe, non-sensitive warning
+    console.error('[AI /chat] Request failed');
 
     // Attempt to parse the Gemini error body (it may be a JSON string in error.message)
     let parsedBody: any = null;
