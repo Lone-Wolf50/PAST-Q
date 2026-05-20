@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface AuthUser {
   id: string;
@@ -129,6 +130,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     storage.setItem('token', newToken);
     storage.setItem('user', JSON.stringify(newUser));
     
+    // Clear streak cache to prevent cross-account leakage if logged in without explicit logout
+    sessionStorage.removeItem('streak_pinged');
+    sessionStorage.removeItem('streak_count');
+
     if (isApp()) {
       storage.setItem('last_visit', Date.now().toString());
     }
@@ -156,6 +161,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('dismissed_banner');
+    sessionStorage.removeItem('streak_pinged');
+    sessionStorage.removeItem('streak_count');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('dismissed_banner');
@@ -168,6 +175,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem(key);
       }
     });
+
+    // Sign out from Supabase to clear its local session tokens and prevent cross-account auto-login
+    supabase.auth.signOut().catch(() => {});
     
     setToken(null);
     setUser(null);
