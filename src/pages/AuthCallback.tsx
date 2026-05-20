@@ -18,6 +18,29 @@ const AuthCallback = () => {
     let isMounted = true;
 
     const handleCallback = async () => {
+      // Helper to validate allowed emails
+      const isAllowedEmail = (emailStr: string): boolean => {
+        const lowercaseEmail = emailStr.toLowerCase().trim();
+        
+        // 1. Block student upsamail (e.g. 10306679@upsamail.edu.gh or id10306679@upsamail.edu.gh)
+        const upsaStudentRegex = /^(id)?\d+@upsamail\.edu\.gh$/i;
+        if (upsaStudentRegex.test(lowercaseEmail)) {
+          return false;
+        }
+        
+        // 2. Allow non-student upsamail (e.g. staff/admin @upsamail.edu.gh)
+        if (lowercaseEmail.endsWith('@upsamail.edu.gh')) {
+          return true;
+        }
+        
+        // 3. Force all other personal/third-party emails to strictly be Gmail
+        if (lowercaseEmail.endsWith('@gmail.com')) {
+          return true;
+        }
+        
+        return false;
+      };
+
       try {
         if (isMounted) setStatus('Verifying your identity...');
 
@@ -26,6 +49,11 @@ const AuthCallback = () => {
 
         if (sessionError || !session?.access_token) {
           throw new Error('Could not retrieve session from Google. Please try again.');
+        }
+
+        const email = session.user?.email || '';
+        if (!isAllowedEmail(email)) {
+          throw new Error('Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.');
         }
 
         if (isMounted) setStatus('Setting up your account...');
@@ -47,6 +75,8 @@ const AuthCallback = () => {
         }, 600);
       } catch (err: any) {
         console.error('OAuth callback error:', err);
+        // Clear Supabase session to prevent auto-login loops on next attempt
+        await supabase.auth.signOut().catch(() => {});
         if (isMounted) {
           setError(err.message || 'Something went wrong. Please try again.');
         }

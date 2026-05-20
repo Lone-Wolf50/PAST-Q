@@ -4,6 +4,7 @@ import { Mail, Lock, User, ArrowRight, Eye, EyeOff, ShieldCheck } from 'lucide-r
 import { clsx } from 'clsx';
 import { apiFetch } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { AlertModal } from '../components/ui/AlertModal';
 
 // ── Google logo SVG ──────────────────────────────────────────────
 const GoogleIcon = () => (
@@ -26,6 +27,12 @@ const RegisterPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Alert modal state for restricted email
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertVariant, setAlertVariant] = useState<'success' | 'error' | 'info'>('error');
 
   useEffect(() => {
     let score = 0;
@@ -57,6 +64,29 @@ const RegisterPage = () => {
     }
   };
 
+  // Helper to validate allowed emails
+  const isAllowedEmail = (emailStr: string): boolean => {
+    const lowercaseEmail = emailStr.toLowerCase().trim();
+    
+    // 1. Block student upsamail (e.g. 10306679@upsamail.edu.gh or id10306679@upsamail.edu.gh)
+    const upsaStudentRegex = /^(id)?\d+@upsamail\.edu\.gh$/i;
+    if (upsaStudentRegex.test(lowercaseEmail)) {
+      return false;
+    }
+    
+    // 2. Allow non-student upsamail (e.g. staff/admin @upsamail.edu.gh)
+    if (lowercaseEmail.endsWith('@upsamail.edu.gh')) {
+      return true;
+    }
+    
+    // 3. Force all other personal/third-party emails to strictly be Gmail
+    if (lowercaseEmail.endsWith('@gmail.com')) {
+      return true;
+    }
+    
+    return false;
+  };
+
   // ── Manual registration ──────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +95,15 @@ const RegisterPage = () => {
 
     if (!/^[a-zA-Z\s]*$/.test(fullName)) {
       setError('Full name should only contain letters and spaces.');
+      setLoading(false);
+      return;
+    }
+
+    if (!isAllowedEmail(email)) {
+      setAlertTitle('Email Restricted');
+      setAlertMessage('Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.');
+      setAlertVariant('error');
+      setShowAlert(true);
       setLoading(false);
       return;
     }
@@ -223,6 +262,14 @@ const RegisterPage = () => {
           </div>
         </div>
       </div>
+
+      <AlertModal
+        isOpen={showAlert}
+        onClose={() => setShowAlert(false)}
+        title={alertTitle}
+        message={alertMessage}
+        variant={alertVariant}
+      />
     </div>
   );
 };

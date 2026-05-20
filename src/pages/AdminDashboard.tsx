@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { Link } from 'react-router-dom';
-import { Users, FileText, TrendingUp, UserMinus, Menu, Bell, Search, RotateCw } from 'lucide-react';
+import { Users, FileText, TrendingUp, UserMinus, Menu, Bell, Search, RotateCw, Trash2 } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend, AreaChart, Area } from 'recharts';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
@@ -16,6 +16,14 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState<any>(null);
   const [recentSignups, setRecentSignups] = useState<any[]>([]);
   const [deletions, setDeletions] = useState<any[]>([]);
+  const [dismissedDeletions, setDismissedDeletions] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('pastq_dismissed_deletions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [notifications, setNotifications] = useState<any[]>([]);
   const [timeRange, setTimeRange] = useState('30d');
   const [globalAiBlock, setGlobalAiBlock] = useState(false);
@@ -51,6 +59,14 @@ const AdminDashboard = () => {
       }
     } catch (err: any) {
     }
+  };
+
+  const handleDismissDeletion = (id: string | undefined, email: string) => {
+    const identifier = id || email;
+    if (!identifier) return;
+    const updated = [...dismissedDeletions, identifier];
+    setDismissedDeletions(updated);
+    localStorage.setItem('pastq_dismissed_deletions', JSON.stringify(updated));
   };
 
   useEffect(() => {
@@ -561,17 +577,31 @@ const AdminDashboard = () => {
             <div className="glass-card p-4 md:p-6 border-theme-border">
               <h2 className="text-lg font-semibold text-theme-primary mb-6">Recent Deletions</h2>
               <div className="flex flex-col gap-3">
-                {deletions.map((d, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-red-500/5 border border-red-500/10">
-                    <div className="p-2 rounded-lg bg-red-500/10 text-red-400 shrink-0">
-                      <UserMinus className="w-4 h-4" />
+                {deletions
+                  .filter(d => !dismissedDeletions.includes(d.id?.toString() || d.email))
+                  .map((d, i) => (
+                    <div key={d.id || d.email || i} className="flex items-center justify-between p-3 rounded-xl bg-red-500/5 border border-red-500/10 group transition-all hover:bg-red-500/10">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 rounded-lg bg-red-500/10 text-red-400 shrink-0">
+                          <UserMinus className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-theme-primary truncate">{d.full_name}</p>
+                          <p className="text-xs text-theme-muted">{d.plan} - {new Date(d.deleted_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDismissDeletion(d.id?.toString(), d.email)}
+                        className="p-1.5 rounded-lg text-theme-muted hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                        title="Dismiss notification"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-theme-primary truncate">{d.full_name}</p>
-                      <p className="text-xs text-theme-muted">{d.plan} - {new Date(d.deleted_at).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                {deletions.filter(d => !dismissedDeletions.includes(d.id?.toString() || d.email)).length === 0 && (
+                  <p className="text-sm text-theme-muted text-center py-4">No recent account deletions.</p>
+                )}
               </div>
               <button className="w-full mt-6 py-2 text-sm text-theme-muted hover:text-theme-primary transition-colors border border-theme-border rounded-lg hover:bg-theme-surface">
                 View All

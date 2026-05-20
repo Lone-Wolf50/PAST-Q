@@ -4,6 +4,7 @@ import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { AlertModal } from '../components/ui/AlertModal';
 
 // ── Google logo SVG ──────────────────────────────────────────────
 const GoogleIcon = () => (
@@ -26,11 +27,49 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // Alert modal state for restricted email
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertVariant, setAlertVariant] = useState<'success' | 'error' | 'info'>('error');
+
+  // Helper to validate allowed emails
+  const isAllowedEmail = (emailStr: string): boolean => {
+    const lowercaseEmail = emailStr.toLowerCase().trim();
+    
+    // 1. Block student upsamail (e.g. 10306679@upsamail.edu.gh or id10306679@upsamail.edu.gh)
+    const upsaStudentRegex = /^(id)?\d+@upsamail\.edu\.gh$/i;
+    if (upsaStudentRegex.test(lowercaseEmail)) {
+      return false;
+    }
+    
+    // 2. Allow non-student upsamail (e.g. staff/admin @upsamail.edu.gh)
+    if (lowercaseEmail.endsWith('@upsamail.edu.gh')) {
+      return true;
+    }
+    
+    // 3. Force all other personal/third-party emails to strictly be Gmail
+    if (lowercaseEmail.endsWith('@gmail.com')) {
+      return true;
+    }
+    
+    return false;
+  };
+
   // ── Manual email/password login ──────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    if (!isAllowedEmail(email)) {
+      setAlertTitle('Email Restricted');
+      setAlertMessage('Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.');
+      setAlertVariant('error');
+      setShowAlert(true);
+      setLoading(false);
+      return;
+    }
 
     try {
       const data = await apiFetch('/auth/login', {
@@ -172,6 +211,14 @@ const LoginPage = () => {
           </div>
         </div>
       </div>
+
+      <AlertModal
+        isOpen={showAlert}
+        onClose={() => setShowAlert(false)}
+        title={alertTitle}
+        message={alertMessage}
+        variant={alertVariant}
+      />
     </div>
   );
 };

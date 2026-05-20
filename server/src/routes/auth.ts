@@ -45,6 +45,35 @@ const sanitizeEmail = (value: unknown): string | null => {
 };
 
 /**
+ * Check if the email address is allowed on the platform:
+ * - Prevent student upsamail emails matching [digits]@upsamail.edu.gh or id[digits]@upsamail.edu.gh
+ * - Allow other upsamail.edu.gh emails (staff/faculty)
+ * - Allow gmail.com (standard personal email)
+ * - Exclude all other third-party email providers
+ */
+const isAllowedEmail = (email: string): boolean => {
+  const lowercaseEmail = email.toLowerCase().trim();
+  
+  // 1. Block student upsamail (e.g. 10306679@upsamail.edu.gh or id10306679@upsamail.edu.gh)
+  const upsaStudentRegex = /^(id)?\d+@upsamail\.edu\.gh$/i;
+  if (upsaStudentRegex.test(lowercaseEmail)) {
+    return false;
+  }
+  
+  // 2. Allow non-student upsamail (e.g. staff/admin @upsamail.edu.gh)
+  if (lowercaseEmail.endsWith('@upsamail.edu.gh')) {
+    return true;
+  }
+  
+  // 3. Force all other personal/third-party emails to strictly be Gmail
+  if (lowercaseEmail.endsWith('@gmail.com')) {
+    return true;
+  }
+  
+  return false;
+};
+
+/**
  * Ensure a value is a plain string OTP of exactly 6 digits.
  * Rejects booleans, objects, or anything non-numeric.
  */
@@ -75,6 +104,14 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
   // Validate email
   if (!email) {
     res.status(400).json({ error: 'A valid email address is required.' });
+    return;
+  }
+
+  // Restrict emails
+  if (!isAllowedEmail(email)) {
+    res.status(400).json({ 
+      error: 'Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.' 
+    });
     return;
   }
 
@@ -478,6 +515,14 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
     }
 
     const email = googleUser.email.toLowerCase().trim();
+
+    if (!isAllowedEmail(email)) {
+      res.status(403).json({ 
+        error: 'Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.' 
+      });
+      return;
+    }
+
     const full_name = sanitizeText(
       googleUser.user_metadata?.full_name ||
       googleUser.user_metadata?.name ||

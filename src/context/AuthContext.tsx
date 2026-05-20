@@ -30,7 +30,7 @@ const isApp = () => {
 };
 
 // Returns the appropriate storage based on environment
-const getStorage = () => isApp() ? localStorage : sessionStorage;
+const getStorage = () => localStorage;
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(() => {
