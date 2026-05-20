@@ -272,36 +272,29 @@ const PapersPage = () => {
           onClick={() => { setSelectedDepartment(null); setShowSaved(false); setPage(1); }}
           className={clsx(
             "px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0",
-            selectedDepartment === null && !showSaved
-              ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent shadow-lg shadow-indigo-500/30 scale-105"
-              : "bg-theme-surface text-theme-muted border-theme-border hover:text-indigo-400"
+            "bg-theme-surface-2 text-theme-primary border-theme-border shadow-sm hover:border-indigo-400/50"
           )}
         >
           All Subjects
         </button>
         {[
-          { name: "IT", color: "text-blue-400", bg: "bg-blue-500/5", border: "border-blue-500/20", gradient: "from-cyan-500 to-blue-500", shadow: "shadow-blue-500/30" },
-          { name: "Accounting", color: "text-emerald-400", bg: "bg-emerald-500/5", border: "border-emerald-500/20", gradient: "from-emerald-500 to-teal-500", shadow: "shadow-emerald-500/30" },
-          { name: "Marketing", color: "text-fuchsia-400", bg: "bg-fuchsia-500/5", border: "border-fuchsia-500/20", gradient: "from-fuchsia-500 to-pink-500", shadow: "shadow-pink-500/30" },
-          { name: "LLB (Law)", color: "text-rose-400", bg: "bg-rose-500/5", border: "border-rose-500/20", gradient: "from-rose-600 to-red-500", shadow: "shadow-red-500/30" },
-          { name: "Actuarial Science", color: "text-indigo-400", bg: "bg-indigo-500/5", border: "border-indigo-500/20", gradient: "from-indigo-600 to-blue-500", shadow: "shadow-blue-500/30" },
-          { name: "Business Admin", color: "text-violet-400", bg: "bg-violet-500/5", border: "border-violet-500/20", gradient: "from-violet-500 to-purple-500", shadow: "shadow-purple-500/30" },
-          { name: "Logistics", color: "text-amber-400", bg: "bg-amber-500/5", border: "border-amber-500/20", gradient: "from-amber-500 to-orange-500", shadow: "shadow-orange-500/30" },
-          { name: "PR", color: "text-rose-400", bg: "bg-rose-500/5", border: "border-rose-500/20", gradient: "from-rose-500 to-red-500", shadow: "shadow-red-500/30" }
+          { name: "IT", pillClass: "tab-pill-blue" },
+          { name: "Accounting", pillClass: "tab-pill-emerald" },
+          { name: "Marketing", pillClass: "tab-pill-fuchsia" },
+          { name: "LLB (Law)", pillClass: "tab-pill-rose" },
+          { name: "Actuarial Science", pillClass: "tab-pill-indigo" },
+          { name: "Business Admin", pillClass: "tab-pill-violet" },
+          { name: "Logistics", pillClass: "tab-pill-orange" },
+          { name: "PR", pillClass: "tab-pill-red" }
         ].map(dept => (
           <button
             key={dept.name}
             onClick={() => { setSelectedDepartment(dept.name); setShowSaved(false); setPage(1); }}
             className={clsx(
-              "px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0 relative overflow-hidden group",
-              selectedDepartment === dept.name && !showSaved
-                ? `bg-gradient-to-r ${dept.gradient} text-white border-transparent shadow-lg ${dept.shadow} scale-105`
-                : `${dept.bg} ${dept.color} ${dept.border} hover:border-transparent`
+              "px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all snap-center shrink-0 hover:opacity-80",
+              dept.pillClass
             )}
           >
-            {selectedDepartment !== dept.name && (
-              <div className={`absolute inset-0 bg-gradient-to-r ${dept.gradient} opacity-0 group-hover:opacity-10 transition-opacity`} />
-            )}
             <span className="relative z-10">{dept.name}</span>
           </button>
         ))}

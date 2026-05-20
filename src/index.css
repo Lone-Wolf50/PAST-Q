@@ -110,6 +110,31 @@
     @apply text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400;
   }
 
+  /* Theme-aware Colored Pills for Tabs */
+  .tab-pill-blue { @apply bg-blue-500/15 text-blue-400 border border-blue-500/30; }
+  :root.light .tab-pill-blue { @apply bg-blue-100 text-blue-700 border border-blue-200; }
+
+  .tab-pill-emerald { @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/30; }
+  :root.light .tab-pill-emerald { @apply bg-emerald-100 text-emerald-700 border border-emerald-200; }
+
+  .tab-pill-fuchsia { @apply bg-fuchsia-500/15 text-fuchsia-400 border border-fuchsia-500/30; }
+  :root.light .tab-pill-fuchsia { @apply bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200; }
+
+  .tab-pill-rose { @apply bg-rose-500/15 text-rose-400 border border-rose-500/30; }
+  :root.light .tab-pill-rose { @apply bg-rose-100 text-rose-700 border border-rose-200; }
+
+  .tab-pill-indigo { @apply bg-indigo-500/15 text-indigo-400 border border-indigo-500/30; }
+  :root.light .tab-pill-indigo { @apply bg-indigo-100 text-indigo-700 border border-indigo-200; }
+
+  .tab-pill-violet { @apply bg-violet-500/15 text-violet-400 border border-violet-500/30; }
+  :root.light .tab-pill-violet { @apply bg-violet-100 text-violet-700 border border-violet-200; }
+
+  .tab-pill-orange { @apply bg-orange-500/15 text-orange-400 border border-orange-500/30; }
+  :root.light .tab-pill-orange { @apply bg-orange-100 text-orange-700 border border-orange-200; }
+
+  .tab-pill-red { @apply bg-red-500/15 text-red-400 border border-red-500/30; }
+  :root.light .tab-pill-red { @apply bg-red-100 text-red-700 border border-red-200; }
+
   /* Theme-aware text helpers */
   .text-theme-primary {
     color: var(--text-primary);
