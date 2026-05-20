@@ -56,12 +56,20 @@ const LandingPage = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 mb-10">
-            <Link to={isLoggedIn ? "/papers" : "/register"} className="w-full sm:w-auto px-8 py-3.5 rounded-full text-white bg-indigo-500 hover:bg-indigo-600 transition-all font-semibold text-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
-              {isLoggedIn ? "Browse Papers" : "Get Started for Free"}
-            </Link>
-            <Link to={isLoggedIn ? "/papers" : "/login"} className="w-full sm:w-auto px-8 py-3.5 rounded-full text-theme-primary bg-theme-surface-2 border border-theme-border hover:bg-theme-surface transition-all font-semibold text-center">
-              {isLoggedIn ? "View Past Papers" : "Log In"}
-            </Link>
+            {isLoggedIn ? (
+              <Link to="/papers" className="w-full sm:w-auto px-8 py-3.5 rounded-full text-white bg-indigo-500 hover:bg-indigo-600 transition-all font-semibold text-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+                Browse Papers
+              </Link>
+            ) : (
+              <>
+                <Link to="/register" className="w-full sm:w-auto px-8 py-3.5 rounded-full text-white bg-indigo-500 hover:bg-indigo-600 transition-all font-semibold text-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+                  Get Started for Free
+                </Link>
+                <Link to="/login" className="w-full sm:w-auto px-8 py-3.5 rounded-full text-theme-primary bg-theme-surface-2 border border-theme-border hover:bg-theme-surface transition-all font-semibold text-center">
+                  Log In
+                </Link>
+              </>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
