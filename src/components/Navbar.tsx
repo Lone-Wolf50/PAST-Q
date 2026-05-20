@@ -111,13 +111,6 @@ const Navbar = () => {
               <Link to="/register" className="hidden md:flex px-4 py-2 rounded-full text-sm font-medium text-theme-primary bg-theme-surface-2 hover:bg-theme-surface-2 border border-theme-border transition-colors">
                 Register
               </Link>
-              {/* Mobile Combined Glassmorphic Button */}
-              <Link to="/register" className="md:hidden relative inline-flex h-9 items-center justify-center overflow-hidden rounded-xl p-[1px] group shadow-[0_0_15px_rgba(99,102,241,0.3)]">
-                <span className="absolute inset-[-1000%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#818cf8_0%,#c084fc_50%,#818cf8_100%)]" />
-                <span className="relative z-10 flex h-full w-full items-center justify-center rounded-xl bg-theme-surface/80 backdrop-blur-xl px-4 py-1 text-sm font-bold text-theme-primary transition-all group-hover:bg-theme-surface/60">
-                  Get Started
-                </span>
-              </Link>
             </div>
           )}
         </div>

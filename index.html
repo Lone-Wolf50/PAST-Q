@@ -82,7 +82,7 @@
     }
   </style>
 
-  <div id="custom-loader">
+  <div id="custom-loader" style="display: none;">
     <img src="/pwa-icon-512.png" alt="PastQ" class="loader-logo" />
     <div class="quote-main">
       UNLOCKING <span id="dynamic-word" class="quote-highlight fade-in">EXCELLENCE</span>
@@ -91,35 +91,43 @@
   <div id="root"></div>
 
   <script>
-    const words = ["EXCELLENCE", "POTENTIAL", "GREATNESS"];
-    let wordIndex = 0;
-    const dynamicWord = document.getElementById('dynamic-word');
-    const loader = document.getElementById('custom-loader');
+    if (!sessionStorage.getItem('loaderShown')) {
+      sessionStorage.setItem('loaderShown', 'true');
+      const loader = document.getElementById('custom-loader');
+      loader.style.display = 'flex';
+      
+      const words = ["EXCELLENCE", "POTENTIAL", "GREATNESS"];
+      let wordIndex = 0;
+      const dynamicWord = document.getElementById('dynamic-word');
 
-    // Switch words every 1.5 seconds
-    const interval = setInterval(() => {
-      wordIndex++;
-      if (wordIndex >= words.length) {
-        clearInterval(interval);
-        // After the last word shows for a bit, fade out the whole loader
+      // Switch words every 1.5 seconds
+      const interval = setInterval(() => {
+        wordIndex++;
+        if (wordIndex >= words.length) {
+          clearInterval(interval);
+          // After the last word shows for a bit, fade out the whole loader
+          setTimeout(() => {
+            loader.style.opacity = '0';
+            setTimeout(() => loader.remove(), 800);
+          }, 1200);
+          return;
+        }
+        
+        // Fade out the word
+        dynamicWord.classList.remove('fade-in');
+        dynamicWord.classList.add('fade-out');
+        
+        // Change text and fade back in
         setTimeout(() => {
-          loader.style.opacity = '0';
-          setTimeout(() => loader.remove(), 800);
-        }, 1200);
-        return;
-      }
-      
-      // Fade out the word
-      dynamicWord.classList.remove('fade-in');
-      dynamicWord.classList.add('fade-out');
-      
-      // Change text and fade back in
-      setTimeout(() => {
-        dynamicWord.textContent = words[wordIndex];
-        dynamicWord.classList.remove('fade-out');
-        dynamicWord.classList.add('fade-in');
-      }, 400); // wait for fade out to complete
-    }, 1500);
+          dynamicWord.textContent = words[wordIndex];
+          dynamicWord.classList.remove('fade-out');
+          dynamicWord.classList.add('fade-in');
+        }, 400); // wait for fade out to complete
+      }, 1500);
+    } else {
+      const loader = document.getElementById('custom-loader');
+      if (loader) loader.remove();
+    }
   </script>
   <script type="module" src="/src/main.tsx"></script>
   <script src="https://js.paystack.co/v1/inline.js"></script>
