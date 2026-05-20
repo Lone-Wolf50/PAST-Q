@@ -10,6 +10,7 @@ import { apiFetch } from '../lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import ReportModal from '../components/ReportModal';
+import { AlertModal } from '../components/ui/AlertModal';
 
 const PaperViewerPage = () => {
   const { id } = useParams();
@@ -33,6 +34,13 @@ const PaperViewerPage = () => {
 
   // Report modal
   const [showReport, setShowReport] = useState(false);
+
+  const [alert, setAlert] = useState<{ show: boolean; title: string; message: string; variant: 'success' | 'error' | 'info' }>({
+    show: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
 
   useEffect(() => {
     const fetchPaper = async () => {
@@ -87,7 +95,12 @@ const PaperViewerPage = () => {
       const res = await apiFetch(`/papers/${id}/download`, { method: 'POST', token: token! });
       window.open(res.file_url, '_blank');
     } catch (err: any) {
-      alert(err.message || 'Download failed.');
+      setAlert({
+        show: true,
+        title: 'Download Failed',
+        message: err.message || 'Download failed.',
+        variant: 'error'
+      });
     } finally {
       setDownloading(false);
     }
@@ -434,6 +447,15 @@ const PaperViewerPage = () => {
           onClose={() => setShowReport(false)}
         />
       )}
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alert.show}
+        onClose={() => setAlert({ ...alert, show: false })}
+        title={alert.title}
+        message={alert.message}
+        variant={alert.variant}
+      />
     </div>
   );
 };

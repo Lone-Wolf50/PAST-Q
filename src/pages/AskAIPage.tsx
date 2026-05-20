@@ -10,6 +10,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { AlertModal } from '../components/ui/AlertModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,12 @@ const AskAIPage = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [alert, setAlert] = useState<{ show: boolean; title: string; message: string; variant: 'success' | 'error' | 'info' }>({
+    show: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
 
   const [searchParams] = useSearchParams();
   const initialPaperId = searchParams.get('paperId');
@@ -505,7 +512,12 @@ const AskAIPage = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (plan === 'Free') {
-      alert("Upgrade to Basic to upload and analyze files with AI!");
+      setAlert({
+        show: true,
+        title: 'Upgrade Required',
+        message: 'Upgrade to Basic to upload and analyze files with AI!',
+        variant: 'info'
+      });
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -513,7 +525,12 @@ const AskAIPage = () => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.size > 10 * 1024 * 1024) {
-        alert("File is too large. Limit is 10MB.");
+        setAlert({
+          show: true,
+          title: 'File Too Large',
+          message: 'File is too large. Limit is 10MB.',
+          variant: 'error'
+        });
         return;
       }
       setSelectedFile(file);
@@ -854,7 +871,12 @@ const AskAIPage = () => {
                   type="button"
                   onClick={() => {
                     if (plan === 'Free') {
-                      alert("Upgrade to Basic to upload and analyze files with AI!");
+                      setAlert({
+                        show: true,
+                        title: 'Upgrade Required',
+                        message: 'Upgrade to Basic to upload and analyze files with AI!',
+                        variant: 'info'
+                      });
                       return;
                     }
                     fileInputRef.current?.click();
@@ -961,6 +983,14 @@ const AskAIPage = () => {
         message="Are you sure you want to start a fresh study session? This will clear your current conversation history."
         confirmText="Clear Chat"
         variant="warning"
+      />
+
+      <AlertModal
+        isOpen={alert.show}
+        onClose={() => setAlert({ ...alert, show: false })}
+        title={alert.title}
+        message={alert.message}
+        variant={alert.variant}
       />
     </div>
   );

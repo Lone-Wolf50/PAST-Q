@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { useLocation, Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { AlertModal } from '../components/ui/AlertModal';
 
 interface Paper {
   id: string;
@@ -50,6 +51,13 @@ const PapersPage = () => {
   const [streak, setStreak] = useState<number>(0);
 
   const isPremium = ['basic', 'plus', 'pro'].includes(user?.plan?.toLowerCase() || '');
+
+  const [alert, setAlert] = useState<{ show: boolean; title: string; message: string; variant: 'success' | 'error' | 'info' }>({
+    show: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
 
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
@@ -142,7 +150,12 @@ const PapersPage = () => {
       });
 
       if (res.error) {
-        alert(res.message || 'Unable to download. Please try again later.');
+        setAlert({
+          show: true,
+          title: 'Download Error',
+          message: res.message || 'Unable to download. Please try again later.',
+          variant: 'error'
+        });
         return;
       }
 
@@ -161,9 +174,19 @@ const PapersPage = () => {
     } catch (err: any) {
       const body = err?.body || err?.response;
       if (body?.error === 'limit_reached') {
-        alert(body.message);
+        setAlert({
+          show: true,
+          title: 'Limit Reached',
+          message: body.message,
+          variant: 'info'
+        });
       } else {
-        alert('An error occurred while requesting the document.');
+        setAlert({
+          show: true,
+          title: 'Error',
+          message: 'An error occurred while requesting the document.',
+          variant: 'error'
+        });
       }
     }
   };
@@ -497,6 +520,15 @@ const PapersPage = () => {
           )}
         </>
       )}
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alert.show}
+        onClose={() => setAlert({ ...alert, show: false })}
+        title={alert.title}
+        message={alert.message}
+        variant={alert.variant}
+      />
     </div>
   );
 };
