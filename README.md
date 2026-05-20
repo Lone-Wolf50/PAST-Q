@@ -28,6 +28,11 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 - **Smart Prompts**: Intelligent installation prompts that gracefully hide themselves once the app is installed or dismissed.
 - **Adaptive Icons**: Fully optimized maskable icons for Android and iOS.
 
+### 💎 Premium User Experience (UX)
+- **Cohesive Custom Modals**: Removed all archaic, blocking browser `window.alert` dialogs, replacing them with a non-blocking `AlertModal` matching the platform's custom dark-theme styling.
+- **State-Adaptive Landing Page**: CTA blocks conditionally hide redundant pathing once authenticated, keeping the home screen clean with a single "Browse Papers" button for logged-in users while retaining standard sign-up flows for visitors.
+- **True Account Isolation**: Comprehensive session and local database teardown on logout to ensure zero data bleeding (streaks, study stats, bookmarks) when switching profiles on shared computers.
+
 ### 🔒 Advanced Security & Session Management
 - **Single-Device Login**: Strict concurrent session control. If a user logs into a new device, any older active sessions are instantly invalidated and the user is presented with a professional expiry notification.
 - **Smart Storage**: 
