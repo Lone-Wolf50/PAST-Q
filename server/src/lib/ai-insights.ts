@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { supabase } from './supabase';
 import { getAIHealth, setAIHealth } from './ai-health';
 import { askPuter, isPuterAvailable } from './puter';
+import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from './huggingface';
 const pdf = require('pdf-parse');
 
 // ── In-memory processing tracker ────────────────────────────────────────────
@@ -180,21 +181,59 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
         }
       }
 
+      // ── Hugging Face Fallback for Insights ──────────────────────────────
       if (!responseText) {
-        // BOTH Gemini and Puter failed — activate circuit breaker
-        if (quotaExhausted) {
+        try {
+          const hfConfig = await getHFConfig();
+          if (hfConfig && hfConfig.apiKey) {
+            const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
+            const hfPrompt = `
+              ${prompt}
+              
+              ${extractedText ? `Here is the extracted text content of the paper for your analysis:\n\n${extractedText.substring(0, 15000)}\n\n` : `IMPORTANT: The PDF content is currently unavailable for this fallback.`}
+              
+              Please provide your BEST academic expert analysis based on the ${extractedText ? 'extracted text above' : `paper title: "${paperTitle}"`}.
+              Return ONLY the JSON object. Do not include markdown code blocks.
+            `.trim();
 
-          setAIHealth({
-            status: 'limited',
-            backOnlineAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-            lastError: 'All AI providers (Gemini + Puter) quota exhausted',
-          });
-          await supabase.from('upsa_admin_notifications').insert({
-            title: '🔴 AI Quota Exhausted',
-            message: `Analysis for "${paperTitle}" blocked — Both Gemini and Puter fallbacks are currently unavailable. Cooldown: 10 minutes.`,
-            is_read: false,
-          });
+            for (const rawModel of hfModels) {
+              const modelId = getHFModelId(rawModel);
+              try {
+                const hfResponse = await askHuggingFace(
+                  modelId,
+                  hfConfig.apiKey,
+                  "You are an expert academic tutor providing structured paper analysis.",
+                  [],
+                  hfPrompt
+                );
+
+                if (hfResponse) {
+                  responseText = hfResponse;
+                  setAIHealth({ status: 'online', backOnlineAt: null, lastError: null });
+                  break;
+                }
+              } catch (hfErr: any) {
+                console.warn(`[HF Insights] Model "${modelId}" failed:`, hfErr.message);
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error('[HF Insights] Error in HF fallback:', err.message);
         }
+      }
+
+      if (!responseText) {
+        // Gemini, Puter, and Hugging Face all failed
+        setAIHealth({
+          status: 'limited',
+          backOnlineAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          lastError: 'All AI providers (Gemini, Puter, Hugging Face) failed',
+        });
+        await supabase.from('upsa_admin_notifications').insert({
+          title: '🔴 AI Quota Exhausted',
+          message: `Analysis for "${paperTitle}" blocked — Gemini, Puter, and Hugging Face are all currently unavailable. Cooldown: 10 minutes.`,
+          is_read: false,
+        });
         markProcessingDone(paperId);
         return;
       }

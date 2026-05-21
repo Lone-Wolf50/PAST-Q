@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { setAIHealth } from '../lib/ai-health';
 import { generatePaperInsights, isProcessing } from '../lib/ai-insights';
 import { askPuter, isPuterAvailable } from '../lib/puter';
+import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from '../lib/huggingface';
 import fs from 'fs';
 import path from 'path';
 
@@ -79,11 +80,11 @@ You are **PastQ Advanced AI Tutor**, a world-class academic assistant specialize
 Direct, highly organized, authoritative yet encouraging. You write like a premium educational consultant.
 
 == FORMATTING & VISUAL STANDARDS (STRICT) ==
-1. **Tables are Mandatory**: Whenever comparing concepts, listing pros/cons, or presenting data (like accounting entries, economic variables, or scientific constants), you MUST use beautifully formatted **Markdown Tables**.
-2. **Double Spacing**: Always leave two full line breaks between headers, paragraphs, and tables to ensure the UI looks "breathable" and premium.
-3. **Typography**: Use **bold text** for critical terms, final numerical results, and key takeaways.
-4. **Hierarchy**: Use \`###\` for major sections and \`####\` for sub-points. Use \`#### 🎯 FINAL ANSWER\` for your ultimate conclusion or solution.
-5. **Mobile First**: Keep paragraphs short (3 sentences max). Use bullet points for lists to prevent "text clumping" on small screens.
+1. **Headers & Titles**: Use \`###\` for major section titles and \`####\` for sub-points. They will be styled dynamically in blue to look premium.
+2. **Double Spacing**: Always leave two full line breaks between headers, paragraphs, lists, and tables to ensure the UI looks "breathable" and matches our style guidelines.
+3. **Bullet Lists**: When explaining factors, reasons, or topics, always use lists formatted as \`- **Key Term**: Brief explanation.\` (the bullet point starts with bold text, followed by a colon and the details). Ensure there is a blank line between each bullet point for readability.
+4. **Tables are Mandatory**: Whenever comparing concepts, listing pros/cons, or presenting data, you MUST use beautifully formatted **Markdown Tables**.
+5. **Typography**: Use **bold text** for critical terms, final numerical results, and key takeaways. Use \`#### 🎯 FINAL ANSWER\` for your ultimate conclusion.
 
 == RESPONSE STRUCTURE ==
 1. **The Lead**: Give the direct answer or solution in the very first sentence. Do not waste the student's time with fluff.
@@ -318,10 +319,6 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    // NOTE: We intentionally do NOT hard-fail here if GEMINI_API_KEY is missing.
-    // The model loop below will simply skip all Gemini models and fall through to
-    // the Puter.js fallback, which does not require a Gemini key.
-
     // 1. Block file uploads for Free plan
     if (userPlan.toLowerCase() === 'free' && fileData) {
       return res.status(403).json({ error: 'file_blocked', message: 'Upgrade to Basic to upload and analyze files with AI!' });
@@ -343,7 +340,6 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     if (userPlan.toLowerCase() === 'basic') {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       
-      // Check overall query count (10 queries per month billing cycle as per UI)
       const { count: totalQueries } = await supabase
         .from('upsa_ai_queries')
         .select('*', { count: 'exact', head: true })
@@ -354,7 +350,6 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         return res.json({ reply: "You've reached your **10 query limit** for this month on the Basic plan. Upgrade to **Plus or Pro** for unlimited queries!" });
       }
 
-      // Check file upload limit for Basic (5 files per month cycle)
       if (fileData) {
         const { count: fileCount } = await supabase
           .from('upsa_ai_queries')
@@ -375,14 +370,11 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     // 2. Prepare the payload for Gemini
     let activeFileData = fileData;
     let activeMimeType = fileMimeType || 'application/pdf';
-    // Paper metadata + pre-generated insights — fetched when paperId is provided
     let paperMeta: { title?: string; subject?: string; year?: string; semester?: string } = {};
     let paperInsights: any = null;
 
-    // If no manual file is uploaded, but a paperId is provided, fetch it from R2
     if (!activeFileData && paperId) {
       try {
-        // Fetch paper metadata and pre-generated insights in parallel
         const [paperRes, insightsRes] = await Promise.all([
           supabase
             .from('upsa_papers')
@@ -400,12 +392,11 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         paperInsights = insightsRes.data || null;
 
         if (paper) {
-          // Store metadata so the Puter fallback can provide academic context
           paperMeta = {
             title: paper.title || undefined,
             subject: (paper.upsa_subjects as any)?.name || undefined,
             year: paper.year ? String(paper.year) : undefined,
-            semester: paper.semester || undefined,
+            semester: paper.semester ? String(paper.semester) : undefined,
           };
 
           if (paper.file_url) {
@@ -414,8 +405,6 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
               const arrayBuffer = await pdfRes.arrayBuffer();
               activeFileData = Buffer.from(arrayBuffer).toString('base64');
               activeMimeType = 'application/pdf';
-            } else {
-              console.warn(`[AI /chat] PDF fetch failed: HTTP ${pdfRes.status} for paperId=${paperId}`);
             }
           }
         }
@@ -438,36 +427,18 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     }
     const userParts: any[] = [];
 
-    // --- PDF Content Extraction (Token-Efficient Hybrid Strategy) ---
-    // Step 1: Try pdf-parse first — completely free, zero AI tokens consumed.
-    // Step 2: Only if pdf-parse returns empty (scanned/image PDF), fall back to Gemini inlineData.
     let extractedText = "";
-    let hasPdfInline = false;
-
     if (activeFileData) {
       const pdfBuffer = Buffer.from(activeFileData, 'base64');
-      console.log(`[PDF-PARSE] Buffer size: ${pdfBuffer.length} bytes | Source: ${paperId ? `paperId=${paperId}` : 'manual upload'}`);
-
       try {
         const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
         const pdfData = await pdfParser(pdfBuffer);
         extractedText = (pdfData.text || "").trim();
-
-        if (extractedText) {
-          console.log(`[PDF-PARSE] ✅ SUCCESS — extracted ${extractedText.length} characters (${pdfData.numpages} pages). Using text injection (no vision tokens).`);
-        } else {
-          console.warn(`[PDF-PARSE] ⚠️  EMPTY — pdf-parse ran without error but returned no text. PDF is likely scanned/image-based or encrypted. Pages: ${pdfData.numpages ?? 'unknown'}.`);
-        }
-      } catch (pdfErr: any) {
-        console.error(`[PDF-PARSE] ❌ FAILED — pdf-parse threw an error. Cause: ${pdfErr?.message}`);
-        console.error(`[PDF-PARSE]    Error type : ${pdfErr?.name ?? 'Unknown'}`);
-        if (pdfErr?.stack) {
-          console.error(`[PDF-PARSE]    Stack      : ${pdfErr.stack.split('\n').slice(0, 4).join(' | ')}`);
-        }
+      } catch (pdfErr) {
+        console.error(`[PDF-PARSE] FAILED`);
       }
 
       if (extractedText) {
-        // pdf-parse succeeded — inject as plain text (token-efficient, no AI vision tokens used)
         userParts.push({
           text:
             `--- BEGIN EXAM PAPER TEXT ---\n` +
@@ -479,33 +450,19 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
             `- Before answering any question, reproduce its exact wording as a blockquote (>).\n`
         });
       } else {
-        // pdf-parse returned nothing — fall back to Gemini native vision (higher token cost)
-        console.warn(`[PDF-PARSE] 🔄 FALLBACK — sending raw PDF bytes to Gemini as inlineData (vision tokens will be used).`);
         userParts.push({
           inlineData: {
             mimeType: activeMimeType || 'application/pdf',
             data: activeFileData,
           },
         });
-        hasPdfInline = true;
       }
-    } else {
-      console.log(`[PDF-PARSE] ⏭️  SKIPPED — no activeFileData available (no paperId PDF fetched and no manual upload).`);
     }
     userParts.push({ text: message });
     contents.push({ role: 'user', parts: userParts });
 
     const systemInstruction = buildSystemInstruction(userPlan);
-
-    // Try models in order; fall back on quota (429) or model-not-found (404).
-    // NOTE: The SDK automatically prepends 'models/' — do NOT include it here.
-    // NOTE: gemini-1.5-x models are NOT available on the default v1beta endpoint.
-    const modelsToTry = [
-      'gemini-2.0-flash',        // primary stable
-      'gemini-2.0-flash-lite',   // lightweight fallback
-      'gemini-1.5-flash',        // stable legacy
-      'gemini-1.5-flash-latest', // latest stable v1.5
-    ];
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
     let response: any = null;
     let lastError: any = null;
 
@@ -520,127 +477,190 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           break;
         } catch (err: any) {
           lastError = err;
-          const body = (() => { try { return JSON.parse(err.message); } catch { return null; } })();
-          const code = body?.error?.code ?? err.status;
-          console.warn(`[AI] Model "${model}" failed (code=${code})`);
-          // Always continue to the next model — let Puter be the final fallback
           continue;
         }
       }
     } else {
-      // No Gemini key configured — go straight to Puter fallback
       lastError = new Error('GEMINI_API_KEY not configured');
     }
 
     let usedPuterFallback = false;
     let puterReplyText: string | null = null;
+    const historyForPuter = (history && Array.isArray(history))
+      ? history.map((m: any) => ({ role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', content: m.content }))
+      : [];
+
+    let fallbackUserMessage = message;
+    if (extractedText) {
+      fallbackUserMessage = `--- BEGIN EXAM PAPER TEXT ---\n${extractedText.substring(0, 10000)}\n--- END EXAM PAPER TEXT ---\n\nRULES:\n- The text above IS the exam paper containing the actual questions.\n- Answer ONLY from the question text above. Do NOT use general knowledge.\n- Before answering any question, reproduce its exact wording as a blockquote (>).\n\nStudent request: ${message}`;
+    } else if (paperInsights) {
+      const metaLine = [
+        paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
+        paperMeta.year ? `Year: ${paperMeta.year}` : null,
+        paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
+      ].filter(Boolean).join(' | ');
+      
+      const topicsList = Array.isArray(paperInsights.topics)
+        ? paperInsights.topics.join(', ')
+        : (paperInsights.topics || 'N/A');
+
+      fallbackUserMessage = 
+        `[Past Exam Paper — AI Analysis Context]\n` +
+        `${metaLine}\n\n` +
+        `SUMMARY:\n${paperInsights.summary || 'N/A'}\n\n` +
+        `KEY TOPICS:\n${topicsList}\n\n` +
+        `DIFFICULTY: ${paperInsights.difficulty || 'N/A'}\n\n` +
+        `HARDEST QUESTION:\n${paperInsights.hardest_question || 'N/A'}\n\n` +
+        `EXAM TIPS:\n${paperInsights.exam_tips || 'N/A'}\n\n` +
+        `Student question: ${message}`;
+    } else if (Object.keys(paperMeta).length > 0) {
+      const metaLines = [
+        paperMeta.subject  ? `Subject  : ${paperMeta.subject}`  : null,
+        paperMeta.title    ? `Title    : ${paperMeta.title}`    : null,
+        paperMeta.year     ? `Year     : ${paperMeta.year}`     : null,
+        paperMeta.semester ? `Semester : ${paperMeta.semester}` : null,
+      ].filter(Boolean).join('\n');
+      fallbackUserMessage =
+        `[Past Exam Paper — Subject Context]\n` +
+        `The student is studying the following past exam paper:\n${metaLines}\n\n` +
+        `Student question: ${message}`;
+    }
+
+    // ─── Scanned PDF Check for Fallback ──────────────────────────────────────
+    const isScannedPdfNoInsights = !!activeFileData && (!extractedText || extractedText.trim().length < 50) && !paperInsights;
+
+    if (!response && isScannedPdfNoInsights) {
+      console.log('[AI /chat] Gemini failed and scanned PDF with no insights detected. Direct fallback response.');
+      const scannedPdfMsg = `
+### ⚠️ Scanned PDF Detected (Fallback Mode)
+
+Our primary AI model (Gemini), which has the ability to "see" and read scanned PDFs or images, is currently offline.
+
+We have successfully connected to our secondary AI backup. However, because this PDF is a scanned image containing no selectable text, we cannot extract or read its contents in this text-only backup mode.
+
+**To continue studying right now, you can:**
+
+- **Copy & Paste**: Extract the text of the question you want help with and paste it directly into the chat.
+- **Type Manually**: Type the question or problem directly into your message.
+- **Check Back Later**: Try again in a little while once our primary visual AI systems are fully restored!
+      `.trim();
+
+      supabase.from('upsa_ai_queries').insert({
+        user_id: req.user?.id,
+        model: 'scanned-pdf-fallback',
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        has_file: true
+      }).then(({ error }) => {
+        if (error) { }
+      });
+
+      const plan = (userPlan || 'free').toLowerCase();
+      if (conversationId && historyPlans.has(plan)) {
+        (async () => {
+          try {
+            await supabase.from('upsa_ai_messages').insert([
+              { conversation_id: conversationId, role: 'user', content: message },
+              { conversation_id: conversationId, role: 'assistant', content: scannedPdfMsg },
+            ]);
+            await supabase
+              .from('upsa_ai_conversations')
+              .update({ last_message_at: new Date().toISOString() })
+              .eq('id', conversationId)
+              .eq('user_id', req.user?.id);
+          } catch (saveErr) { }
+        })();
+      }
+
+      return res.json({ reply: scannedPdfMsg });
+    }
 
     if (!response) {
-      // All Gemini models exhausted — try Puter.js fallback before giving up
+      console.log('[AI /chat] Gemini failed or not configured. Attempting Puter fallback...');
       if (isPuterAvailable()) {
-
         try {
-          const historyForPuter = (history && Array.isArray(history))
-            ? history.map((m: any) => ({ role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', content: m.content }))
-            : [];
-          // Puter cannot read binary PDF data. Build the richest context we can:
-          // Priority 1: pdf-parse extracted text (full content)
-          // Priority 2: Pre-generated paper insights (summary, topics, hardest Q, tips)
-          // Priority 3: Paper metadata only (subject, year, semester)
-          // Priority 4: Plain message (general knowledge fallback)
-          let userMsgForPuter: string;
-          if (extractedText) {
-            userMsgForPuter =
-              `--- BEGIN EXAM PAPER TEXT ---\n` +
-              `${extractedText.substring(0, 10000)}\n` +
-              `--- END EXAM PAPER TEXT ---\n\n` +
-              `RULES:\n` +
-              `- The text above IS the exam paper containing the actual questions.\n` +
-              `- Answer ONLY from the question text above. Do NOT use general knowledge.\n` +
-              `- Before answering any question, reproduce its exact wording as a blockquote (>).\n\n` +
-              `Student request: ${message}`;
-          } else if (paperInsights) {
-            // We have pre-generated AI insights for this paper — use them as context
-            const topicsList = Array.isArray(paperInsights.topics)
-              ? paperInsights.topics.join(', ')
-              : (paperInsights.topics || '');
-            const metaLine = [
-              paperMeta.subject  ? `Subject: ${paperMeta.subject}` : null,
-              paperMeta.year     ? `Year: ${paperMeta.year}`       : null,
-              paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
-            ].filter(Boolean).join(' | ');
-            userMsgForPuter =
-              `[Past Exam Paper — AI Analysis Context]\n` +
-              `${metaLine}\n\n` +
-              `PAPER SUMMARY:\n${paperInsights.summary || 'N/A'}\n\n` +
-              `KEY TOPICS COVERED:\n${topicsList || 'N/A'}\n\n` +
-              `DIFFICULTY: ${paperInsights.difficulty || 'N/A'}\n\n` +
-              `HARDEST QUESTION & SOLUTION:\n${paperInsights.hardest_question || 'N/A'}\n\n` +
-              `EXAM TIPS:\n${paperInsights.exam_tips || 'N/A'}\n\n` +
-              `---\n` +
-              `Using the above exam paper analysis as your context, please answer the student's question thoroughly. ` +
-              `Do NOT say you cannot access the PDF.\n\n` +
-              `Student question: ${message}`;
-          } else if (Object.keys(paperMeta).length > 0) {
-            const metaLines = [
-              paperMeta.subject  ? `Subject  : ${paperMeta.subject}`  : null,
-              paperMeta.title    ? `Title    : ${paperMeta.title}`    : null,
-              paperMeta.year     ? `Year     : ${paperMeta.year}`     : null,
-              paperMeta.semester ? `Semester : ${paperMeta.semester}` : null,
-            ].filter(Boolean).join('\n');
-            userMsgForPuter =
-              `[Past Exam Paper — Academic Context]\n` +
-              `The student is studying the following past exam paper:\n${metaLines}\n\n` +
-              `Please answer the student's question using your academic knowledge of this subject. ` +
-              `Do not say you cannot access the PDF — help based on the subject context above.\n\n` +
-              `Student question: ${message}`;
-          } else {
-            userMsgForPuter = message;
-          }
-
-          puterReplyText = await askPuter(systemInstruction, historyForPuter, userMsgForPuter);
+          puterReplyText = await askPuter(systemInstruction, historyForPuter, fallbackUserMessage);
           usedPuterFallback = true;
-
-          // Reset health — Puter is serving fine even if Gemini is limited
-          setAIHealth({ status: 'online', backOnlineAt: null, lastError: null });
+          console.log('[AI /chat] Puter fallback succeeded!');
         } catch (puterErr: any) {
-
+          console.error('[AI /chat] Puter fallback failed:', puterErr.message);
+          lastError = puterErr;
         }
-      }
-
-      if (!usedPuterFallback) {
-        // Both Gemini and Puter have failed — set health to limited and surface a quota message
-
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(0, 0, 0, 0);
-        setAIHealth({ status: 'limited', backOnlineAt: tomorrow.toISOString(), lastError: lastError?.message });
-        throw lastError;
+      } else {
+        console.warn('[AI /chat] Puter fallback is not available (missing token).');
       }
     }
 
-    // ── Extract reply text (from Gemini or Puter fallback) ──────────────────
-    let replyText: string;
-    if (usedPuterFallback) {
-      replyText = puterReplyText ?? 'Sorry, I could not generate a response. Please try again.';
-    } else {
-      // Reset health to online on Gemini success
-      setAIHealth({ status: 'online', backOnlineAt: null, lastError: null });
-      // In @google/genai v1, response.text is a getter that THROWS (not returns undefined)
-      // when the response has no text content (e.g. blocked, empty candidates).
+    let usedHFFallback = false;
+    let hfReplyText: string | null = null;
+    let hfUsedModel: string | null = null;
+
+    if (!response && !usedPuterFallback) {
+      console.log('[AI /chat] Puter failed or not available. Attempting Hugging Face fallback...');
       try {
-        replyText = response.text ?? 'Sorry, I could not generate a response. Please try again.';
-      } catch {
-        replyText =
-          response?.candidates?.[0]?.content?.parts?.[0]?.text
-          ?? 'Sorry, I could not generate a response. Please try again.';
+        const hfConfig = await getHFConfig();
+        console.log('[AI /chat] HF config fetched:', hfConfig ? 'Successfully' : 'Failed (returned null)');
+        if (hfConfig && hfConfig.apiKey) {
+          const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
+          console.log('[AI /chat] HF Models to try:', hfModels);
+
+          for (const rawModel of hfModels) {
+            const modelId = getHFModelId(rawModel);
+            console.log(`[AI /chat] Trying HF model: ${modelId}`);
+            try {
+              hfReplyText = await askHuggingFace(modelId, hfConfig.apiKey, systemInstruction, historyForPuter, fallbackUserMessage);
+              usedHFFallback = true;
+              hfUsedModel = modelId;
+              console.log(`[AI /chat] HF model ${modelId} succeeded!`);
+              break;
+            } catch (hfErr: any) {
+              console.error(`[AI /chat] HF model ${modelId} failed:`, hfErr.message);
+              lastError = hfErr;
+            }
+          }
+        } else {
+          console.warn('[AI /chat] Hugging Face config or API Key is missing in Supabase.');
+        }
+      } catch (err: any) {
+        console.error('[AI /chat] Hugging Face fallback initialization failed:', err.message);
+        lastError = err;
       }
     }
 
-    // ── Log the query to Supabase for stats ────────────────────────────────
+    if (!response && !usedPuterFallback && !usedHFFallback) {
+      setAIHealth({ status: 'limited', backOnlineAt: new Date(Date.now() + 86400000).toISOString(), lastError: lastError?.message || 'All AI Fallbacks Failed' });
+      return res.status(429).json({
+        error: 'all_engines_failed',
+        message: '⚠️ All AI services are temporarily unavailable. Please use one of the buttons below to continue on an external AI service:',
+        suggested_external_ais: [
+          { name: 'ChatGPT', url: 'https://chat.openai.com' },
+          { name: 'Claude', url: 'https://claude.ai' },
+          { name: 'Gemini', url: 'https://gemini.google.com' }
+        ]
+      });
+    }
+
+    let replyText: string;
+    let modelUsed: string;
+    if (response) {
+      try {
+        replyText = response.text ?? 'Sorry, I could not generate a response.';
+      } catch {
+        replyText = response?.candidates?.[0]?.content?.parts?.[0]?.text ?? 'Sorry, I could not generate a response.';
+      }
+      modelUsed = response?.model || 'gemini-2.0-flash';
+    } else if (usedPuterFallback) {
+      replyText = puterReplyText ?? 'Sorry, I could not generate a response.';
+      modelUsed = 'puter-gpt-4o';
+    } else {
+      replyText = hfReplyText ?? 'Sorry, I could not generate a response.';
+      modelUsed = hfUsedModel || 'huggingface-fallback';
+    }
+
     supabase.from('upsa_ai_queries').insert({
       user_id: req.user?.id,
-      model: usedPuterFallback ? 'puter-gpt-4o' : (response?.model || 'gemini-2.5-flash'),
+      model: modelUsed,
       prompt_tokens: response?.usageMetadata?.promptTokenCount || 0,
       completion_tokens: response?.usageMetadata?.candidatesTokenCount || 0,
       total_tokens: response?.usageMetadata?.totalTokenCount || 0,
@@ -673,7 +693,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     res.json({ reply: replyText });
   } catch (error: any) {
     // Log safe, non-sensitive warning
-    console.error('[AI /chat] Request failed');
+    console.error('[AI /chat] Request failed:', error);
 
     // Attempt to parse the Gemini error body (it may be a JSON string in error.message)
     let parsedBody: any = null;

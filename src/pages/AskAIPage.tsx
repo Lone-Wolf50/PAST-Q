@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { clsx } from 'clsx';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +23,7 @@ interface Message {
   content: string;
   timestamp: number;
   attachmentName?: string;
+  isErrorFallback?: boolean;
 }
 
 interface Conversation {
@@ -438,22 +440,23 @@ const AskAIPage = () => {
         },
       });
 
-      // Backend signals a quota error via structured JSON (not an exception)
-      if (res?.error === 'quota_exceeded') {
+      // Backend signals a quota or fallback failure error via structured JSON (not an exception)
+      if (res?.error === 'quota_exceeded' || res?.error === 'all_engines_failed') {
         if (res.isMaintenance) {
           setIsMaintenance(true);
           setMaintenanceMsg(res.message);
           return;
         }
-        const quotaMsg: Message = {
+        const fallbackMsg: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
           content: res.message ||
-            '⚠️ The AI service is temporarily unavailable due to quota limits. Please try again later.',
+            '⚠️ All AI services are temporarily unavailable due to high demand or rate limits. Please try again later.',
           timestamp: Date.now(),
+          isErrorFallback: true,
         };
         setUsageCount(prev => prev - 1);
-        setMessages(prev => [...prev, quotaMsg]);
+        setMessages(prev => [...prev, fallbackMsg]);
         return;
       }
 
@@ -477,7 +480,7 @@ const AskAIPage = () => {
 
       // Try to show a friendly inline message rather than a raw alert
       const errBody = err?.body ?? err?.response;
-      if (errBody?.error === 'quota_exceeded' || errBody?.error === 'ai_disabled') {
+      if (errBody?.error === 'quota_exceeded' || errBody?.error === 'ai_disabled' || errBody?.error === 'all_engines_failed') {
         if (errBody.isMaintenance) {
           setIsMaintenance(true);
           setMaintenanceMsg(errBody.message);
@@ -485,8 +488,9 @@ const AskAIPage = () => {
           const alertMsg: Message = {
             id: crypto.randomUUID(),
             role: 'assistant',
-            content: errBody.message || '⚠️ Your AI access has been temporarily restricted.',
+            content: errBody.message || '⚠️ All AI services are temporarily unavailable due to high demand or rate limits.',
             timestamp: Date.now(),
+            isErrorFallback: true,
           };
           setMessages(prev => [...prev, alertMsg]);
         }
@@ -495,8 +499,9 @@ const AskAIPage = () => {
           id: crypto.randomUUID(),
           role: 'assistant',
           content:
-            '❌ I was unable to connect to the AI service right now. Please check your connection and try again.',
+            '❌ I was unable to connect to the AI service right now. Please check your connection or try again. You can also copy your question and continue on one of the external alternate servers below:',
           timestamp: Date.now(),
+          isErrorFallback: true,
         };
         setMessages(prev => [...prev, friendly]);
       }
@@ -557,32 +562,32 @@ const AskAIPage = () => {
       {/* Mobile Drawer Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside className={clsx(
-        "fixed md:static inset-y-0 left-0 w-72 shrink-0 flex flex-col gap-3 p-3 bg-theme-surface/50 backdrop-blur-xl z-50 transition-transform duration-300 shadow-2xl md:shadow-none border-r border-theme-border",
+        "fixed md:static inset-y-0 left-0 w-72 shrink-0 flex flex-col gap-3 p-3 z-50 transition-transform duration-300 shadow-2xl md:shadow-none border-r border-theme-border/60 bg-[var(--glass-sidebar-bg)] backdrop-blur-2xl",
         sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 hidden md:flex"
       )}>
         {/* Top Info Card */}
-        <div className="bg-theme-surface-2 border border-theme-border rounded-xl p-3 shadow-sm shrink-0">
-          <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="glass-panel-premium p-3.5 shadow-md shrink-0 flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+              <div className="w-9 h-9 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md shadow-indigo-500/20">
                 Q
               </div>
-              <h1 className="text-lg font-bold tracking-tight text-theme-primary">PastQ Advanced AI</h1>
+              <h1 className="text-lg font-black tracking-tight text-theme-primary">PastQ AI</h1>
             </div>
-            <button className="md:hidden p-2 text-theme-muted" onClick={() => setSidebarOpen(false)}>
+            <button className="md:hidden p-2 text-theme-muted hover:text-theme-primary hover:bg-theme-surface-2 rounded-xl transition-all" onClick={() => setSidebarOpen(false)}>
               <X size={20} />
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-theme-surface border-2 border-theme-border shadow-inner flex items-center justify-center overflow-hidden">
+          <div className="flex items-center gap-3 mt-4 pt-3 border-t border-theme-border/40">
+            <div className="w-10 h-10 rounded-full bg-theme-surface border-2 border-theme-border/80 shadow-inner flex items-center justify-center overflow-hidden">
               {user?.avatar_url ? (
                 <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
               ) : (
@@ -601,7 +606,7 @@ const AskAIPage = () => {
         {(plan === 'Plus' || plan === 'Pro') && (
           <button
             onClick={startNewChat}
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all active:scale-95 shadow-lg shadow-indigo-500/25 shrink-0"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-bold transition-all active:scale-95 shadow-md shadow-indigo-500/10 border border-indigo-400/20 shrink-0 cursor-pointer"
           >
             <Plus size={16} />
             New Conversation
@@ -636,21 +641,21 @@ const AskAIPage = () => {
                   tabIndex={0}
                   role="button"
                   className={clsx(
-                    "w-full text-left p-2.5 rounded-xl border transition-all group relative cursor-pointer",
+                    "w-full text-left p-2.5 rounded-xl border transition-all group relative cursor-pointer backdrop-blur-md",
                     activeConversationId === conv.id
-                      ? "bg-indigo-600/10 border-indigo-500/40 shadow-sm"
-                      : "bg-theme-surface-2/50 border-theme-border/50 hover:border-indigo-500/30 hover:bg-theme-surface-2"
+                      ? "bg-indigo-500/10 border-indigo-500/30 shadow-[0_4px_16px_rgba(99,102,241,0.08)]"
+                      : "bg-theme-surface-2/20 border-theme-border/30 hover:border-indigo-500/30 hover:bg-theme-surface-2/50"
                   )}
                 >
                   <p className={clsx(
                     "text-xs font-semibold truncate pr-6 transition-colors",
-                    activeConversationId === conv.id ? "text-indigo-400" : "text-theme-secondary group-hover:text-theme-primary"
+                    activeConversationId === conv.id ? "text-indigo-500 dark:text-indigo-400" : "text-theme-secondary group-hover:text-theme-primary"
                   )}>
                     {conv.title}
                   </p>
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-[9px] text-theme-muted font-medium">{relativeTime(conv.last_message_at)}</span>
-                    <div className="flex items-center gap-1 text-[9px] text-theme-muted bg-theme-surface px-1.5 py-0.5 rounded-md border border-theme-border/50">
+                    <div className="flex items-center gap-1 text-[9px] text-theme-muted bg-theme-surface/60 px-1.5 py-0.5 rounded-md border border-theme-border/30">
                       <Clock size={8} />
                       <span>{daysUntilExpiry(conv.expires_at)}d</span>
                     </div>
@@ -658,7 +663,7 @@ const AskAIPage = () => {
                   <button
                     onClick={(e) => deleteConversation(e, conv.id)}
                     disabled={deletingId === conv.id}
-                    className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 text-theme-muted transition-all"
+                    className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 text-theme-muted transition-all cursor-pointer"
                   >
                     {deletingId === conv.id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
                   </button>
@@ -669,21 +674,21 @@ const AskAIPage = () => {
         )}
 
         {/* Usage Card */}
-        <div className="bg-theme-surface-2 border border-theme-border rounded-xl p-3 shadow-sm shrink-0">
+        <div className="glass-panel-premium p-3.5 shadow-md shrink-0">
           <div className="flex justify-between items-center mb-2">
             <span className="text-[10px] font-bold text-theme-muted uppercase tracking-wider">
               {plan} Plan
             </span>
             {plan !== 'Pro' && (
-              <Link to="/pricing" className="text-[10px] font-bold text-indigo-500 hover:text-indigo-400">
+              <Link to="/pricing" className="text-[10px] font-bold text-indigo-500 hover:text-indigo-400 dark:text-indigo-400 dark:hover:text-indigo-300">
                 Upgrade
               </Link>
             )}
           </div>
 
-          <div className="w-full bg-theme-surface h-1.5 rounded-full overflow-hidden mb-2 border border-theme-border/50">
+          <div className="w-full bg-theme-surface/50 h-1.5 rounded-full overflow-hidden mb-2 border border-theme-border/30">
             <motion.div
-              className="bg-indigo-600 h-full shadow-[0_0_8px_rgba(79,70,229,0.5)]"
+              className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full shadow-[0_0_8px_rgba(79,70,229,0.3)]"
               initial={{ width: 0 }}
               animate={{
                 width: limit === Infinity ? '100%' : `${Math.min((usageCount / limit) * 100, 100)}%`
@@ -697,7 +702,7 @@ const AskAIPage = () => {
             </p>
             <button
               onClick={handleReset}
-              className="p-1.5 text-theme-muted hover:text-indigo-400 hover:bg-theme-surface rounded-lg border border-transparent hover:border-theme-border transition-all"
+              className="p-1.5 text-theme-muted hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-theme-surface/50 rounded-lg border border-transparent hover:border-theme-border/30 transition-all cursor-pointer"
               title="Reset session"
             >
               <RotateCcw size={12} />
@@ -711,9 +716,9 @@ const AskAIPage = () => {
       <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-theme-base">
 
         {/* Header */}
-        <header className="px-5 py-3 md:py-4 border-b border-theme-border flex justify-between items-center bg-theme-surface/50 backdrop-blur-md z-10 shrink-0">
+        <header className="px-5 py-3.5 border-b border-theme-border/60 flex justify-between items-center bg-[var(--glass-header-bg)] backdrop-blur-xl z-10 shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <button className="md:hidden p-2 -ml-2 text-theme-muted hover:bg-theme-surface-2 rounded-xl transition-colors" onClick={() => setSidebarOpen(true)}>
+            <button className="md:hidden p-2 -ml-2 text-theme-muted hover:bg-theme-surface-2 rounded-xl transition-colors cursor-pointer" onClick={() => setSidebarOpen(true)}>
               <Menu size={20} />
             </button>
             <div>
@@ -726,12 +731,12 @@ const AskAIPage = () => {
 
           <div className="flex items-center gap-2">
             {(plan === 'Plus' || plan === 'Pro') && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-500 rounded-xl text-xs font-bold border border-amber-500/20 shadow-sm">
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-bold border border-amber-500/20 shadow-sm">
                 <Sparkles size={14} />
                 <span>{plan}</span>
               </div>
             )}
-            <Link to="/papers" className="px-4 py-2 bg-theme-surface-2 rounded-xl text-xs font-bold border border-theme-border shadow-sm hover:bg-theme-surface transition-colors text-theme-primary">Past Papers</Link>
+            <Link to="/papers" className="px-4 py-2 glass-panel-premium glass-panel-premium-hover rounded-xl text-xs font-bold shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all text-theme-primary">Past Papers</Link>
           </div>
         </header>
 
@@ -744,10 +749,11 @@ const AskAIPage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="max-w-2xl mx-auto mt-12 text-center"
               >
-                <div className="w-20 h-20 glass-card rounded-[2rem] shadow-lg border border-theme-border flex items-center justify-center mx-auto mb-8 animate-bounce">
-                  <GraduationCap className="text-indigo-500" size={40} />
+                <div className="w-20 h-20 glass-panel-premium rounded-[1.8rem] shadow-lg flex items-center justify-center mx-auto mb-8 relative group">
+                  <div className="absolute inset-0 bg-indigo-500/5 rounded-[1.8rem] blur-md opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <GraduationCap className="text-indigo-500 relative z-10" size={40} />
                 </div>
-                <h3 className="text-3xl font-bold text-theme-primary mb-3 tracking-tight">How can I help you today?</h3>
+                <h3 className="text-3xl font-extrabold text-theme-primary mb-3 tracking-tight">How can I help you today?</h3>
                 <p className="text-theme-muted max-w-sm mx-auto mb-10 text-sm font-medium leading-relaxed">
                   Choose a topic below or type your own assignment or concept question to get started.
                 </p>
@@ -756,9 +762,9 @@ const AskAIPage = () => {
                     <button
                       key={q}
                       onClick={() => handleSend(q)}
-                      className="p-5 glass-card border-theme-border rounded-2xl text-left text-xs font-semibold text-theme-secondary hover:border-indigo-400 hover:bg-theme-surface-2 transition-all shadow-sm group"
+                      className="p-5 glass-panel-premium glass-panel-premium-hover rounded-2xl text-left text-xs font-semibold text-theme-secondary hover:border-indigo-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm group cursor-pointer"
                     >
-                      <span className="group-hover:text-indigo-400 transition-colors">{q}</span>
+                      <span className="group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors leading-relaxed">{q}</span>
                     </button>
                   ))}
                 </div>
@@ -776,24 +782,67 @@ const AskAIPage = () => {
                 )}
               >
                 <div className={clsx(
-                  "max-w-[85%] p-5 rounded-2xl shadow-md transition-all",
+                  "max-w-[85%] p-5 rounded-2xl shadow-sm transition-all",
                   message.role === 'user'
-                    ? "bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-none shadow-indigo-500/20"
-                    : "glass-card border-theme-border rounded-tl-none text-theme-secondary"
+                    ? "glass-bubble-user rounded-tr-none"
+                    : "glass-bubble-ai rounded-tl-none"
                 )}>
                   {message.attachmentName && (
-                    <div className="mb-3 flex items-center gap-2 bg-white/10 border border-white/20 px-3 py-2 rounded-xl text-[11px] font-bold">
+                    <div className="mb-3 flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 rounded-xl text-[11px] font-bold text-indigo-500 dark:text-indigo-400">
                       <Paperclip size={14} />
                       <span className="truncate max-w-[200px]">{message.attachmentName}</span>
                     </div>
                   )}
-                  <div className={clsx(
-                    message.role === 'user'
-                      ? "text-white whitespace-pre-wrap text-sm font-medium"
-                      : "prose prose-sm max-w-none prose-headings:text-theme-primary prose-strong:text-theme-primary prose-code:bg-theme-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-indigo-400 prose-code:font-bold dark:prose-invert text-theme-secondary"
-                  )}>
-                    {message.role === 'user' ? message.content : <Markdown>{message.content}</Markdown>}
-                  </div>
+                  {message.role === 'user' ? (
+                    <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed">{message.content}</p>
+                  ) : (
+                    <div className="ai-prose">
+                      <Markdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          h1: ({children}) => <h1 className="ai-h1">{children}</h1>,
+                          h2: ({children}) => <h2 className="ai-h2">{children}</h2>,
+                          h3: ({children}) => <h3 className="ai-h3">{children}</h3>,
+                          h4: ({children}) => <h4 className="ai-h4">{children}</h4>,
+                          p: ({children}) => <p className="ai-p">{children}</p>,
+                          ul: ({children}) => <ul className="ai-ul">{children}</ul>,
+                          ol: ({children}) => <ol className="ai-ol">{children}</ol>,
+                          li: ({children}) => <li className="ai-li">{children}</li>,
+                          strong: ({children}) => <strong className="ai-strong">{children}</strong>,
+                          em: ({children}) => <em className="ai-em">{children}</em>,
+                          blockquote: ({children}) => <blockquote className="ai-blockquote">{children}</blockquote>,
+                          hr: () => <hr className="ai-hr" />,
+                          a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
+                          code: ({className, children, ...props}) => {
+                            const isBlock = className?.includes('language-');
+                            return isBlock ? (
+                              <div className="ai-code-block-wrapper">
+                                {className && (
+                                  <div className="ai-code-lang">{className.replace('language-', '')}</div>
+                                )}
+                                <pre className="ai-pre"><code className={className}>{children}</code></pre>
+                              </div>
+                            ) : (
+                              <code className="ai-inline-code" {...props}>{children}</code>
+                            );
+                          },
+                          pre: ({children}) => <>{children}</>,
+                          table: ({children}) => (
+                            <div className="ai-table-wrapper">
+                              <table className="ai-table">{children}</table>
+                            </div>
+                          ),
+                          thead: ({children}) => <thead className="ai-thead">{children}</thead>,
+                          tbody: ({children}) => <tbody>{children}</tbody>,
+                          tr: ({children}) => <tr className="ai-tr">{children}</tr>,
+                          th: ({children}) => <th className="ai-th">{children}</th>,
+                          td: ({children}) => <td className="ai-td">{children}</td>,
+                        }}
+                      >
+                        {message.content}
+                      </Markdown>
+                    </div>
+                  )}
                 </div>
                 <div className={clsx(
                   "text-[10px] text-theme-muted mt-2 font-bold uppercase tracking-wider flex items-center gap-1.5",
@@ -811,7 +860,7 @@ const AskAIPage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="flex items-start"
               >
-                <div className="glass-card border-theme-border p-4 rounded-2xl rounded-tl-none shadow-md flex items-center gap-3 text-indigo-400 text-xs font-bold italic">
+                <div className="glass-panel-premium p-4 rounded-2xl rounded-tl-none shadow-md flex items-center gap-3 text-indigo-500 dark:text-indigo-400 text-xs font-bold italic">
                   <Loader2 size={16} className="animate-spin" />
                   <motion.span
                     key={loadingMsgIdx}
@@ -829,16 +878,16 @@ const AskAIPage = () => {
         </div>
 
         {/* Input */}
-        <footer className="p-4 md:p-6 bg-theme-base border-t border-theme-border shrink-0">
+        <footer className="p-4 md:p-6 bg-[var(--glass-footer-bg)] border-t border-theme-border/60 backdrop-blur-xl shrink-0">
           <div className="max-w-4xl mx-auto w-full">
             {selectedFileName && (
-              <div className="mb-3 flex items-center gap-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-3 py-1.5 rounded-lg w-max text-xs font-semibold">
+              <div className="mb-3 flex items-center gap-2 bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border border-indigo-500/20 px-3 py-1.5 rounded-lg w-max text-xs font-semibold">
                 <Paperclip size={14} />
                 <span className="truncate max-w-[200px] md:max-w-[300px]">{selectedFileName}</span>
                 <button
                   type="button"
                   onClick={() => { setSelectedFileName(''); setSelectedFile(null); }}
-                  className="hover:text-red-400 ml-1 transition-colors"
+                  className="hover:text-red-400 ml-1 transition-colors cursor-pointer"
                 >
                   <X size={14} />
                 </button>
@@ -855,7 +904,7 @@ const AskAIPage = () => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={canSend ? "Ask your academic question..." : "Limit reached."}
-                className="w-full bg-theme-surface-2 border border-theme-border p-4 pr-16 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm text-theme-primary font-medium placeholder:text-theme-muted transition-all"
+                className="w-full glass-panel-premium glass-panel-premium-hover p-4 pr-24 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 text-sm text-theme-primary font-medium placeholder:text-theme-muted transition-all"
                 disabled={!canSend || isLoading}
               />
               <input
@@ -882,8 +931,8 @@ const AskAIPage = () => {
                     fileInputRef.current?.click();
                   }}
                   className={clsx(
-                    "p-2 transition-colors rounded-xl",
-                    selectedFileName ? "text-indigo-400 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-400",
+                    "p-2 transition-colors rounded-xl cursor-pointer",
+                    selectedFileName ? "text-indigo-500 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-500 dark:hover:text-indigo-400",
                     plan === 'Free' && "opacity-50 cursor-not-allowed hover:text-theme-muted"
                   )}
                   title={plan === 'Free' ? "Upload blocked on Free plan" : "Attach File"}
@@ -894,10 +943,10 @@ const AskAIPage = () => {
                   type="submit"
                   disabled={!input.trim() || !canSend || isLoading}
                   className={clsx(
-                    "p-3 rounded-2xl transition-all shadow-lg active:scale-95 disabled:opacity-50",
+                    "p-3 rounded-2xl transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer",
                     input.trim() && canSend && !isLoading
-                      ? "bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-indigo-500/30"
-                      : "bg-theme-surface border border-theme-border text-theme-muted shadow-none"
+                      ? "bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-indigo-500/10"
+                      : "bg-theme-surface/50 border border-theme-border/30 text-theme-muted"
                   )}
                 >
                   <Send size={18} />
@@ -912,7 +961,7 @@ const AskAIPage = () => {
                 </Link>
               ) : (
                 <p className="text-[10px] text-theme-muted uppercase tracking-widest font-bold">
-                  {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-emerald-400">PastQ Advanced AI v2.0</span>
+                  {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-indigo-500 dark:text-indigo-400">PastQ Premium AI v3.0</span>
                 </p>
               )}
             </div>
@@ -933,14 +982,14 @@ const AskAIPage = () => {
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="max-w-md w-full bg-theme-surface border border-theme-border rounded-[2.5rem] p-8 md:p-12 text-center shadow-2xl relative overflow-hidden"
+              className="max-w-md w-full glass-panel-premium rounded-[2.2rem] p-8 md:p-12 text-center shadow-2xl relative overflow-hidden"
             >
               {/* Glow effect */}
-              <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-500/20 blur-[100px] rounded-full"></div>
-              <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-500/20 blur-[100px] rounded-full"></div>
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-500/15 blur-[100px] rounded-full"></div>
+              <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-500/15 blur-[100px] rounded-full"></div>
 
               <div className="relative">
-                <div className="w-24 h-24 bg-theme-surface-2 border border-theme-border rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner">
+                <div className="w-24 h-24 glass-panel-premium rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner">
                   <div className="relative">
                     <Sparkles className="text-indigo-500 animate-pulse" size={48} />
                     <div className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 rounded-full border-4 border-theme-surface"></div>
@@ -949,7 +998,7 @@ const AskAIPage = () => {
 
                 <h2 className="text-3xl font-black text-theme-primary mb-4 tracking-tight">System Maintenance</h2>
 
-                <div className="p-6 bg-theme-surface-2 border border-theme-border rounded-2xl mb-8">
+                <div className="p-6 glass-panel-premium rounded-2xl mb-8">
                   <p className="text-sm text-theme-secondary font-medium leading-relaxed">
                     {maintenanceMsg || "Our AI Tutor is currently recharging and performing routine maintenance to better serve you."}
                   </p>
@@ -958,13 +1007,13 @@ const AskAIPage = () => {
                 <div className="space-y-4">
                   <Link
                     to="/papers"
-                    className="flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-500/25 active:scale-95"
+                    className="flex items-center justify-center gap-2 w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-500/10 active:scale-95 cursor-pointer"
                   >
                     Explore Past Papers
                   </Link>
                   <Link
                     to="/"
-                    className="flex items-center justify-center gap-2 w-full py-3 bg-theme-surface-2 hover:bg-theme-surface border border-theme-border text-theme-secondary rounded-2xl font-bold transition-all active:scale-95 text-sm"
+                    className="flex items-center justify-center gap-2 w-full py-3 glass-panel-premium glass-panel-premium-hover text-theme-secondary rounded-2xl font-bold transition-all active:scale-95 text-sm cursor-pointer"
                   >
                     Go to Home
                   </Link>

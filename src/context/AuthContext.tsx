@@ -2,6 +2,9 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
+const VITE_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const BASE_URL = VITE_API_URL.endsWith('/api') ? VITE_API_URL : `${VITE_API_URL.replace(/\/$/, '')}/api`;
+
 interface AuthUser {
   id: string;
   full_name: string;
@@ -94,7 +97,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const currentToken = getStorage().getItem('token');
     if (!currentToken) return;
 
-    fetch(`${import.meta.env.VITE_API_URL || ''}/api/profile/me`, {
+    fetch(`${BASE_URL}/profile/me`, {
       headers: { Authorization: `Bearer ${currentToken}` }
     })
       .then(res => {
@@ -112,7 +115,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (sessionStorage.getItem('streak_pinged')) return;
     sessionStorage.setItem('streak_pinged', '1');
 
-    fetch(`${import.meta.env.VITE_API_URL || ''}/api/streaks/ping`, {
+    fetch(`${BASE_URL}/streaks/ping`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     })
