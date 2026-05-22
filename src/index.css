@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @tailwind base;
 @tailwind components;
@@ -36,15 +37,15 @@
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-hover: rgba(255, 255, 255, 0.15);
   --glass-inner-shadow: rgba(255, 255, 255, 0.05);
-  
+
   --glass-user-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.15) 100%);
   --glass-user-border: rgba(99, 102, 241, 0.3);
   --glass-user-text: #ffffff;
-  
+
   --glass-ai-bg: rgba(255, 255, 255, 0.02);
   --glass-ai-border: rgba(255, 255, 255, 0.05);
   --glass-ai-text: #e4e4e7;
-  
+
   --glass-sidebar-bg: rgba(13, 11, 24, 0.4);
   --glass-header-bg: rgba(13, 11, 24, 0.35);
   --glass-footer-bg: rgba(13, 11, 24, 0.3);
@@ -69,15 +70,15 @@
   --glass-border: rgba(99, 102, 241, 0.12);
   --glass-border-hover: rgba(99, 102, 241, 0.25);
   --glass-inner-shadow: rgba(255, 255, 255, 0.6);
-  
+
   --glass-user-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%);
   --glass-user-border: rgba(99, 102, 241, 0.25);
   --glass-user-text: #1e1b4b;
-  
+
   --glass-ai-bg: rgba(255, 255, 255, 0.65);
   --glass-ai-border: rgba(99, 102, 241, 0.08);
   --glass-ai-text: #1e293b;
-  
+
   --glass-sidebar-bg: rgba(245, 246, 250, 0.6);
   --glass-header-bg: rgba(245, 246, 250, 0.55);
   --glass-footer-bg: rgba(245, 246, 250, 0.5);
@@ -110,7 +111,7 @@
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255,255,255,0.07);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.07);
     border-radius: 1rem;
     transition: background 0.3s ease, border-color 0.3s ease;
   }
@@ -158,12 +159,12 @@
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid var(--border);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.10);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.10);
   }
 
   :root.light .glass-nav-mobile {
-    background: rgba(255,255,255,0.85);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.95);
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95);
   }
 
   .glass-button {
@@ -182,29 +183,69 @@
   }
 
   /* Theme-aware Colored Pills for Tabs */
-  .tab-pill-blue { @apply bg-blue-500/15 text-blue-400 border border-blue-500/30; }
-  :root.light .tab-pill-blue { @apply bg-blue-100 text-blue-700 border border-blue-200; }
+  .tab-pill-blue {
+    @apply bg-blue-500/15 text-blue-400 border border-blue-500/30;
+  }
 
-  .tab-pill-emerald { @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/30; }
-  :root.light .tab-pill-emerald { @apply bg-emerald-100 text-emerald-700 border border-emerald-200; }
+  :root.light .tab-pill-blue {
+    @apply bg-blue-100 text-blue-700 border border-blue-200;
+  }
 
-  .tab-pill-fuchsia { @apply bg-fuchsia-500/15 text-fuchsia-400 border border-fuchsia-500/30; }
-  :root.light .tab-pill-fuchsia { @apply bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200; }
+  .tab-pill-emerald {
+    @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/30;
+  }
 
-  .tab-pill-rose { @apply bg-rose-500/15 text-rose-400 border border-rose-500/30; }
-  :root.light .tab-pill-rose { @apply bg-rose-100 text-rose-700 border border-rose-200; }
+  :root.light .tab-pill-emerald {
+    @apply bg-emerald-100 text-emerald-700 border border-emerald-200;
+  }
 
-  .tab-pill-indigo { @apply bg-indigo-500/15 text-indigo-400 border border-indigo-500/30; }
-  :root.light .tab-pill-indigo { @apply bg-indigo-100 text-indigo-700 border border-indigo-200; }
+  .tab-pill-fuchsia {
+    @apply bg-fuchsia-500/15 text-fuchsia-400 border border-fuchsia-500/30;
+  }
 
-  .tab-pill-violet { @apply bg-violet-500/15 text-violet-400 border border-violet-500/30; }
-  :root.light .tab-pill-violet { @apply bg-violet-100 text-violet-700 border border-violet-200; }
+  :root.light .tab-pill-fuchsia {
+    @apply bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200;
+  }
 
-  .tab-pill-orange { @apply bg-orange-500/15 text-orange-400 border border-orange-500/30; }
-  :root.light .tab-pill-orange { @apply bg-orange-100 text-orange-700 border border-orange-200; }
+  .tab-pill-rose {
+    @apply bg-rose-500/15 text-rose-400 border border-rose-500/30;
+  }
 
-  .tab-pill-red { @apply bg-red-500/15 text-red-400 border border-red-500/30; }
-  :root.light .tab-pill-red { @apply bg-red-100 text-red-700 border border-red-200; }
+  :root.light .tab-pill-rose {
+    @apply bg-rose-100 text-rose-700 border border-rose-200;
+  }
+
+  .tab-pill-indigo {
+    @apply bg-indigo-500/15 text-indigo-400 border border-indigo-500/30;
+  }
+
+  :root.light .tab-pill-indigo {
+    @apply bg-indigo-100 text-indigo-700 border border-indigo-200;
+  }
+
+  .tab-pill-violet {
+    @apply bg-violet-500/15 text-violet-400 border border-violet-500/30;
+  }
+
+  :root.light .tab-pill-violet {
+    @apply bg-violet-100 text-violet-700 border border-violet-200;
+  }
+
+  .tab-pill-orange {
+    @apply bg-orange-500/15 text-orange-400 border border-orange-500/30;
+  }
+
+  :root.light .tab-pill-orange {
+    @apply bg-orange-100 text-orange-700 border border-orange-200;
+  }
+
+  .tab-pill-red {
+    @apply bg-red-500/15 text-red-400 border border-red-500/30;
+  }
+
+  :root.light .tab-pill-red {
+    @apply bg-red-100 text-red-700 border border-red-200;
+  }
 
   /* Theme-aware text helpers */
   .text-theme-primary {
@@ -288,8 +329,13 @@
   }
 
   @keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
+    0% {
+      background-position: -200% 0;
+    }
+
+    100% {
+      background-position: 200% 0;
+    }
   }
 
   .animate-shimmer {
@@ -314,6 +360,7 @@
     font-weight: 450;
     line-height: 1.78;
   }
+
   .ai-prose .ai-p:last-child {
     margin-bottom: 0;
   }
@@ -329,6 +376,7 @@
     border-bottom: 1px solid var(--border);
     padding-bottom: 0.3em;
   }
+
   .ai-prose .ai-h2 {
     font-size: 1.1rem;
     font-weight: 700;
@@ -337,6 +385,7 @@
     margin-bottom: 0.45em;
     line-height: 1.35;
   }
+
   .ai-prose .ai-h3 {
     font-size: 1rem;
     font-weight: 700;
@@ -345,6 +394,7 @@
     margin-bottom: 0.4em;
     line-height: 1.4;
   }
+
   .ai-prose .ai-h4 {
     font-size: 0.9rem;
     font-weight: 700;
@@ -357,12 +407,15 @@
   :root .ai-prose .ai-h1,
   :root .ai-prose .ai-h2,
   :root .ai-prose .ai-h3 {
-    color: #4f46e5; /* indigo-600 */
+    color: #4f46e5;
+    /* indigo-600 */
   }
+
   :root.light .ai-prose .ai-h1,
   :root.light .ai-prose .ai-h2,
   :root.light .ai-prose .ai-h3 {
-    color: #3730a3; /* indigo-800 for contrast on light bg */
+    color: #3730a3;
+    /* indigo-800 for contrast on light bg */
   }
 
   /* Bullet list */
@@ -392,8 +445,8 @@
   }
 
   /* Style bullet dots & numbers color modernly */
-  .ai-prose .ai-ul > .ai-li::marker,
-  .ai-prose .ai-ol > .ai-li::marker {
+  .ai-prose .ai-ul>.ai-li::marker,
+  .ai-prose .ai-ol>.ai-li::marker {
     color: #6366f1;
     font-weight: 700;
   }
@@ -404,10 +457,12 @@
     margin-top: 0.3em;
     margin-bottom: 0;
   }
+
   .ai-prose .ai-li .ai-ul {
     list-style: circle;
   }
-  .ai-prose .ai-li .ai-ul > .ai-li::marker {
+
+  .ai-prose .ai-li .ai-ul>.ai-li::marker {
     color: #818cf8;
   }
 
@@ -449,6 +504,7 @@
     word-break: break-all;
     transition: color 0.15s;
   }
+
   .ai-prose .ai-link:hover {
     color: #818cf8;
   }
@@ -465,6 +521,7 @@
     white-space: nowrap;
     font-weight: 500;
   }
+
   :root.light .ai-prose .ai-inline-code {
     background: rgba(99, 102, 241, 0.08);
     color: #4338ca;
@@ -479,6 +536,7 @@
     border: 1px solid var(--glass-border);
     background: rgba(0, 0, 0, 0.35);
   }
+
   :root.light .ai-prose .ai-code-block-wrapper {
     background: #1e1e2e;
   }
@@ -501,6 +559,7 @@
     overflow-x: auto;
     background: transparent;
   }
+
   .ai-prose .ai-pre code {
     font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
     font-size: 0.82em;
@@ -529,6 +588,7 @@
   .ai-prose .ai-thead {
     background: rgba(99, 102, 241, 0.12);
   }
+
   :root.light .ai-prose .ai-thead {
     background: rgba(99, 102, 241, 0.08);
   }
@@ -544,6 +604,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
+
   :root.light .ai-prose .ai-th {
     color: #4338ca;
   }
@@ -565,7 +626,126 @@
   }
 
   /* First element spacing fix */
-  .ai-prose > *:first-child {
+  .ai-prose>*:first-child {
     margin-top: 0 !important;
+  }
+
+  /* ── Desktop Cool Hover Expanding Navbar ─────────────────────────────────── */
+  .desktop-cool-nav {
+    display: flex;
+    position: relative;
+    gap: 25px;
+    align-items: center;
+  }
+
+  .desktop-cool-nav .nav-item {
+    position: relative;
+    list-style: none;
+    width: 36px;
+    height: 36px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    border-radius: 60px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: width 0.5s, box-shadow 0.5s, background-color 0.5s, border-color 0.5s;
+  }
+
+  /* Make the inner link cover the full pill area so the whole button is clickable */
+  .desktop-cool-nav .nav-item>a {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 60px;
+  }
+
+  .desktop-cool-nav .nav-item::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 60px;
+    background: linear-gradient(45deg, var(--i), var(--j));
+    opacity: 0;
+    transition: 0.5s;
+  }
+
+  .desktop-cool-nav .nav-item::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 60px;
+    background: linear-gradient(45deg, var(--i), var(--j));
+    transition: 0.5s;
+    filter: blur(12px);
+    z-index: -1;
+    opacity: 0;
+  }
+
+  .desktop-cool-nav .nav-item:hover {
+    width: 130px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0);
+    border-color: transparent;
+    background-color: transparent;
+  }
+
+  .desktop-cool-nav .nav-item:hover::before {
+    opacity: 1;
+  }
+
+  .desktop-cool-nav .nav-item:hover::after {
+    opacity: 0.5;
+  }
+
+  .desktop-cool-nav .nav-item .icon-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-secondary);
+    transition: 0.5s;
+    transition-delay: 0.25s;
+    z-index: 10;
+  }
+
+  .desktop-cool-nav .nav-item:hover .icon-wrapper {
+    transform: scale(0);
+    color: #fff;
+    transition-delay: 0s;
+  }
+
+  .desktop-cool-nav .nav-item .title {
+    position: absolute;
+    color: #fff;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transform: scale(0);
+    transition: 0.5s;
+    transition-delay: 0s;
+    z-index: 10;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .desktop-cool-nav .nav-item:hover .title {
+    transform: scale(1);
+    transition-delay: 0.25s;
+  }
+
+  .desktop-cool-nav .nav-item.active-item {
+    border-color: rgba(99, 102, 241, 0.45);
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.25);
+    background: rgba(99, 102, 241, 0.08);
   }
 }
