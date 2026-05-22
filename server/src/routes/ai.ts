@@ -8,11 +8,114 @@ import { askPuter, isPuterAvailable } from '../lib/puter';
 import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from '../lib/huggingface';
 import fs from 'fs';
 import path from 'path';
+import { performOcrPipeline } from '../lib/ocr';
 
 const pdf = require('pdf-parse');
 
 const router = express.Router();
 const aiConfigPath = path.join(__dirname, '../../ai-config.json');
+
+// Apply Clock Polyfill using class inheritance to correct system clock skew
+async function applyClockPolyfill() {
+  console.log('[Clock Polyfill] Checking clock skew against Google...');
+  try {
+    const res = await fetch('https://www.google.com', { method: 'HEAD' });
+    const dateHeader = res.headers.get('date');
+    if (dateHeader) {
+      const serverTime = new Date(dateHeader).getTime();
+      const localTime = Date.now();
+      const skewMs = localTime - serverTime;
+      const skewSeconds = skewMs / 1000;
+
+      if (Math.abs(skewSeconds) > 60) {
+        console.log(`[Clock Polyfill] System clock is skewed by ${skewSeconds.toFixed(1)}s. Adjusting Date class...`);
+        const OriginalDate = global.Date;
+        const originalNow = OriginalDate.now;
+
+        // Custom Date subclass
+        class AdjustedDate extends OriginalDate {
+          constructor(...args: any[]) {
+            if (args.length === 0) {
+              super(originalNow() - skewMs);
+            } else {
+              // @ts-ignore
+              super(...args);
+            }
+          }
+        }
+
+        // Adjust now() static method on the subclass
+        (AdjustedDate as any).now = function () {
+          return originalNow() - skewMs;
+        };
+
+        // Override global Date
+        global.Date = AdjustedDate as any;
+        console.log(`[Clock Polyfill] Date class successfully adjusted. Corrected UTC Time: ${new Date().toUTCString()}`);
+      } else {
+        console.log('[Clock Polyfill] No significant clock skew detected.');
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Clock Polyfill] Failed to apply clock polyfill:', err.message);
+  }
+}
+applyClockPolyfill();
+
+
+// High-performance cache to prevent downloading and parsing PDFs on every turn
+interface CachedPaper {
+  paperMeta: { title?: string; subject?: string; year?: string; semester?: string };
+  paperInsights: any;
+  extractedText: string;
+  extractionFailed: boolean;
+  activeFileData?: string;
+  activeMimeType?: string;
+  alertShown?: boolean; // tracks whether the PDF-unreadable warning has been shown at least once
+}
+const paperCache = new Map<string, CachedPaper>();
+
+// Strips blockquote warnings from history to prevent LLMs from mimicking them
+function cleanHistoryContent(content: string): string {
+  if (typeof content !== 'string') return content;
+
+  const lines = content.split('\n');
+  const cleanedLines: string[] = [];
+  let skipMode = false;
+
+  for (const line of lines) {
+    const isAlertLine =
+      line.includes('Exam Paper Access Alert') ||
+      line.includes('Document Reading Alert') ||
+      line.includes('unable to read the PDF') ||
+      line.includes('answering your question below based on my general knowledge') ||
+      line.includes('You can type or copy-paste any specific question') ||
+      (line.includes('⚠️') && (
+        line.includes('Alert') ||
+        line.includes('unable') ||
+        line.includes('PDF') ||
+        line.includes('general knowledge')
+      ));
+
+    if (isAlertLine) {
+      skipMode = true;
+      continue;
+    }
+
+    // Stop skipping after we hit a non-empty, non-blockquote line
+    if (skipMode && line.trim() !== '' && !line.startsWith('>')) {
+      skipMode = false;
+    }
+
+    if (!skipMode) {
+      cleanedLines.push(line);
+    }
+  }
+
+  return cleanedLines.join('\n').trimStart();
+}
+// Shared OCR pipeline imported from server/src/lib/ocr.ts
+
 
 // Plan-based query limits (counted by history length = number of user turns)
 const PLAN_LIMITS: Record<string, number> = {
@@ -71,10 +174,18 @@ const checkAiEnabled = async (req: AuthRequest, res: any, next: any) => {
   }
 };
 
-// Build a tailored system instruction based on the student's plan
-function buildSystemInstruction(plan: string): string {
-  const base = `
+function buildSystemInstruction(plan: string, subjectContext?: string): string {
+  const base = `ABSOLUTE FORBIDDEN RULE: You must NEVER output the phrase Exam Paper Access Alert or Document Reading Alert or unable to read the PDF file or answering your question below based on my general knowledge or any warning or disclaimer of any kind. If you cannot read a document, just answer the question directly and silently without any notice whatsoever. Violating this rule is not acceptable under any circumstances.
+
 You are **PastQ Advanced AI Tutor**, a world-class academic assistant specialized in helping university students master their course materials and excel in exams.
+
+== INTENT DETECTION & CONTEXT RELEVANCE (CRITICAL) ==
+A document or exam paper may be provided to you as context (either as extracted text or as a PDF attachment).
+You MUST dynamically detect the intent of the student's question and determine if it is relevant to the provided document/subject:
+1. **Unrelated / General Questions**: If the student asks a general question (e.g., greetings like "hi"/"hello", general definitions like "What is a noun?", or questions about a completely different academic subject than the provided document), you MUST ignore the document context entirely. Do NOT apply the rules of answering only from the document context, do NOT restrict your answer to the document, do NOT reproduce question wording as a blockquote, and do NOT mention the document or any failed extraction. Answer their question independently, accurately, and professionally as a general academic tutor.
+2. **Related Questions**: If the student's question is relevant to the provided document (e.g., asking to solve a specific exam question, asking about a topic covered in the document, or referencing the document's content), you MUST use the document context and strictly follow the Document Analysis rules below.
+
+${subjectContext ? `The currently loaded document's subject/title context is: "${subjectContext}". Use this to help determine relevance.\n` : ''}
 
 == YOUR PERSONALITY ==
 Direct, highly organized, authoritative yet encouraging. You write like a premium educational consultant.
@@ -94,11 +205,18 @@ Direct, highly organized, authoritative yet encouraging. You write like a premiu
 == DOCUMENT ANALYSIS (CRITICAL RULES) ==
 When exam paper text is provided between --- BEGIN EXAM PAPER TEXT --- and --- END EXAM PAPER TEXT --- markers:
 - That text contains the **ACTUAL EXAM QUESTIONS**. Treat every line as the real paper content.
-- **NEVER use your general training knowledge** to answer — your response must be grounded entirely in that text.
+- **NEVER use your general training knowledge** to answer specific exam questions — your response must be grounded entirely in that text.
 - **Always reproduce the exact question wording** as a blockquote (>) before answering it.
 - Respond to whatever the student requests by working through the relevant question(s) found in the paper text.
 - Reference question numbers and sub-parts exactly as written in the paper.
-- If a question cannot be located in the provided text, say so explicitly.
+- If the student asks a general concept question, a question about a related topic, or any question not directly requesting to solve a specific exam question from the paper, treat it as a General/Related Question: answer it directly, accurately, and professionally using your general academic knowledge. Do NOT include any disclaimers about it not being in the paper, and do NOT try to force-relate it to the paper context.
+
+== CONVERSATION MEMORY & CONTINUATION (CRITICAL) ==
+- You MUST maintain continuity across the conversation.
+- If the user interrupts, asks a follow-up, or says commands like "continue to number X", "next", "continue", or "go on", you must review the conversation history to identify the last question answered, locate the next logical question or the requested question in the PDF, and answer it seamlessly.
+- Maintain a cohesive, helpful study session. Do not treat each request in isolation if it is clearly a continuation of the previous turns.
+== DOCUMENT ANALYSIS ==
+- **NEVER** output blockquote warnings starting with "> ⚠️". Do not reproduce any alert, warning notice, or access disclaimer in your response under any circumstances.
 `.trim();
 
   const planBehavior: Record<string, string> = {
@@ -245,7 +363,13 @@ router.get('/conversations/:id', protect, checkHistoryAccess, async (req: AuthRe
     .order('created_at', { ascending: true });
 
   if (msgErr) return res.status(500).json({ error: msgErr.message });
-  res.json({ conversation: conv, messages: messages ?? [] });
+
+  const cleanedMessages = (messages ?? []).map((m: any) => ({
+    ...m,
+    content: m.role === 'assistant' ? cleanHistoryContent(m.content) : m.content
+  }));
+
+  res.json({ conversation: conv, messages: cleanedMessages });
 });
 
 // DELETE /ai/conversations/:id — delete a conversation and its messages
@@ -334,12 +458,14 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         .gte('created_at', tenHoursAgo);
 
       if ((count || 0) >= 5) {
+
         return res.json({ reply: "You've reached your **5 query limit** for the last 10 hours on the Free plan. Upgrade to **Basic, Plus, or Pro** to keep studying!" });
+
       }
     }
     if (userPlan.toLowerCase() === 'basic') {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      
+
       const { count: totalQueries } = await supabase
         .from('upsa_ai_queries')
         .select('*', { count: 'exact', head: true })
@@ -367,144 +493,164 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       }
     }
 
+    // Start high-precision execution profiling
+    const startTime = performance.now();
+    let t_db_download = 0;
+    let t_extract = 0;
+    let t_ai = 0;
+
     // 2. Prepare the payload for Gemini
     let activeFileData = fileData;
     let activeMimeType = fileMimeType || 'application/pdf';
     let paperMeta: { title?: string; subject?: string; year?: string; semester?: string } = {};
     let paperInsights: any = null;
+    let extractedText = "";
+    let extractionFailed = false;
 
-    if (!activeFileData && paperId) {
-      try {
-        const [paperRes, insightsRes] = await Promise.all([
-          supabase
-            .from('upsa_papers')
-            .select('title, year, semester, file_url, upsa_subjects(name)')
-            .eq('id', paperId)
-            .single(),
-          supabase
-            .from('upsa_paper_insights')
-            .select('summary, topics, difficulty, hardest_question, exam_tips')
-            .eq('paper_id', paperId)
-            .single(),
-        ]);
+    if (paperId && paperCache.has(paperId)) {
+      const cached = paperCache.get(paperId)!;
+      paperMeta = cached.paperMeta;
+      paperInsights = cached.paperInsights;
+      extractedText = cached.extractedText;
+      extractionFailed = cached.extractionFailed;
+      activeFileData = cached.activeFileData || activeFileData;
+      activeMimeType = cached.activeMimeType || activeMimeType;
+      console.log(`[Paper Cache] Hit cache for paperId: ${paperId}. Characters: ${extractedText.length}. Failed: ${extractionFailed}`);
+    } else {
+      if (!activeFileData && paperId) {
+        const fetchStart = performance.now();
+        try {
+          const [paperRes, insightsRes] = await Promise.all([
+            supabase
+              .from('upsa_papers')
+              .select('title, year, semester, file_url, upsa_subjects(name)')
+              .eq('id', paperId)
+              .single(),
+            supabase
+              .from('upsa_paper_insights')
+              .select('summary, topics, difficulty, hardest_question, exam_tips')
+              .eq('paper_id', paperId)
+              .single(),
+          ]);
 
-        const paper = paperRes.data;
-        paperInsights = insightsRes.data || null;
+          const paper = paperRes.data;
+          paperInsights = insightsRes.data || null;
 
-        if (paper) {
-          paperMeta = {
-            title: paper.title || undefined,
-            subject: (paper.upsa_subjects as any)?.name || undefined,
-            year: paper.year ? String(paper.year) : undefined,
-            semester: paper.semester ? String(paper.semester) : undefined,
-          };
+          if (paper) {
+            paperMeta = {
+              title: paper.title || undefined,
+              subject: (paper.upsa_subjects as any)?.name || undefined,
+              year: paper.year ? String(paper.year) : undefined,
+              semester: paper.semester ? String(paper.semester) : undefined,
+            };
 
-          if (paper.file_url) {
-            const pdfRes = await fetch(paper.file_url);
-            if (pdfRes.ok) {
-              const arrayBuffer = await pdfRes.arrayBuffer();
-              activeFileData = Buffer.from(arrayBuffer).toString('base64');
-              activeMimeType = 'application/pdf';
+            if (paper.file_url) {
+              const pdfRes = await fetch(paper.file_url);
+              if (pdfRes.ok) {
+                const arrayBuffer = await pdfRes.arrayBuffer();
+                activeFileData = Buffer.from(arrayBuffer).toString('base64');
+                activeMimeType = 'application/pdf';
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[AI /chat] Could not fetch PDF for paperId:', paperId, err);
+        }
+        t_db_download += performance.now() - fetchStart;
+      }
+
+      if (activeFileData) {
+        const parseStart = performance.now();
+        const pdfBuffer = Buffer.from(activeFileData, 'base64');
+        let numPages = 1;
+        try {
+          const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
+          const pdfData = await pdfParser(pdfBuffer);
+          extractedText = (pdfData.text || "").trim();
+          numPages = pdfData.numpages || 1;
+          console.log(`[PDF Extraction] Successfully parsed PDF via pdf-parse. Pages: ${numPages}, Character length: ${extractedText.length}`);
+        } catch (pdfErr: any) {
+          console.error(`[PDF Extraction] FAILED with error:`, pdfErr.message, pdfErr.stack);
+          extractionFailed = true;
+        }
+
+        const avgCharsPerPage = extractedText.length / numPages;
+        const isHybridOrScanned = extractedText.length < 50 || avgCharsPerPage < 250;
+
+        if (!extractionFailed && isHybridOrScanned) {
+          if (extractedText.length < 50) {
+            console.warn(`[PDF Extraction] Extracted text is too short (${extractedText.length} chars). PDF is likely a scanned image.`);
+          } else {
+            console.warn(`[PDF Extraction] Average character length per page is too low (${avgCharsPerPage.toFixed(1)} chars/page). PDF is likely a hybrid document with only the cover page typed.`);
+          }
+          extractionFailed = true;
+
+          // Run OCR immediately before calling Gemini
+          if (activeFileData) {
+            try {
+              console.log(`[AI /chat] Running OCR before Gemini call for ${numPages} pages...`);
+              const pdfBuffer = Buffer.from(activeFileData, 'base64');
+              const ocrText = await performOcrPipeline(pdfBuffer, numPages);
+              if (ocrText && ocrText.length > 50) {
+                extractedText = ocrText;
+                extractionFailed = false;
+                console.log('[AI /chat] Pre-Gemini OCR succeeded. Length:', ocrText.length);
+              }
+            } catch (ocrErr: any) {
+              console.warn('[AI /chat] Pre-Gemini OCR failed:', ocrErr.message);
             }
           }
         }
-      } catch (err) {
-        console.warn('[AI /chat] Could not fetch PDF for paperId:', paperId, err);
+        t_extract += performance.now() - parseStart;
       }
-    }
 
-    const geminiKey = process.env.GEMINI_API_KEY;
-    const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : null;
-
-    const contents: any[] = [];
-    if (history && Array.isArray(history)) {
-      for (const msg of history) {
-        contents.push({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }],
+      // Only cache successful extractions (or if OCR succeeded) so failed ones are retried/not stuck in cache
+      if (paperId && Object.keys(paperMeta).length > 0 && !extractionFailed) {
+        paperCache.set(paperId, {
+          paperMeta,
+          paperInsights,
+          extractedText,
+          extractionFailed,
+          activeFileData,
+          activeMimeType
         });
-      }
-    }
-    const userParts: any[] = [];
-
-    let extractedText = "";
-    if (activeFileData) {
-      const pdfBuffer = Buffer.from(activeFileData, 'base64');
-      try {
-        const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
-        const pdfData = await pdfParser(pdfBuffer);
-        extractedText = (pdfData.text || "").trim();
-      } catch (pdfErr) {
-        console.error(`[PDF-PARSE] FAILED`);
-      }
-
-      if (extractedText) {
-        userParts.push({
-          text:
-            `--- BEGIN EXAM PAPER TEXT ---\n` +
-            `${extractedText.substring(0, 35000)}\n` +
-            `--- END EXAM PAPER TEXT ---\n\n` +
-            `RULES:\n` +
-            `- The text above IS the exam paper containing the actual questions.\n` +
-            `- Answer ONLY from the question text above. Do NOT use general knowledge.\n` +
-            `- Before answering any question, reproduce its exact wording as a blockquote (>).\n`
-        });
-      } else {
-        userParts.push({
-          inlineData: {
-            mimeType: activeMimeType || 'application/pdf',
-            data: activeFileData,
-          },
-        });
-      }
-    }
-    userParts.push({ text: message });
-    contents.push({ role: 'user', parts: userParts });
-
-    const systemInstruction = buildSystemInstruction(userPlan);
-    const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
-    let response: any = null;
-    let lastError: any = null;
-
-    if (ai) {
-      for (const model of modelsToTry) {
-        try {
-          response = await ai.models.generateContent({
-            model,
-            contents,
-            config: { systemInstruction },
-          });
-          break;
-        } catch (err: any) {
-          lastError = err;
-          continue;
+        if (paperCache.size > 100) {
+          const firstKey = paperCache.keys().next().value;
+          if (firstKey) paperCache.delete(firstKey);
         }
       }
-    } else {
-      lastError = new Error('GEMINI_API_KEY not configured');
     }
 
-    let usedPuterFallback = false;
-    let puterReplyText: string | null = null;
-    const historyForPuter = (history && Array.isArray(history))
-      ? history.map((m: any) => ({ role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', content: m.content }))
+    const systemInstruction = buildSystemInstruction(userPlan, paperMeta.subject || paperMeta.title);
+    let lastError: any = null;
+
+    // Shared history for non-Gemini providers
+    const historyForProviders = (history && Array.isArray(history))
+      ? history.map((m: any) => ({ role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', content: cleanHistoryContent(m.content) }))
       : [];
 
-    let fallbackUserMessage = message;
-    if (extractedText) {
-      fallbackUserMessage = `--- BEGIN EXAM PAPER TEXT ---\n${extractedText.substring(0, 10000)}\n--- END EXAM PAPER TEXT ---\n\nRULES:\n- The text above IS the exam paper containing the actual questions.\n- Answer ONLY from the question text above. Do NOT use general knowledge.\n- Before answering any question, reproduce its exact wording as a blockquote (>).\n\nStudent request: ${message}`;
+    // Build the shared user message payload (same text sent to all providers)
+    let providerUserMessage = message;
+    if (extractedText && !extractionFailed) {
+      providerUserMessage =
+        `--- BEGIN EXAM PAPER TEXT ---\n` +
+        `${extractedText.substring(0, 35000)}\n` +
+        `--- END EXAM PAPER TEXT ---\n\n` +
+        `RULES:\n` +
+        `- The text above IS the exam paper containing the actual questions.\n` +
+        `- Answer ONLY from the question text above. Do NOT use general knowledge.\n` +
+        `- Before answering any question, reproduce its exact wording as a blockquote (>).\n\n` +
+        `Student request: ${message}`;
     } else if (paperInsights) {
       const metaLine = [
         paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
         paperMeta.year ? `Year: ${paperMeta.year}` : null,
         paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
       ].filter(Boolean).join(' | ');
-      
       const topicsList = Array.isArray(paperInsights.topics)
         ? paperInsights.topics.join(', ')
         : (paperInsights.topics || 'N/A');
-
-      fallbackUserMessage = 
+      providerUserMessage =
         `[Past Exam Paper — AI Analysis Context]\n` +
         `${metaLine}\n\n` +
         `SUMMARY:\n${paperInsights.summary || 'N/A'}\n\n` +
@@ -515,72 +661,58 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         `Student question: ${message}`;
     } else if (Object.keys(paperMeta).length > 0) {
       const metaLines = [
-        paperMeta.subject  ? `Subject  : ${paperMeta.subject}`  : null,
-        paperMeta.title    ? `Title    : ${paperMeta.title}`    : null,
-        paperMeta.year     ? `Year     : ${paperMeta.year}`     : null,
-        paperMeta.semester ? `Semester : ${paperMeta.semester}` : null,
+        paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
+        paperMeta.title ? `Title: ${paperMeta.title}` : null,
+        paperMeta.year ? `Year: ${paperMeta.year}` : null,
+        paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
       ].filter(Boolean).join('\n');
-      fallbackUserMessage =
+      providerUserMessage =
         `[Past Exam Paper — Subject Context]\n` +
         `The student is studying the following past exam paper:\n${metaLines}\n\n` +
         `Student question: ${message}`;
     }
 
-    // ─── Scanned PDF Check for Fallback ──────────────────────────────────────
-    const isScannedPdfNoInsights = !!activeFileData && (!extractedText || extractedText.trim().length < 50) && !paperInsights;
+    // ── STEP 1: HuggingFace (primary) ─────────────────────────────────────────
+    let usedHFFallback = false;
+    let hfReplyText: string | null = null;
+    let hfUsedModel: string | null = null;
 
-    if (!response && isScannedPdfNoInsights) {
-      console.log('[AI /chat] Gemini failed and scanned PDF with no insights detected. Direct fallback response.');
-      const scannedPdfMsg = `
-### ⚠️ Scanned PDF Detected (Fallback Mode)
-
-Our primary AI model (Gemini), which has the ability to "see" and read scanned PDFs or images, is currently offline.
-
-We have successfully connected to our secondary AI backup. However, because this PDF is a scanned image containing no selectable text, we cannot extract or read its contents in this text-only backup mode.
-
-**To continue studying right now, you can:**
-
-- **Copy & Paste**: Extract the text of the question you want help with and paste it directly into the chat.
-- **Type Manually**: Type the question or problem directly into your message.
-- **Check Back Later**: Try again in a little while once our primary visual AI systems are fully restored!
-      `.trim();
-
-      supabase.from('upsa_ai_queries').insert({
-        user_id: req.user?.id,
-        model: 'scanned-pdf-fallback',
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-        has_file: true
-      }).then(({ error }) => {
-        if (error) { }
-      });
-
-      const plan = (userPlan || 'free').toLowerCase();
-      if (conversationId && historyPlans.has(plan)) {
-        (async () => {
+    console.log('[AI /chat] Attempting HuggingFace (primary)...');
+    try {
+      const hfConfig = await getHFConfig();
+      if (hfConfig && hfConfig.apiKey) {
+        const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
+        for (const rawModel of hfModels) {
+          const modelId = getHFModelId(rawModel);
+          console.log(`[AI /chat] Trying HF model: ${modelId}`);
           try {
-            await supabase.from('upsa_ai_messages').insert([
-              { conversation_id: conversationId, role: 'user', content: message },
-              { conversation_id: conversationId, role: 'assistant', content: scannedPdfMsg },
-            ]);
-            await supabase
-              .from('upsa_ai_conversations')
-              .update({ last_message_at: new Date().toISOString() })
-              .eq('id', conversationId)
-              .eq('user_id', req.user?.id);
-          } catch (saveErr) { }
-        })();
+            hfReplyText = await askHuggingFace(modelId, hfConfig.apiKey, systemInstruction, historyForProviders, providerUserMessage);
+            usedHFFallback = true;
+            hfUsedModel = modelId;
+            console.log(`[AI /chat] HuggingFace succeeded with model: ${modelId}`);
+            break;
+          } catch (hfErr: any) {
+            console.error(`[AI /chat] HF model ${modelId} failed:`, hfErr.message);
+            lastError = hfErr;
+          }
+        }
+      } else {
+        console.warn('[AI /chat] HuggingFace config or API Key is missing in Supabase.');
       }
-
-      return res.json({ reply: scannedPdfMsg });
+    } catch (err: any) {
+      console.error('[AI /chat] HuggingFace initialization failed:', err.message);
+      lastError = err;
     }
 
-    if (!response) {
-      console.log('[AI /chat] Gemini failed or not configured. Attempting Puter fallback...');
+    // ── STEP 2: Puter (first fallback) ────────────────────────────────────────
+    let usedPuterFallback = false;
+    let puterReplyText: string | null = null;
+
+    if (!usedHFFallback) {
+      console.log('[AI /chat] HuggingFace failed. Attempting Puter fallback...');
       if (isPuterAvailable()) {
         try {
-          puterReplyText = await askPuter(systemInstruction, historyForPuter, fallbackUserMessage);
+          puterReplyText = await askPuter(systemInstruction, historyForProviders, providerUserMessage);
           usedPuterFallback = true;
           console.log('[AI /chat] Puter fallback succeeded!');
         } catch (puterErr: any) {
@@ -592,44 +724,103 @@ We have successfully connected to our secondary AI backup. However, because this
       }
     }
 
-    let usedHFFallback = false;
-    let hfReplyText: string | null = null;
-    let hfUsedModel: string | null = null;
+    // ── STEP 3: Gemini (last resort) ──────────────────────────────────────────
+    let response: any = null;
 
-    if (!response && !usedPuterFallback) {
-      console.log('[AI /chat] Puter failed or not available. Attempting Hugging Face fallback...');
+    if (!usedHFFallback && !usedPuterFallback) {
+      console.log('[AI /chat] Puter failed. Attempting Gemini as last resort...');
       try {
-        const hfConfig = await getHFConfig();
-        console.log('[AI /chat] HF config fetched:', hfConfig ? 'Successfully' : 'Failed (returned null)');
-        if (hfConfig && hfConfig.apiKey) {
-          const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
-          console.log('[AI /chat] HF Models to try:', hfModels);
+        const geminiKey = process.env.GEMINI_API_KEY;
+        const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : null;
 
-          for (const rawModel of hfModels) {
-            const modelId = getHFModelId(rawModel);
-            console.log(`[AI /chat] Trying HF model: ${modelId}`);
-            try {
-              hfReplyText = await askHuggingFace(modelId, hfConfig.apiKey, systemInstruction, historyForPuter, fallbackUserMessage);
-              usedHFFallback = true;
-              hfUsedModel = modelId;
-              console.log(`[AI /chat] HF model ${modelId} succeeded!`);
-              break;
-            } catch (hfErr: any) {
-              console.error(`[AI /chat] HF model ${modelId} failed:`, hfErr.message);
-              lastError = hfErr;
+        if (ai) {
+          const contents: any[] = [];
+          if (history && Array.isArray(history)) {
+            for (const msg of history) {
+              contents.push({
+                role: msg.role === 'user' ? 'user' : 'model',
+                parts: [{ text: cleanHistoryContent(msg.content) }],
+              });
             }
           }
+          const userParts: any[] = [];
+
+          if (activeFileData) {
+            if (extractedText && !extractionFailed) {
+              userParts.push({
+                text:
+                  `--- BEGIN EXAM PAPER TEXT ---\n` +
+                  `${extractedText.substring(0, 35000)}\n` +
+                  `--- END EXAM PAPER TEXT ---\n\n` +
+                  `RULES:\n` +
+                  `- The text above IS the exam paper containing the actual questions.\n` +
+                  `- Answer ONLY from the question text above. Do NOT use general knowledge.\n` +
+                  `- Before answering any question, reproduce its exact wording as a blockquote (>).\n`
+              });
+            } else {
+              const contextLines: string[] = [];
+              if (paperInsights) {
+                const metaLine = [
+                  paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
+                  paperMeta.year ? `Year: ${paperMeta.year}` : null,
+                  paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
+                ].filter(Boolean).join(' | ');
+                const topicsList = Array.isArray(paperInsights.topics)
+                  ? paperInsights.topics.join(', ')
+                  : (paperInsights.topics || 'N/A');
+                contextLines.push(
+                  `[Past Exam Paper — AI Analysis Context]\n${metaLine}\n\n` +
+                  `SUMMARY:\n${paperInsights.summary || 'N/A'}\n\n` +
+                  `KEY TOPICS:\n${topicsList}\n\n` +
+                  `DIFFICULTY: ${paperInsights.difficulty || 'N/A'}\n\n` +
+                  `HARDEST QUESTION:\n${paperInsights.hardest_question || 'N/A'}\n\n` +
+                  `EXAM TIPS:\n${paperInsights.exam_tips || 'N/A'}`
+                );
+              } else if (Object.keys(paperMeta).length > 0) {
+                const metaLines = [
+                  paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
+                  paperMeta.title ? `Title: ${paperMeta.title}` : null,
+                  paperMeta.year ? `Year: ${paperMeta.year}` : null,
+                  paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
+                ].filter(Boolean).join('\n');
+                contextLines.push(`[Past Exam Paper — Subject Context]\nThe student is studying the following exam:\n${metaLines}`);
+              }
+              if (contextLines.length > 0) {
+                userParts.push({ text: contextLines.join('\n\n') });
+              }
+            }
+          }
+          userParts.push({ text: message });
+          contents.push({ role: 'user', parts: userParts });
+
+          const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
+          const aiStart = performance.now();
+          for (const model of modelsToTry) {
+            try {
+              response = await ai.models.generateContent({
+                model,
+                contents,
+                config: { systemInstruction },
+              });
+              console.log(`[AI /chat] Gemini succeeded with model: ${model}`);
+              break;
+            } catch (err: any) {
+              console.error(`[AI /chat] Gemini model ${model} failed:`, err.message);
+              lastError = err;
+            }
+          }
+          t_ai += performance.now() - aiStart;
         } else {
-          console.warn('[AI /chat] Hugging Face config or API Key is missing in Supabase.');
+          lastError = new Error('GEMINI_API_KEY not configured');
         }
-      } catch (err: any) {
-        console.error('[AI /chat] Hugging Face fallback initialization failed:', err.message);
-        lastError = err;
+      } catch (geminiOuterErr: any) {
+        console.error('[AI /chat] Gemini (last resort) failed:', geminiOuterErr);
+        lastError = geminiOuterErr;
       }
     }
 
-    if (!response && !usedPuterFallback && !usedHFFallback) {
-      setAIHealth({ status: 'limited', backOnlineAt: new Date(Date.now() + 86400000).toISOString(), lastError: lastError?.message || 'All AI Fallbacks Failed' });
+    if (!usedHFFallback && !usedPuterFallback && !response) {
+      setAIHealth({ status: 'limited', backOnlineAt: new Date(Date.now() + 86400000).toISOString(), lastError: lastError?.message || 'All AI Engines Failed' });
       return res.status(429).json({
         error: 'all_engines_failed',
         message: '⚠️ All AI services are temporarily unavailable. Please use one of the buttons below to continue on an external AI service:',
@@ -643,20 +834,21 @@ We have successfully connected to our secondary AI backup. However, because this
 
     let replyText: string;
     let modelUsed: string;
-    if (response) {
+    if (usedHFFallback) {
+      replyText = hfReplyText ?? 'Sorry, I could not generate a response.';
+      modelUsed = hfUsedModel || 'huggingface';
+    } else if (usedPuterFallback) {
+      replyText = puterReplyText ?? 'Sorry, I could not generate a response.';
+      modelUsed = 'puter-gpt-4o';
+    } else {
       try {
         replyText = response.text ?? 'Sorry, I could not generate a response.';
       } catch {
         replyText = response?.candidates?.[0]?.content?.parts?.[0]?.text ?? 'Sorry, I could not generate a response.';
       }
       modelUsed = response?.model || 'gemini-2.0-flash';
-    } else if (usedPuterFallback) {
-      replyText = puterReplyText ?? 'Sorry, I could not generate a response.';
-      modelUsed = 'puter-gpt-4o';
-    } else {
-      replyText = hfReplyText ?? 'Sorry, I could not generate a response.';
-      modelUsed = hfUsedModel || 'huggingface-fallback';
     }
+    replyText = cleanHistoryContent(replyText);
 
     supabase.from('upsa_ai_queries').insert({
       user_id: req.user?.id,
@@ -689,6 +881,9 @@ We have successfully connected to our secondary AI backup. However, because this
         }
       })();
     }
+
+    const totalTime = performance.now() - startTime;
+    console.log(`[AI Profile] DB/Download: ${t_db_download.toFixed(1)}ms | Parse: ${t_extract.toFixed(1)}ms | AI: ${t_ai.toFixed(1)}ms | Total: ${totalTime.toFixed(1)}ms`);
 
     res.json({ reply: replyText });
   } catch (error: any) {
@@ -733,7 +928,175 @@ We have successfully connected to our secondary AI backup. However, because this
       });
     }
 
-    res.status(500).json({ error: 'Failed to generate AI response.' });
+    res.status(500).json({
+      error: 'server_error',
+      message: '⚠️ All AI services are temporarily unavailable. Please use one of the buttons below to continue on an external AI service:',
+      suggested_external_ais: [
+        { name: 'ChatGPT', url: 'https://chat.openai.com' },
+        { name: 'Claude', url: 'https://claude.ai' },
+        { name: 'Gemini', url: 'https://gemini.google.com' }
+      ]
+    });
+  }
+});
+
+router.get('/test-ocr/:paperId', protect, async (req: AuthRequest, res: any) => {
+  try {
+    const { paperId } = req.params;
+
+    const { data: paper, error: paperErr } = await supabase
+      .from('upsa_papers')
+      .select('title, file_url, year, semester, upsa_subjects(name)')
+      .eq('id', paperId)
+      .single();
+
+    if (paperErr || !paper) {
+      return res.status(404).json({ error: 'Paper not found in database', details: paperErr?.message });
+    }
+
+    if (!paper.file_url) {
+      return res.status(400).json({ error: 'Paper does not have a file_url configured' });
+    }
+
+    console.log(`[Test OCR] Fetching PDF from url: ${paper.file_url}`);
+    const pdfRes = await fetch(paper.file_url);
+    if (!pdfRes.ok) {
+      return res.status(500).json({ error: `Failed to download PDF. Status: ${pdfRes.status}` });
+    }
+    const arrayBuffer = await pdfRes.arrayBuffer();
+    const pdfBuffer = Buffer.from(arrayBuffer);
+
+    let numPages = 5;
+    try {
+      const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
+      const pdfData = await pdfParser(pdfBuffer);
+      numPages = pdfData.numpages || 5;
+    } catch (e) {
+      console.warn('[Test OCR] Failed to parse PDF page count:', e);
+    }
+
+    let ocrText = '';
+    let ocrSucceeded = false;
+    let ocrError: string | null = null;
+
+    try {
+      console.log(`[Test OCR] Running OCR pipeline for ${numPages} pages...`);
+      ocrText = await performOcrPipeline(pdfBuffer, numPages);
+      ocrSucceeded = !!(ocrText && ocrText.length > 50);
+    } catch (err: any) {
+      ocrError = err.message || 'Unknown OCR error';
+      console.error('[Test OCR] OCR pipeline failed:', err);
+    }
+
+    const testPrompt = `Summarize this paper in one sentence: ${ocrText.substring(0, 500)}`;
+    const systemInstruction = buildSystemInstruction('Free', (paper.upsa_subjects as any)?.name || paper.title);
+
+    // 1. Test Gemini
+    let geminiResult = { succeeded: false, response: '', modelUsed: '', error: '' };
+    try {
+      const geminiKey = process.env.GEMINI_API_KEY;
+      const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : null;
+      if (ai) {
+        const contents = [
+          {
+            role: 'user',
+            parts: [{ text: testPrompt }]
+          }
+        ];
+        const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+        let response: any = null;
+        for (const model of modelsToTry) {
+          try {
+            response = await ai.models.generateContent({
+              model,
+              contents,
+              config: { systemInstruction },
+            });
+            geminiResult.modelUsed = response?.model || model;
+            break;
+          } catch (err: any) {
+            geminiResult.error = err.message || String(err);
+          }
+        }
+        if (response) {
+          let replyText = '';
+          try {
+            replyText = response.text ?? '';
+          } catch {
+            replyText = response?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+          }
+          geminiResult.response = cleanHistoryContent(replyText);
+          geminiResult.succeeded = true;
+          geminiResult.error = '';
+        }
+      } else {
+        geminiResult.error = 'GEMINI_API_KEY not configured';
+      }
+    } catch (err: any) {
+      geminiResult.error = err.message || String(err);
+    }
+
+    // 2. Test Puter
+    let puterResult = { succeeded: false, response: '', error: '' };
+    try {
+      if (isPuterAvailable()) {
+        const puterReplyText = await askPuter(systemInstruction, [], testPrompt);
+        if (puterReplyText) {
+          puterResult.response = cleanHistoryContent(puterReplyText);
+          puterResult.succeeded = true;
+        } else {
+          puterResult.error = 'Puter returned empty response';
+        }
+      } else {
+        puterResult.error = 'Puter is not available (missing PUTER_AUTH_TOKEN)';
+      }
+    } catch (err: any) {
+      puterResult.error = err.message || String(err);
+    }
+
+    // 3. Test HuggingFace
+    let hfResult = { succeeded: false, response: '', modelUsed: '', error: '' };
+    try {
+      const hfConfig = await getHFConfig();
+      if (hfConfig && hfConfig.apiKey) {
+        const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
+        let responseText = null;
+        for (const rawModel of hfModels) {
+          const modelId = getHFModelId(rawModel);
+          try {
+            responseText = await askHuggingFace(modelId, hfConfig.apiKey, systemInstruction, [], testPrompt);
+            hfResult.modelUsed = modelId;
+            break;
+          } catch (err: any) {
+            hfResult.error = err.message || String(err);
+          }
+        }
+        if (responseText) {
+          hfResult.response = cleanHistoryContent(responseText);
+          hfResult.succeeded = true;
+          hfResult.error = '';
+        }
+      } else {
+        hfResult.error = 'HuggingFace config or API Key is missing';
+      }
+    } catch (err: any) {
+      hfResult.error = err.message || String(err);
+    }
+
+    res.json({
+      ocr: {
+        succeeded: ocrSucceeded,
+        charactersExtracted: ocrText.length,
+        preview: ocrText.substring(0, 200),
+        error: ocrError
+      },
+      gemini: geminiResult,
+      puter: puterResult,
+      huggingface: hfResult
+    });
+
+  } catch (err: any) {
+    res.status(500).json({ error: 'Unexpected test route failure', details: err.message });
   }
 });
 

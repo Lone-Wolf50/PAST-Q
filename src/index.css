@@ -367,52 +367,35 @@
 
   /* Bullet list */
   .ai-prose .ai-ul {
-    list-style: none;
-    margin: 0.55em 0 0.85em 0;
+    list-style-type: disc;
+    margin: 0.55em 0 0.85em 1.25em;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.35em;
   }
 
   /* Numbered list */
   .ai-prose .ai-ol {
-    list-style: none;
-    counter-reset: ai-counter;
-    margin: 0.55em 0 0.85em 0;
+    list-style-type: decimal;
+    margin: 0.55em 0 0.85em 1.25em;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.35em;
-  }
-  .ai-prose .ai-ol > .ai-li {
-    counter-increment: ai-counter;
-  }
-  .ai-prose .ai-ol > .ai-li::before {
-    content: counter(ai-counter) ".";
-    font-weight: 700;
-    color: #6366f1;
-    min-width: 1.5em;
-    flex-shrink: 0;
   }
 
   /* List items — shared */
   .ai-prose .ai-li {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.6em;
-    padding-left: 0.1em;
+    display: list-item;
     color: var(--text-primary);
     line-height: 1.65;
+    margin-bottom: 0.35em;
   }
 
-  /* Bullet dot for ul items */
-  .ai-prose .ai-ul > .ai-li::before {
-    content: "•";
-    font-size: 1.1em;
-    line-height: 1.55;
+  .ai-prose .ai-li:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Style bullet dots & numbers color modernly */
+  .ai-prose .ai-ul > .ai-li::marker,
+  .ai-prose .ai-ol > .ai-li::marker {
     color: #6366f1;
-    flex-shrink: 0;
+    font-weight: 700;
   }
 
   /* Nested lists */
@@ -421,8 +404,10 @@
     margin-top: 0.3em;
     margin-bottom: 0;
   }
-  .ai-prose .ai-li .ai-ul > .ai-li::before {
-    content: "◦";
+  .ai-prose .ai-li .ai-ul {
+    list-style: circle;
+  }
+  .ai-prose .ai-li .ai-ul > .ai-li::marker {
     color: #818cf8;
   }
 

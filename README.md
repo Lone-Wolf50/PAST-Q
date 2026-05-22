@@ -11,10 +11,10 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 - **Tutor Insights**: A dedicated sidebar that reveals AI-generated summaries, key focus areas, and "hardest question" solutions.
 - **Reveal Mechanism**: Advanced logic that handles on-demand insight generation while maintaining a global cache for speed.
 
-### 🤖 AI Tutor Chat
+### 🤖 Multi-Tier AI Tutor Chat & OCR
 - **Context-Aware**: The AI knows exactly which paper you are reading and answers questions based on the document text.
-- **Multi-Model Intelligence**: Primarily powered by **Google Gemini 1.5/2.0 Pro**, with a resilient fallback system using **Puter.js (Llama/GPT)**.
-- **Smart Extraction**: Automatic PDF-to-text processing for clean, accurate AI responses.
+- **High-Resiliency Multi-Tier AI**: A rock-solid, multi-engine fallback pipeline ensures the tutor is always online even during primary API blackouts.
+- **Integrated OCR Engine**: Automatic detection of scanned or unreadable PDFs with local and cloud OCR pipelines.
 
 ### 💼 Student Dashboard
 - **Browse & Filter**: Advanced filtering by academic year, semester, and department.
@@ -47,13 +47,96 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 
 ---
 
+## 🤖 AI Fallback Architecture (Detailed)
+
+PastQ relies on a state-of-the-art redundancy routing matrix to bypass network failures, API outages, and usage limits.
+
+### A. Student Chat Router (`POST /ai/chat`)
+Interactive student chats prioritize high-quality open-weights models before falling back to sandbox utilities and commercial APIs:
+
+```mermaid
+graph TD
+    A[Student Asks a Question] --> B{Tier 1: Hugging Face API}
+    B -- Succeeded --> C[Deliver Answer to Student]
+    B -- Failed / Quota Exceeded --> D{Tier 2: Puter.js GPT-4o Sandbox}
+    D -- Succeeded --> C
+    D -- Failed / Token Missing --> E{Tier 3: Google Gemini API}
+    E -- Succeeded --> C
+    E -- Failed --> F[Show Alternate Service Links to Student]
+```
+
+1. **Tier 1: Hugging Face Inference API (Primary)**
+   Attempts to resolve the question using high-performance open-weight models sequentially. If one fails, the router seamlessly hops to the next in real-time:
+   * **Model A**: `meta-llama/Llama-3.3-70B-Instruct`
+   * **Model B**: `Qwen/Qwen2.5-72B-Instruct`
+   * **Model C**: `deepseek-ai/DeepSeek-V3`
+   * **Model D**: `mistralai/Mistral-7B-Instruct-v0.3`
+2. **Tier 2: Puter.js GPT-4o Sandbox (First Fallback)**
+   If Hugging Face is unreachable or keys are exhausted, the server switches to Puter API sandbox utilizing `gpt-4o`.
+3. **Tier 3: Google Gemini API (Last Resort)**
+   If other channels fail, Gemini (`gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-2.5-flash`) acts as a highly capable last line of defense.
+
+---
+
+### B. Static Paper Insights Generator
+For heavy, asynchronous background analysis of uploaded exam papers, the order is optimized for bulk speeds:
+1. **Google Gemini** (Primary - utilizes advanced document context windows)
+2. **Puter.js** (First Fallback)
+3. **Hugging Face** (Second Fallback)
+
+---
+
+## 🔍 OCR Pipeline & `eng.traineddata`
+
+All exam PDFs — whether fully scanned, fully digital, or hybrid — are automatically analysed and routed through our intelligent OCR pipeline to ensure AI answers are always grounded in the real paper content.
+
+### Shared OCR Utility: `server/src/lib/ocr.ts`
+The entire OCR logic lives in a single, reusable module (`ocr.ts`) exported as `performOcrPipeline(pdfBuffer, numPages)`. Both the **student chat router** (`POST /ai/chat`) and the **background insights generator** (`generatePaperInsights`) import from this shared utility, guaranteeing consistent behaviour everywhere.
+
+### Hybrid PDF Detection (Critical Fix)
+University exam papers frequently follow a **hybrid layout**: the cover page (university name, instructions, date) is digitally typed (selectable text), while subsequent pages containing the actual questions are scanned images. Previously, `pdf-parse` would extract the cover page text (>50 chars) and the system would incorrectly conclude the PDF was fully readable — skipping OCR entirely and sending only the cover page to the AI, which then reported *"there are no questions in this paper"*.
+
+The detection logic now uses a **characters-per-page average threshold** to catch this case:
+
+```
+avgCharsPerPage = extractedText.length / numPages
+
+isHybridOrScanned = (extractedText.length < 50) OR (avgCharsPerPage < 250)
+```
+
+| Condition | Interpretation | Action |
+|---|---|---|
+| `extractedText < 50 chars` | Fully scanned (zero selectable text) | Trigger OCR |
+| `avgCharsPerPage < 250` | Hybrid — only cover page is typed | Trigger OCR |
+| `avgCharsPerPage ≥ 250` | Fully digital paper | Use pdf-parse text directly |
+
+### Page Limit — Expanded from 5 → 12
+The previous hard-coded limit of **5 pages** caused questions on pages 6–10 to be silently truncated. The pipeline now renders up to **12 pages** dynamically based on the PDF's actual page count, ensuring long papers with 6–12 pages of questions are fully captured.
+
+### The OCR Workflow
+1. **Parse**: `pdf-parse` extracts selectable text and the total page count (`numpages`).
+2. **Hybrid Check**: Average characters-per-page is calculated. If below `250`, the paper is flagged for OCR.
+3. **Image Rendering**: `unpdf` + `@napi-rs/canvas` render up to `min(numPages, 12)` PDF pages to PNG images at 1.5× scale.
+4. **Primary OCR**: Images are sent to **Google Cloud Vision API** (`DOCUMENT_TEXT_DETECTION`) in a single batch request.
+5. **Local Backup OCR**: If Vision credentials are missing or the API fails, **Tesseract.js** processes each page image locally.
+6. **Result**: Fully assembled OCR text (one block per page) replaces `extractedText` and is sent to the AI provider.
+
+### What is `eng.traineddata`?
+* **Definition**: `eng.traineddata` is the Tesseract English Language Dataset containing the neural network LSTM model and character classification data needed to perform offline text recognition.
+* **Generation**: Tesseract.js automatically downloads this `~5 MB` dataset from the official `tessdata` CDN during its first run on the backend.
+* **Storage Location**: Cached in the backend process root (`/server/eng.traineddata`).
+* **Version Control**: This is a runtime cache file. It is **excluded** in both `/server/.gitignore` and the root `/.gitignore` via the `*.traineddata` glob pattern. Do **not** commit it to Git.
+
+---
+
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Framer Motion.
 - **Backend**: Node.js, Express, TypeScript.
 - **Database**: Supabase (PostgreSQL) + Auth.
 - **File Storage**: Cloudflare R2 (S3-Compatible) for ultra-fast PDF delivery.
-- **AI Models**: Google Gemini API + Puter.js SDK.
+- **AI Models**: Hugging Face Serverless APIs + Puter.js SDK + Google Gemini API.
+- **OCR Engine**: Google Cloud Vision + Tesseract.js.
 - **Payments**: Paystack Integration.
 
 ---
@@ -80,6 +163,11 @@ FRONTEND_URL=http://localhost:5173
 GEMINI_API_KEY=your_gemini_key
 PUTER_AUTH_TOKEN=your_puter_token (optional fallback)
 
+# Hugging Face Inference API
+HF_TABLE_NAME=upsa_hf_config
+HF_KEY_COLUMN=hf_api_key
+HF_MODEL_COLUMN=model_names
+
 # Supabase Admin
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
@@ -97,7 +185,7 @@ PAYSTACK_SECRET_KEY=your_secret_key
 
 ---
 
-## 📦 Local Installation
+## 📦 Local Installation & Development
 
 1. **Clone & Install Dependencies**:
    ```bash
@@ -109,45 +197,44 @@ PAYSTACK_SECRET_KEY=your_secret_key
    - **Frontend**: `npm run dev` (Root)
    - **Backend**: `npm run dev` (Inside `/server`)
 
-3. **Mobile Testing**:
-   Run `npm run dev -- --host` in the root and update your `VITE_API_URL` to your local network IP (e.g., `172.30.X.X`).
-
----
-
-## 🌐 Deployment (Option A: Recommended)
-
-### Frontend (Vercel)
-The root directory contains a `vercel.json` configured for Single Page Application (SPA) routing. Simply connect your GitHub repo to Vercel and it will deploy automatically.
-
-### Backend (Render)
-The root directory contains a `render.yaml` Blueprint.
-1. Create a new **Blueprint** project on Render.com.
-2. Connect your GitHub repo.
-3. Render will automatically configure the `/server` directory as the root and deploy the Express app.
+3. **Clean Builds**:
+   All local test/diagnostic scripts (`test-pdf.js`, `test-gemini.js`, `test-hf.js`, etc.) have been completely removed from source directories (`/server/src`) and compiler output directories (`/server/dist`) to keep builds clean and production-ready.
 
 ---
 
 ## 📂 Project Structure
 
 ```
-├── public/             # Static assets
+├── public/             # Static frontend assets
 ├── server/             # Express Backend
+│   ├── dist/           # Production-ready JavaScript (compiled)
 │   ├── src/
-│   │   ├── lib/        # Core utilities (AI, Storage)
-│   │   ├── routes/     # API Endpoints
+│   │   ├── lib/        # Core utilities
+│   │   │   ├── ocr.ts          # Shared OCR pipeline (Vision API + Tesseract.js)
+│   │   │   ├── ai-insights.ts  # Background paper insights generator
+│   │   │   ├── huggingface.ts  # HuggingFace Inference API client
+│   │   │   ├── puter.ts        # Puter.js GPT-4o fallback client
+│   │   │   ├── ai-health.ts    # AI status tracker
+│   │   │   ├── supabase.ts     # Supabase admin client
+│   │   │   ├── mailer.ts       # Nodemailer email utility
+│   │   │   └── r2.ts           # Cloudflare R2 file storage
+│   │   ├── middleware/ # Auth & rate-limiting middleware
+│   │   ├── routes/     # Express route controllers
 │   │   └── index.ts    # Server Entry Point
+│   ├── tsconfig.json   # TypeScript configuration for Node.js
+│   └── .gitignore      # Server-specific Git ignore rules (ignores credentials & .traineddata)
 ├── src/                # React Frontend
-│   ├── components/     # UI Components
-│   ├── context/        # Auth & Theme State
-│   ├── lib/            # API Helpers
-│   ├── pages/          # Application Routes
-│   └── App.tsx         # Main Component
-├── render.yaml         # Render Blueprint
-└── vercel.json         # Vercel Configuration
+│   ├── assets/         # App icons & graphics
+│   ├── components/     # UI Components (Modals, Study Sidebar, Dashboard elements)
+│   ├── context/        # Global Auth & Styling Providers
+│   ├── lib/            # Axios API wrappers
+│   ├── pages/          # Layouts & routing configurations
+│   └── App.tsx         # Main entry component
+├── render.yaml         # Render Blueprint for Server deployment
+└── vercel.json         # Vercel Configuration for SPA Frontend deployment
 ```
 
 ---
 
 ## 📜 License
 Developed for the **UPSA AI Academic Initiative**. All rights reserved.
-

@@ -166,6 +166,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     sessionStorage.removeItem('dismissed_banner');
     sessionStorage.removeItem('streak_pinged');
     sessionStorage.removeItem('streak_count');
+    
+    // Clear paper browsing states from sessionStorage to prevent filter leakage across accounts
+    sessionStorage.removeItem('papers_page');
+    sessionStorage.removeItem('papers_selected_subject');
+    sessionStorage.removeItem('papers_selected_department');
+    sessionStorage.removeItem('papers_selected_year');
+    sessionStorage.removeItem('papers_selected_semester');
+    sessionStorage.removeItem('papers_search_query');
+    sessionStorage.removeItem('papers_show_saved');
+
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('dismissed_banner');

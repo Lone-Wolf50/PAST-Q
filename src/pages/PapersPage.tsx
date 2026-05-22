@@ -18,15 +18,61 @@ interface Paper {
 
 const PapersPage = () => {
   const { token, user } = useAuth();
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
-  const [selectedYear, setSelectedYear] = useState<string>('');
-  const [selectedSemester, setSelectedSemester] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSaved, setShowSaved] = useState(false);
-  const [page, setPage] = useState(1);
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(() => {
+    return sessionStorage.getItem('papers_selected_subject') || null;
+  });
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(() => {
+    return sessionStorage.getItem('papers_selected_department') || null;
+  });
+  const [selectedYear, setSelectedYear] = useState<string>(() => {
+    return sessionStorage.getItem('papers_selected_year') || '';
+  });
+  const [selectedSemester, setSelectedSemester] = useState<string>(() => {
+    return sessionStorage.getItem('papers_selected_semester') || '';
+  });
+  const [searchQuery, setSearchQuery] = useState(() => {
+    return sessionStorage.getItem('papers_search_query') || '';
+  });
+  const [showSaved, setShowSaved] = useState(() => {
+    return sessionStorage.getItem('papers_show_saved') === 'true';
+  });
+  const [page, setPage] = useState<number>(() => {
+    const saved = sessionStorage.getItem('papers_page');
+    return saved ? parseInt(saved, 10) : 1;
+  });
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [totalPapers, setTotalPapers] = useState(0);
+
+  // Save filter state to sessionStorage whenever it changes to preserve it on navigation back
+  useEffect(() => {
+    if (selectedSubject === null) sessionStorage.removeItem('papers_selected_subject');
+    else sessionStorage.setItem('papers_selected_subject', selectedSubject);
+  }, [selectedSubject]);
+
+  useEffect(() => {
+    if (selectedDepartment === null) sessionStorage.removeItem('papers_selected_department');
+    else sessionStorage.setItem('papers_selected_department', selectedDepartment);
+  }, [selectedDepartment]);
+
+  useEffect(() => {
+    sessionStorage.setItem('papers_selected_year', selectedYear);
+  }, [selectedYear]);
+
+  useEffect(() => {
+    sessionStorage.setItem('papers_selected_semester', selectedSemester);
+  }, [selectedSemester]);
+
+  useEffect(() => {
+    sessionStorage.setItem('papers_search_query', searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    sessionStorage.setItem('papers_show_saved', showSaved.toString());
+  }, [showSaved]);
+
+  useEffect(() => {
+    sessionStorage.setItem('papers_page', page.toString());
+  }, [page]);
 
   useEffect(() => {
     const handleResize = () => {

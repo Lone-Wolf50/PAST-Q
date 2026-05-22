@@ -61,6 +61,18 @@ const STARTER_QUESTIONS = [
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// Strip any PDF-reading alert blockquotes that may have been persisted in
+// localStorage or the Supabase conversation history from a previous server version.
+function cleanAlertText(content: string): string {
+  if (typeof content !== 'string') return content;
+  return content
+    // Matches the blockquote alert block greedily until two blank lines or end of string
+    .replace(/>\s*⚠️\s*\*\*(?:Exam Paper Access Alert|Document Reading Alert)\*\*:[\s\S]*?(?=\n\n[^>]|\n\n$|$)/g, '')
+    // Fallback: catch any remaining > ⚠️ lines (including multi-line blockquotes)
+    .replace(/(?:>\s*⚠️[^\n]*\n?)+/g, '')
+    .trimStart();
+}
+
 const AskAIPage = () => {
   const LOADING_MESSAGES = [
     "Analyzing your question...",
@@ -78,7 +90,12 @@ const AskAIPage = () => {
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
       const saved = localStorage.getItem('pastq_ai_messages');
-      return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
+      if (!saved) return INITIAL_MESSAGES;
+      const parsed: Message[] = JSON.parse(saved);
+      // Strip any stale alert blockquotes that were stored from a previous build
+      return parsed.map(m =>
+        m.role === 'assistant' ? { ...m, content: cleanAlertText(m.content) } : m
+      );
     } catch {
       return INITIAL_MESSAGES;
     }
@@ -109,6 +126,7 @@ const AskAIPage = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [alert, setAlert] = useState<{ show: boolean; title: string; message: string; variant: 'success' | 'error' | 'info' }>({
     show: false,
     title: '',
@@ -143,7 +161,7 @@ const AskAIPage = () => {
             const loaded: Message[] = (res.messages ?? []).map((m: any) => ({
               id: m.id,
               role: m.role as 'user' | 'assistant',
-              content: m.content,
+              content: m.role === 'assistant' ? cleanAlertText(m.content) : m.content,
               timestamp: new Date(m.created_at).getTime(),
             }));
             if (loaded.length) setMessages(loaded);
@@ -219,6 +237,14 @@ const AskAIPage = () => {
     }
   }, [messages, isLoading]);
 
+  // Auto-resize textarea based on input content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(Math.max(textareaRef.current.scrollHeight, 52), 200)}px`;
+    }
+  }, [input]);
+
   // Rotate loading text
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -281,7 +307,7 @@ const AskAIPage = () => {
       const loaded: Message[] = (res.messages ?? []).map((m: any) => ({
         id: m.id,
         role: m.role as 'user' | 'assistant',
-        content: m.content,
+        content: m.role === 'assistant' ? cleanAlertText(m.content) : m.content,
         timestamp: new Date(m.created_at).getTime(),
       }));
       setMessages(loaded.length ? loaded : INITIAL_MESSAGES);
@@ -399,7 +425,7 @@ const AskAIPage = () => {
       const history = updatedMessages
         .filter(m => m.id !== 'welcome')
         .slice(0, -1) // exclude the message we just added (it's passed as `message`)
-        .map(m => ({ role: m.role, content: m.content }));
+        .map(m => ({ role: m.role, content: cleanAlertText(m.content) }));
 
       // Clear the file selection UI immediately after reading it into memory
       setSelectedFile(null);
@@ -480,7 +506,14 @@ const AskAIPage = () => {
 
       // Try to show a friendly inline message rather than a raw alert
       const errBody = err?.body ?? err?.response;
-      if (errBody?.error === 'quota_exceeded' || errBody?.error === 'ai_disabled' || errBody?.error === 'all_engines_failed') {
+      const isKnownError = errBody?.error === 'quota_exceeded' ||
+        errBody?.error === 'ai_disabled' ||
+        errBody?.error === 'all_engines_failed' ||
+        errBody?.error === 'file_blocked' ||
+        errBody?.error === 'file_limit_reached' ||
+        errBody?.error === 'server_error';
+
+      if (isKnownError) {
         if (errBody.isMaintenance) {
           setIsMaintenance(true);
           setMaintenanceMsg(errBody.message);
@@ -499,7 +532,7 @@ const AskAIPage = () => {
           id: crypto.randomUUID(),
           role: 'assistant',
           content:
-            '❌ I was unable to connect to the AI service right now. Please check your connection or try again. You can also copy your question and continue on one of the external alternate servers below:',
+            '❌ The AI service is currently experiencing connection issues or high load. While we work to restore full service, you can copy your question and continue studying on one of the external alternate servers below:',
           timestamp: Date.now(),
           isErrorFallback: true,
         };
@@ -800,20 +833,20 @@ const AskAIPage = () => {
                       <Markdown
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          h1: ({children}) => <h1 className="ai-h1">{children}</h1>,
-                          h2: ({children}) => <h2 className="ai-h2">{children}</h2>,
-                          h3: ({children}) => <h3 className="ai-h3">{children}</h3>,
-                          h4: ({children}) => <h4 className="ai-h4">{children}</h4>,
-                          p: ({children}) => <p className="ai-p">{children}</p>,
-                          ul: ({children}) => <ul className="ai-ul">{children}</ul>,
-                          ol: ({children}) => <ol className="ai-ol">{children}</ol>,
-                          li: ({children}) => <li className="ai-li">{children}</li>,
-                          strong: ({children}) => <strong className="ai-strong">{children}</strong>,
-                          em: ({children}) => <em className="ai-em">{children}</em>,
-                          blockquote: ({children}) => <blockquote className="ai-blockquote">{children}</blockquote>,
+                          h1: ({ children }) => <h1 className="ai-h1">{children}</h1>,
+                          h2: ({ children }) => <h2 className="ai-h2">{children}</h2>,
+                          h3: ({ children }) => <h3 className="ai-h3">{children}</h3>,
+                          h4: ({ children }) => <h4 className="ai-h4">{children}</h4>,
+                          p: ({ children }) => <p className="ai-p">{children}</p>,
+                          ul: ({ children }) => <ul className="ai-ul">{children}</ul>,
+                          ol: ({ children }) => <ol className="ai-ol">{children}</ol>,
+                          li: ({ children }) => <li className="ai-li">{children}</li>,
+                          strong: ({ children }) => <strong className="ai-strong">{children}</strong>,
+                          em: ({ children }) => <em className="ai-em">{children}</em>,
+                          blockquote: ({ children }) => <blockquote className="ai-blockquote">{children}</blockquote>,
                           hr: () => <hr className="ai-hr" />,
-                          a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
-                          code: ({className, children, ...props}) => {
+                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
+                          code: ({ className, children, ...props }) => {
                             const isBlock = className?.includes('language-');
                             return isBlock ? (
                               <div className="ai-code-block-wrapper">
@@ -826,21 +859,55 @@ const AskAIPage = () => {
                               <code className="ai-inline-code" {...props}>{children}</code>
                             );
                           },
-                          pre: ({children}) => <>{children}</>,
-                          table: ({children}) => (
+                          pre: ({ children }) => <>{children}</>,
+                          table: ({ children }) => (
                             <div className="ai-table-wrapper">
                               <table className="ai-table">{children}</table>
                             </div>
                           ),
-                          thead: ({children}) => <thead className="ai-thead">{children}</thead>,
-                          tbody: ({children}) => <tbody>{children}</tbody>,
-                          tr: ({children}) => <tr className="ai-tr">{children}</tr>,
-                          th: ({children}) => <th className="ai-th">{children}</th>,
-                          td: ({children}) => <td className="ai-td">{children}</td>,
+                          thead: ({ children }) => <thead className="ai-thead">{children}</thead>,
+                          tbody: ({ children }) => <tbody>{children}</tbody>,
+                          tr: ({ children }) => <tr className="ai-tr">{children}</tr>,
+                          th: ({ children }) => <th className="ai-th">{children}</th>,
+                          td: ({ children }) => <td className="ai-td">{children}</td>,
                         }}
                       >
                         {message.content}
                       </Markdown>
+
+                      {message.isErrorFallback && (
+                        <div className="mt-4 pt-4 border-t border-theme-border/30">
+                          <p className="text-[10px] text-theme-muted uppercase font-bold tracking-wider mb-2.5">
+                            Suggested External AI Servers
+                          </p>
+                          <div className="flex flex-wrap gap-2.5">
+                            <a
+                              href="https://chat.openai.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-xl text-xs font-bold transition-all border border-emerald-500/20 active:scale-95 shadow-sm"
+                            >
+                              <span>ChatGPT</span>
+                            </a>
+                            <a
+                              href="https://claude.ai"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 rounded-xl text-xs font-bold transition-all border border-orange-500/20 active:scale-95 shadow-sm"
+                            >
+                              <span>Claude</span>
+                            </a>
+                            <a
+                              href="https://gemini.google.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 rounded-xl text-xs font-bold transition-all border border-blue-500/20 active:scale-95 shadow-sm"
+                            >
+                              <span>Gemini</span>
+                            </a>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -896,15 +963,17 @@ const AskAIPage = () => {
             <form
               onSubmit={handleSubmit}
               className={clsx(
-                "relative flex items-center group",
+                "relative flex items-end group",
                 !canSend && "opacity-50 pointer-events-none"
               )}
             >
-              <input
+              <textarea
+                ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={canSend ? "Ask your academic question..." : "Limit reached."}
-                className="w-full glass-panel-premium glass-panel-premium-hover p-4 pr-24 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 text-sm text-theme-primary font-medium placeholder:text-theme-muted transition-all"
+                rows={1}
+                className="w-full glass-panel-premium glass-panel-premium-hover py-3.5 pl-4 pr-[100px] rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 text-sm text-theme-primary font-medium placeholder:text-theme-muted transition-all resize-none min-h-[52px] max-h-[200px] overflow-y-auto scrollbar-hide align-bottom"
                 disabled={!canSend || isLoading}
               />
               <input
@@ -915,7 +984,7 @@ const AskAIPage = () => {
                 accept=".pdf,.doc,.docx,.txt"
               />
 
-              <div className="absolute right-3 flex items-center gap-1.5">
+              <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => {

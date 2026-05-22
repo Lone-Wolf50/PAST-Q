@@ -27,10 +27,18 @@ export async function apiFetch(path: string, { method = 'GET', body, token }: Ap
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await res.json();
+  let data: any;
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    data = await res.json().catch(() => null);
+  } else {
+    const text = await res.text().catch(() => '');
+    data = { error: 'server_error', message: text || 'An unexpected server error occurred.' };
+  }
+
   if (!res.ok) {
     checkSessionExpiry(res, !!token);
-    const err = new Error(data.message || data.error || 'Something went wrong.') as any;
+    const err = new Error(data?.message || data?.error || 'Something went wrong.') as any;
     err.status = res.status;
     err.body = data; // preserve full structured body for callers
     throw err;
@@ -56,10 +64,19 @@ export async function apiFetchMultipart(
     body: formData,
   });
 
-  const data = await res.json();
+  let data: any;
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    data = await res.json().catch(() => null);
+  } else {
+    const text = await res.text().catch(() => '');
+    data = { error: 'server_error', message: text || 'An unexpected server error occurred.' };
+  }
+
   if (!res.ok) {
     checkSessionExpiry(res, !!token);
-    throw new Error(data.error || 'Something went wrong.');
+    throw new Error(data?.error || data?.message || 'Something went wrong.');
   }
   return data;
 }
+

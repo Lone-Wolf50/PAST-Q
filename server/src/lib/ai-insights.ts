@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import { getAIHealth, setAIHealth } from './ai-health';
 import { askPuter, isPuterAvailable } from './puter';
 import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from './huggingface';
+import { performOcrPipeline } from './ocr';
 const pdf = require('pdf-parse');
 
 // ── In-memory processing tracker ────────────────────────────────────────────
@@ -83,14 +84,35 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
 
     // ── Global PDF Extraction ───────────────────────────────────────────────
     let extractedText = "";
-    try {
+    let numPages = 1;
+    let extractionFailed = false;
 
+    try {
       const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
       const pdfData = await pdfParser(pdfBuffer);
-      extractedText = pdfData.text || "";
-
+      extractedText = (pdfData.text || "").trim();
+      numPages = pdfData.numpages || 1;
+      console.log(`[AI Insights] Parsed PDF. Pages: ${numPages}, Selectable text length: ${extractedText.length}`);
     } catch (pdfErr: any) {
+      console.error(`[AI Insights] Failed to parse PDF:`, pdfErr.message);
+      extractionFailed = true;
+    }
 
+    // Handle scanned/hybrid PDFs during background insights extraction as well!
+    const avgCharsPerPage = numPages > 0 ? extractedText.length / numPages : 0;
+    const isHybridOrScanned = extractedText.length < 50 || avgCharsPerPage < 250;
+
+    if (isHybridOrScanned || extractionFailed) {
+      console.log(`[AI Insights] Scanned/Hybrid PDF detected (Average chars per page: ${avgCharsPerPage.toFixed(1)}). Triggering OCR...`);
+      try {
+        const ocrText = await performOcrPipeline(pdfBuffer, numPages);
+        if (ocrText && ocrText.length > 50) {
+          extractedText = ocrText;
+          console.log(`[AI Insights] OCR succeeded. Extracted length: ${extractedText.length}`);
+        }
+      } catch (ocrErr: any) {
+        console.error(`[AI Insights] OCR pipeline failed during insights generation:`, ocrErr.message);
+      }
     }
 
     const geminiPrompt = extractedText
