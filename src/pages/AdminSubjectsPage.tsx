@@ -23,6 +23,51 @@ const AdminSubjectsPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
+  // Draft Persistence States
+  const [draftName, setDraftName] = useState('');
+  const [draftCode, setDraftCode] = useState('');
+
+  // Unified closeModal handler
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setEditingSubject(null);
+    setDraftName('');
+    setDraftCode('');
+    localStorage.removeItem('admin_subject_upload_draft');
+  };
+
+  // Restore Draft on Mount
+  useEffect(() => {
+    const savedDraft = localStorage.getItem('admin_subject_upload_draft');
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        setDraftName(parsed.name || '');
+        setDraftCode(parsed.code || '');
+        setShowModal(true);
+        setAlert({
+          show: true,
+          title: 'Draft Restored',
+          message: 'Your unsaved subject form draft was restored.',
+          variant: 'success'
+        });
+      } catch (e) {
+        console.error('Failed to parse subject upload draft', e);
+      }
+    }
+  }, []);
+
+  // Save Draft to localStorage
+  useEffect(() => {
+    if (showModal && !editingSubject) {
+      const draft = {
+        name: draftName,
+        code: draftCode
+      };
+      localStorage.setItem('admin_subject_upload_draft', JSON.stringify(draft));
+    }
+  }, [showModal, editingSubject, draftName, draftCode]);
+
   // Reset page when searching
   useEffect(() => {
     setCurrentPage(1);
@@ -104,8 +149,7 @@ const AdminSubjectsPage = () => {
           body: { name: fd.get('name'), code: fd.get('code') },
           token
         });
-        setShowModal(false);
-        setEditingSubject(null);
+        handleCloseModal();
         fetchSubjects();
       } else {
         const res = await apiFetch('/hq-management/subjects', {
@@ -113,7 +157,7 @@ const AdminSubjectsPage = () => {
           body: { name: fd.get('name'), code: fd.get('code') },
           token
         });
-        setShowModal(false);
+        handleCloseModal();
         fetchSubjects();
         setPostCreatePrompt({
           show: true,
@@ -124,7 +168,7 @@ const AdminSubjectsPage = () => {
     } catch (err: any) {
       // 409 = server detected a duplicate name or code in the database
       if (err?.status === 409) {
-        setShowModal(false);
+        handleCloseModal();
         setAlert({
           show: true,
           title: 'Duplicate Subject',
@@ -146,6 +190,8 @@ const AdminSubjectsPage = () => {
 
   const openEditModal = (subject: any) => {
     setEditingSubject(subject);
+    setDraftName(subject.name || '');
+    setDraftCode(subject.code || '');
     setShowModal(true);
   };
 
@@ -407,7 +453,8 @@ const AdminSubjectsPage = () => {
                   name="name"
                   type="text"
                   required
-                  defaultValue={editingSubject?.name || ''}
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
                   className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:outline-none focus:border-indigo-500/50"
                   placeholder="e.g. Microeconomics"
                 />
@@ -418,7 +465,8 @@ const AdminSubjectsPage = () => {
                   name="code"
                   type="text"
                   required
-                  defaultValue={editingSubject?.code || ''}
+                  value={draftCode}
+                  onChange={(e) => setDraftCode(e.target.value)}
                   className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary uppercase font-mono focus:outline-none focus:border-indigo-500/50"
                   placeholder="e.g. ECON201"
                 />
@@ -426,7 +474,7 @@ const AdminSubjectsPage = () => {
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-theme-border">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={handleCloseModal}
                   className="px-6 py-2.5 rounded-xl text-theme-secondary font-semibold hover:bg-theme-surface transition-colors"
                 >
                   Cancel

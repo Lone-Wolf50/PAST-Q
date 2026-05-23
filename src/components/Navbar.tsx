@@ -36,49 +36,56 @@ const Navbar = () => {
           </Link>
 
           {isLoggedIn && (
-            <div className="hidden md:flex items-center gap-1">
+            <ul className="hidden md:flex items-center gap-6 desktop-cool-nav ml-6">
               {desktopNavLinks.map((link) => {
                 const isActive = location.pathname === link.path;
                 const Icon = link.icon;
+
+                let iColor = '#a955ff';
+                let jColor = '#ea51ff';
+                if (link.name === 'Papers') {
+                  iColor = '#56CCF2';
+                  jColor = '#2F80ED';
+                } else if (link.name === 'Pricing') {
+                  iColor = '#FF9966';
+                  jColor = '#FF5E62';
+                }
+
                 return (
-                  <Link
+                  <li
                     key={link.name}
-                    to={link.path}
+                    style={{ '--i': iColor, '--j': jColor } as React.CSSProperties}
                     className={clsx(
-                      'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300',
-                      isActive
-                        ? 'text-theme-primary bg-theme-surface-2'
-                        : 'text-theme-muted hover:text-theme-primary hover:bg-theme-surface'
+                      'nav-item',
+                      isActive && 'active-item'
                     )}
                   >
-                    <Icon className="w-4 h-4" />
-                    {link.name}
-                  </Link>
+                    <Link to={link.path} className="w-full h-full flex justify-center items-center">
+                      <span className="icon-wrapper">
+                        <Icon className={clsx("w-6 h-6", isActive ? "text-indigo-400" : "text-theme-secondary")} />
+                      </span>
+                      <span className="title">{link.name}</span>
+                    </Link>
+                  </li>
                 );
               })}
 
-              {/* Ask AI — desktop: glowing animated border button */}
-              <Link
-                to="/ask-ai"
-                className="relative inline-flex h-10 items-center justify-center overflow-hidden rounded-full p-[2px] ml-2 group"
+              {/* Ask AI */}
+              <li
+                style={{ '--i': '#a855f7', '--j': '#7EE8FA' } as React.CSSProperties}
+                className={clsx(
+                  'nav-item',
+                  location.pathname === '/ask-ai' && 'active-item'
+                )}
               >
-                {/* spinning conic gradient border */}
-                <span className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#a855f7_0%,#6366f1_50%,#a855f7_100%)]" />
-                {/* outer glow halo */}
-                <span className="absolute inset-0 rounded-full blur-md opacity-60 bg-gradient-to-r from-indigo-500 to-purple-500 group-hover:opacity-90 transition-opacity" />
-                <span 
-                  className="relative z-10 inline-flex h-full w-full items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-bold tracking-wide transition-all"
-                  style={{ 
-                    backgroundColor: 'var(--bg-base)',
-                    color: 'var(--text-primary)',
-                    textShadow: '0 0 12px rgba(139,92,246,0.8), 0 0 24px rgba(99,102,241,0.5)'
-                  }}
-                >
-                  <Sparkles className="w-4 h-4 text-indigo-400 group-hover:text-purple-400 transition-colors drop-shadow-[0_0_6px_rgba(139,92,246,0.9)]" />
-                  Ask AI
-                </span>
-              </Link>
-            </div>
+                <Link to="/ask-ai" className="w-full h-full flex justify-center items-center">
+                  <span className="icon-wrapper">
+                    <BrainCircuit className={clsx("w-6 h-6", location.pathname === '/ask-ai' ? "text-indigo-400" : "text-theme-secondary")} />
+                  </span>
+                  <span className="title">Ask AI</span>
+                </Link>
+              </li>
+            </ul>
           )}
         </div>
 

@@ -7,8 +7,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   // Skip cross-origin requests and API calls
   if (event.request.url.includes('/api/')) {
+    return;
+  }
+
+  // Skip navigation requests to let the browser/Vite handle client routing (like /login)
+  if (event.request.mode === 'navigate') {
     return;
   }
 

@@ -71,6 +71,63 @@ const AdminPaymentsPage = () => {
     }
   };
 
+  const handleExportReport = () => {
+    if (payments.length === 0) {
+      setAlert({
+        show: true,
+        title: 'No Data',
+        message: 'There are no transactions to export.',
+        variant: 'info'
+      });
+      return;
+    }
+
+    const headers = ['Transaction ID', 'Student Name', 'Student Email', 'Plan', 'Amount (GHS)', 'Status', 'Date'];
+    
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvRows = [
+      headers.join(','),
+      ...payments.map(p => [
+        escapeCSV(p.reference),
+        escapeCSV(p.upsa_users?.full_name),
+        escapeCSV(p.upsa_users?.email),
+        escapeCSV(p.plan),
+        escapeCSV(p.amount),
+        escapeCSV(p.status),
+        escapeCSV(new Date(p.created_at).toLocaleDateString())
+      ].join(','))
+    ];
+
+    const csvContent = '\uFEFF' + csvRows.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `payment_report_${dateStr}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setAlert({
+      show: true,
+      title: 'Export Successful',
+      message: `Successfully exported ${payments.length} transactions to CSV.`,
+      variant: 'success'
+    });
+  };
+
   const filteredPayments = payments.filter(p => {
     const matchSearch = !searchTerm || 
       p.reference.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -106,7 +163,10 @@ const AdminPaymentsPage = () => {
               <h1 className="text-3xl font-bold text-theme-primary mb-2">Revenue & Transactions</h1>
               <p className="text-theme-muted text-sm">Monitor system financial health and manage subscriber statuses.</p>
             </div>
-            <button className="flex items-center gap-2 px-5 py-2.5 bg-theme-surface border border-theme-border rounded-xl text-theme-primary font-bold hover:bg-theme-surface-2 transition-all">
+            <button 
+              onClick={handleExportReport}
+              className="flex items-center gap-2 px-5 py-2.5 bg-theme-surface border border-theme-border rounded-xl text-theme-primary font-bold hover:bg-theme-surface-2 transition-all"
+            >
               <ArrowUpRight className="w-4 h-4" />
               Export Report
             </button>

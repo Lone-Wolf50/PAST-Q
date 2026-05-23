@@ -14,6 +14,7 @@ import { apiFetch, apiFetchMultipart } from '../lib/api';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
 import BulkUploadModal from '../components/BulkUploadModal';
+import { getBulkUploadDraft } from '../lib/bulkUploadDb';
 
 const AdminPapersPage = () => {
   const location = useLocation();
@@ -47,6 +48,14 @@ const AdminPapersPage = () => {
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [externalUrl, setExternalUrl] = useState('');
 
+  // Draft Persistence States
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftSubjectId, setDraftSubjectId] = useState('');
+  const [draftYear, setDraftYear] = useState('');
+  const [draftSemester, setDraftSemester] = useState('First');
+  const [draftAnswerUrl, setDraftAnswerUrl] = useState('');
+  const [isDraftRestored, setIsDraftRestored] = useState(false);
+
   // Filters
   const [filterSubject, setFilterSubject] = useState('');
   const [filterYear, setFilterYear] = useState('');
@@ -61,7 +70,74 @@ const AdminPapersPage = () => {
 
   // Editing state
   const [editingPaper, setEditingPaper] = useState<any>(null);
-  const [defaultSubjectId, setDefaultSubjectId] = useState<string>('');
+
+  // Restore Draft on Mount
+  useEffect(() => {
+    const savedDraft = localStorage.getItem('admin_paper_upload_draft');
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        setDraftTitle(parsed.title || '');
+        setDraftSubjectId(parsed.subjectId || '');
+        setDraftYear(parsed.year || '');
+        setDraftSemester(parsed.semester || 'First');
+        setDraftAnswerUrl(parsed.answerUrl || '');
+        setUploadMode(parsed.uploadMode || 'file');
+        setHasAnswers(!!parsed.hasAnswers);
+        setAnswerMode(parsed.answerMode || 'file');
+        setExternalUrl(parsed.externalUrl || '');
+        setIsDraftRestored(true);
+        setShowModal(true);
+        setAlert({
+          show: true,
+          title: 'Draft Restored',
+          message: 'Your unsaved paper upload form draft was restored. Note: You will need to re-select any local PDF file(s).',
+          variant: 'success'
+        });
+      } catch (e) {
+        console.error('Failed to parse paper upload draft', e);
+      }
+    }
+  }, []);
+
+  // Restore Bulk Draft on Mount
+  useEffect(() => {
+    const checkBulkDraft = async () => {
+      try {
+        const draftRows = await getBulkUploadDraft();
+        if (draftRows && draftRows.length > 0) {
+          setShowBulkModal(true);
+          setAlert({
+            show: true,
+            title: 'Bulk Draft Restored',
+            message: `Your unsaved bulk upload session with ${draftRows.length} paper(s) was restored.`,
+            variant: 'success'
+          });
+        }
+      } catch (e) {
+        console.error('Failed to restore bulk upload draft', e);
+      }
+    };
+    checkBulkDraft();
+  }, []);
+
+  // Save Draft to localStorage
+  useEffect(() => {
+    if (showModal && !editingPaper) {
+      const draft = {
+        title: draftTitle,
+        subjectId: draftSubjectId,
+        year: draftYear,
+        semester: draftSemester,
+        answerUrl: draftAnswerUrl,
+        uploadMode,
+        hasAnswers,
+        answerMode,
+        externalUrl
+      };
+      localStorage.setItem('admin_paper_upload_draft', JSON.stringify(draft));
+    }
+  }, [showModal, editingPaper, draftTitle, draftSubjectId, draftYear, draftSemester, draftAnswerUrl, uploadMode, hasAnswers, answerMode, externalUrl]);
 
   // Insight preview modal
   const [insightModal, setInsightModal] = useState<{ show: boolean; paper: any | null; insights: any | null; loading: boolean }>({
@@ -138,7 +214,7 @@ const AdminPapersPage = () => {
       const targetSubject = subjects.find(s => s.code === location.state.openUploadForSubjectCode);
       if (targetSubject) {
         resetModal();
-        setDefaultSubjectId(targetSubject.id);
+        setDraftSubjectId(targetSubject.id);
         setShowModal(true);
         if (location.state.filterToSubject === location.state.openUploadForSubjectCode) {
           setFilterSubject(targetSubject.code);
@@ -188,7 +264,13 @@ const AdminPapersPage = () => {
     setExternalUrl('');
     setHasAnswers(false);
     setAnswerMode('file');
-    setDefaultSubjectId('');
+    setDraftTitle('');
+    setDraftSubjectId('');
+    setDraftYear('');
+    setDraftSemester('First');
+    setDraftAnswerUrl('');
+    setIsDraftRestored(false);
+    localStorage.removeItem('admin_paper_upload_draft');
   };
 
   const handleOpenEdit = (paper: any) => {
@@ -197,6 +279,11 @@ const AdminPapersPage = () => {
     setExternalUrl(paper.file_url);
     setHasAnswers(paper.has_answers);
     setAnswerMode(paper.answer_url ? 'url' : 'file');
+    setDraftTitle(paper.title || '');
+    setDraftSubjectId(paper.subject_id || '');
+    setDraftYear(paper.year || '');
+    setDraftSemester(paper.semester || 'First');
+    setDraftAnswerUrl(paper.answer_url || '');
     setShowModal(true);
   };
 
@@ -777,7 +864,8 @@ const AdminPapersPage = () => {
                         <input
                           name="title"
                           required
-                          defaultValue={editingPaper?.title || ''}
+                          value={draftTitle}
+                          onChange={(e) => setDraftTitle(e.target.value)}
                           className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none transition-colors"
                           placeholder="e.g. 2023 Principles of Management"
                         />
@@ -788,7 +876,8 @@ const AdminPapersPage = () => {
                         <select
                           name="subject_id"
                           required
-                          defaultValue={editingPaper?.subject_id || defaultSubjectId || ''}
+                          value={draftSubjectId}
+                          onChange={(e) => setDraftSubjectId(e.target.value)}
                           className="theme-select"
                         >
                           <option value="">Select Subject</option>
@@ -803,7 +892,8 @@ const AdminPapersPage = () => {
                             name="year"
                             required
                             maxLength={4}
-                            defaultValue={editingPaper?.year || ''}
+                            value={draftYear}
+                            onChange={(e) => setDraftYear(e.target.value)}
                             className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none"
                             placeholder="2024"
                           />
@@ -813,7 +903,8 @@ const AdminPapersPage = () => {
                           <select
                             name="semester"
                             required
-                            defaultValue={editingPaper?.semester || 'First'}
+                            value={draftSemester}
+                            onChange={(e) => setDraftSemester(e.target.value)}
                             className="theme-select"
                           >
                             <option value="First">First Semester</option>
@@ -865,6 +956,11 @@ const AdminPapersPage = () => {
                                 {pdfFiles.length > 0 ? `${pdfFiles.length} file(s) selected` : 'Choose PDF file(s)'}
                               </span>
                             </label>
+                            {isDraftRestored && pdfFiles.length === 0 && (
+                              <p className="text-[10px] text-amber-400 font-bold mt-1 text-center animate-pulse">
+                                ⚠️ Draft restored! Please re-select the local PDF file(s) to upload.
+                              </p>
+                            )}
                           </div>
                         ) : (
                           <div className="relative">
@@ -934,6 +1030,8 @@ const AdminPapersPage = () => {
                               <input
                                 type="url"
                                 name="answer_url"
+                                value={draftAnswerUrl}
+                                onChange={(e) => setDraftAnswerUrl(e.target.value)}
                                 placeholder="https://example.com/answer.pdf"
                                 className="w-full bg-theme-surface border border-emerald-500/30 rounded-xl py-2.5 pl-9 pr-4 text-xs text-theme-primary outline-none focus:border-emerald-500/60"
                               />
@@ -1179,6 +1277,10 @@ const AdminPapersPage = () => {
           onClose={() => setShowBulkModal(false)}
           fetchPapers={fetchPapers}
           fetchSubjects={fetchSubjects}
+          onEditPaper={(paper) => {
+            setShowBulkModal(false);
+            handleOpenEdit(paper);
+          }}
         />
       )}
     </div>

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { apiFetch, apiFetchMultipart } from '../lib/api';
+import { saveBulkUploadDraft, getBulkUploadDraft, clearBulkUploadDraft, type BulkRow } from '../lib/bulkUploadDb';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,17 +23,6 @@ interface Paper {
   semester: string;
 }
 
-interface BulkRow {
-  id: string;           // local UUID for React key
-  file: File;
-  title: string;
-  subjectId: string;
-  year: string;
-  semester: string;
-  status: 'idle' | 'uploading' | 'done' | 'error';
-  errorMsg?: string;
-  forceUpload?: boolean;
-}
 
 interface Props {
   subjects: Subject[];
@@ -230,11 +220,18 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleClose = () => {
+  const isLoadedRef = useRef(false);
+
+  const handleClose = async () => {
     const hasUnuploaded = rows.some(r => r.status === 'idle' || r.status === 'error');
     if (hasUnuploaded && !allDone) {
       setShowCloseConfirm(true);
     } else {
+      try {
+        await clearBulkUploadDraft();
+      } catch (err) {
+        console.error('Failed to clear bulk upload draft', err);
+      }
       onClose();
     }
   };
@@ -242,6 +239,41 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   useEffect(() => {
     setSubjects([...initialSubjects].sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim())));
   }, [initialSubjects]);
+
+  // Load draft rows from IndexedDB on mount
+  useEffect(() => {
+    const loadDraft = async () => {
+      try {
+        const draftRows = await getBulkUploadDraft();
+        if (draftRows && draftRows.length > 0) {
+          setRows(draftRows);
+        }
+      } catch (err) {
+        console.error('Failed to load bulk upload draft', err);
+      } finally {
+        isLoadedRef.current = true;
+      }
+    };
+    loadDraft();
+  }, []);
+
+  // Save rows to IndexedDB whenever rows change
+  useEffect(() => {
+    if (!isLoadedRef.current) return;
+
+    const saveDraft = async () => {
+      try {
+        if (rows.length > 0) {
+          await saveBulkUploadDraft(rows);
+        } else {
+          await clearBulkUploadDraft();
+        }
+      } catch (err) {
+        console.error('Failed to save bulk upload draft', err);
+      }
+    };
+    saveDraft();
+  }, [rows]);
 
   // ── File addition ──────────────────────────────────────────────────────────
 
@@ -411,7 +443,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                 <h3 className="text-xl font-bold text-theme-primary">{doneCount} Paper{doneCount !== 1 ? 's' : ''} Uploaded!</h3>
                 <p className="text-sm text-theme-muted">Your papers have been saved to the database.</p>
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="mt-2 px-6 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-sm transition-all"
                 >
                   Done
@@ -783,7 +815,14 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
 
             <div className="flex flex-col gap-3">
               <button
-                onClick={onClose}
+                onClick={async () => {
+                  try {
+                    await clearBulkUploadDraft();
+                  } catch (err) {
+                    console.error('Failed to clear bulk upload draft', err);
+                  }
+                  onClose();
+                }}
                 className="w-full py-3.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] flex justify-center items-center text-sm"
               >
                 Yes, Discard Them

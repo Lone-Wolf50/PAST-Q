@@ -42,8 +42,16 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 ### 🛡️ Admin HQ Portal
 - **Centralized Management**: Full control over papers, subjects, and student records.
 - **Bulk Upload Workflow**: High-efficiency spreadsheet-style interface for uploading hundreds of papers simultaneously with real-time duplicate detection.
+- **Form Draft Persistence**: Admin upload/add forms (Papers & Subjects) automatically save to `localStorage` as you type. If the page refreshes accidentally, the modal re-opens with all fields restored — only the file picker must be re-selected (browser security restriction). A clear notice is shown to remind the admin.
+- **Payment Report Export**: The Revenue & Transactions page features a fully functional **Export Report** button that generates and downloads a UTF-8 CSV file (`payment_report_YYYY-MM-DD.csv`) covering all transaction records (Transaction ID, Student Name, Email, Plan, Amount, Status, Date) with proper comma and quote escaping for Excel compatibility.
 - **AI Health Monitoring**: Real-time status indicators for API quota and processing status.
 - **Live Processing Logs**: Visual feedback for background PDF analysis and insight generation.
+
+### 🔒 AI Academic Guardrails (Strict)
+- **Off-Topic Refusal**: The PastQ AI Tutor is strictly restricted to academic, educational, and course-related topics.
+- **Zero Leakage Policy**: The AI is explicitly forbidden from including **any** answer, score, result, fact, or detail for an off-topic query inside its refusal (e.g. it will NOT say "I can't answer sports questions, but Man United beat Chelsea 2-1"). Non-academic queries receive a polite refusal and an invitation to ask an academic question — nothing more.
+- **Broad Scope**: Covers sports scores, celebrity gossip, pop culture, movies, music, gaming, general leisure trivia, and all other non-academic topics.
+- **Single Control Point**: Enforced at the very top of `buildSystemInstruction()` in `server/src/routes/ai.ts`, which is shared by all three AI provider tiers (HuggingFace, Puter, Gemini).
 
 ---
 
