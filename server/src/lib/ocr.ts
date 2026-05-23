@@ -94,6 +94,11 @@ export async function performOcrPipeline(pdfBuffer: Buffer, numPages: number): P
   }
 
   // Step 2: Tesseract.js OCR
+  if (process.env.NODE_ENV === 'production' || process.env.DISABLE_LOCAL_OCR === 'true') {
+    console.warn('[OCR Pipeline] Tesseract.js local OCR is disabled in production to protect the Node event loop and prevent memory depletion.');
+    throw new Error('Local Tesseract OCR fallback is disabled in production to guarantee server performance. Please configure a valid Google Cloud Vision key.');
+  }
+
   try {
     console.log('[OCR Pipeline] Attempting Tesseract.js OCR...');
     let ocrText = '';

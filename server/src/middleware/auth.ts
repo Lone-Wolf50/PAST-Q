@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../lib/supabase';
+import { getCachedSession, setCachedSession } from '../lib/redis';
 
 export interface AuthRequest extends Request {
   user?: { id: string; email: string; plan: string; role: string };
@@ -42,17 +43,36 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       return;
     }
 
-    // Verify user status in DB for real-time enforcement
-    const { data: user, error } = await supabase
-      .from('upsa_users')
-      .select('status, session_version')
-      .eq('id', decoded.id)
-      .single();
+    // Verify user status in DB / Cache for real-time enforcement
+    let user = await getCachedSession(decoded.id);
+    let cacheHit = true;
 
-    if (error || !user) {
-      console.warn(`🔐 Auth failed: User account not found for ID ${decoded.id}`);
-      res.status(401).json({ error: 'User account not found.' });
-      return;
+    if (!user) {
+      cacheHit = false;
+      const { data: dbUser, error } = await supabase
+        .from('upsa_users')
+        .select('status, session_version')
+        .eq('id', decoded.id)
+        .single();
+
+      if (error || !dbUser) {
+        console.warn(`🔐 Auth failed: User account not found for ID ${decoded.id}`);
+        res.status(401).json({ error: 'User account not found.' });
+        return;
+      }
+
+      user = {
+        status: dbUser.status || 'active',
+        session_version: dbUser.session_version ?? 0,
+      };
+
+      // Populate Cache asynchronously
+      setCachedSession(decoded.id, user).catch(() => {});
+    }
+
+    if (cacheHit) {
+      // Optional logging to verify cache hits in dev environment
+      // console.log(`⚡ [Redis] Session cache HIT for user: ${decoded.email}`);
     }
 
     if (decoded.session_version !== undefined && user.session_version !== undefined && user.session_version !== null) {

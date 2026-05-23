@@ -1,3 +1,7 @@
+// ── Sentry must be initialized before any other imports ──────────────────────
+import './instrument';
+import * as Sentry from '@sentry/node';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -14,6 +18,8 @@ import aiRouter from './routes/ai';
 import supportRouter from './routes/support';
 import streaksRouter from './routes/streaks';
 import { supabase } from './lib/supabase';
+import { redis } from './lib/redis';
+import RedisStore from 'rate-limit-redis';
 
 dotenv.config();
 
@@ -47,18 +53,52 @@ app.use(cors(corsOptions));
 
 // ── Security Middlewares ───────────────────────────────────────────────────────
 app.use(helmet());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Specific body parser overrides MUST come before the global 1MB body parser:
+// Allow larger payloads on the AI chat route for base64 encoded PDF uploads
+app.use('/api/ai/chat', express.json({ limit: '15mb' }));
+app.use('/api/ai/chat', express.urlencoded({ limit: '15mb', extended: true }));
+
+// Limit global JSON payloads to 1MB. Admin file uploads use multer (memory storage)
+// on specific routes and bypass this limit — they are not affected.
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
 // ── Global Rate Limiting ───────────────────────────────────────────────────────
+const apiLimiterStore = redis
+  ? new RedisStore({
+      sendCommand: (...args: string[]) => redis!.call(args[0], ...args.slice(1)) as Promise<any>,
+    })
+  : undefined;
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500, // Increased to accommodate dashboard auto-refreshes
   standardHeaders: true,
   legacyHeaders: false,
+  store: apiLimiterStore,
   message: { error: 'Too many requests, please try again later.' },
 });
 app.use('/api', apiLimiter);
+
+// ── Strict AI Rate Limiting ──────────────────────────────────────────────────
+// Expensive AI operations are limited to 30 requests per 15 minutes to protect
+// API budgets and prevent loop-blocking abuse.
+const aiLimiterStore = redis
+  ? new RedisStore({
+      sendCommand: (...args: string[]) => redis!.call(args[0], ...args.slice(1)) as Promise<any>,
+      prefix: 'rl:ai:',
+    })
+  : undefined;
+
+const aiChatLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Max 30 AI queries per 15 minutes per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: aiLimiterStore,
+  message: { error: 'You are sending AI queries too quickly. Please try again after 15 minutes.' },
+});
+app.use('/api/ai/chat', aiChatLimiter);
 
 // ── Root Route ────────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
@@ -117,6 +157,10 @@ app.use((req, res) => {
   });
 });
 
+// ── Sentry Error Handler (must be before the global error handler) ─────────────
+// This captures all unhandled Express errors and sends them to Sentry.
+Sentry.setupExpressErrorHandler(app);
+
 // ── Global Error Handler ───────────────────────────────────────────────────────
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('❌ GLOBAL ERROR:', err);
@@ -125,13 +169,17 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
-// ── Start Server ───────────────────────────────────────────────────────────────
+// ── Process-Level Error Handlers ──────────────────────────────────────────────
+// On Vercel (serverless), processes do not restart — so we log but do NOT call
+// process.exit(1). Sentry captures the error for alerting regardless.
 process.on('uncaughtException', (err) => {
-
+  console.error('🔴 UNCAUGHT EXCEPTION — process will continue (Vercel serverless):', err);
+  Sentry.captureException(err);
 });
 
 process.on('unhandledRejection', (reason) => {
-
+  console.error('🔴 UNHANDLED PROMISE REJECTION:', reason);
+  Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
 if (process.env.VERCEL !== '1') {

@@ -6,6 +6,7 @@ import fs from 'fs';
 import { supabase } from '../lib/supabase';
 import { protect, adminOnly, AuthRequest } from '../middleware/auth';
 import { uploadToR2, deleteFromR2, keyFromUrl } from '../lib/r2';
+import { invalidateCachedSession } from '../lib/redis';
 import { getAIHealth } from '../lib/ai-health';
 import { generatePaperInsights, getProcessingState, isProcessing } from '../lib/ai-insights';
 
@@ -342,6 +343,7 @@ router.patch('/users/:id/plan', async (req: AuthRequest, res: Response) => {
   if (!validPlans.includes(plan)) { res.status(400).json({ error: 'Invalid plan.' }); return; }
   try {
     await supabase.from('upsa_users').update({ plan }).eq('id', id);
+    invalidateCachedSession(id as string).catch(() => {});
     res.status(200).json({ message: `Plan updated to ${plan}.` });
   } catch {
     res.status(500).json({ error: 'Failed to update plan.' });
@@ -355,6 +357,7 @@ router.patch('/users/:id/status', async (req: AuthRequest, res: Response) => {
   if (!validStatuses.includes(status)) { res.status(400).json({ error: 'Invalid status.' }); return; }
   try {
     await supabase.from('upsa_users').update({ status }).eq('id', id);
+    invalidateCachedSession(id as string).catch(() => {});
     res.status(200).json({ message: `Status updated to ${status}.` });
   } catch {
     res.status(500).json({ error: 'Failed to update status.' });
@@ -367,6 +370,7 @@ router.patch('/users/:id/ai-status', async (req: AuthRequest, res: Response) => 
   if (typeof ai_enabled !== 'boolean') { res.status(400).json({ error: 'Invalid AI status.' }); return; }
   try {
     await supabase.from('upsa_users').update({ ai_enabled }).eq('id', id);
+    invalidateCachedSession(id as string).catch(() => {});
     res.status(200).json({ message: `AI access ${ai_enabled ? 'enabled' : 'disabled'}.` });
   } catch {
     res.status(500).json({ error: 'Failed to update AI access.' });
@@ -377,6 +381,7 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   try {
     await supabase.from('upsa_users').delete().eq('id', id);
+    invalidateCachedSession(id as string).catch(() => {});
     res.status(200).json({ message: 'User deleted.' });
   } catch {
     res.status(500).json({ error: 'Failed to delete user.' });

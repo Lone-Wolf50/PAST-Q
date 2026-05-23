@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../lib/supabase';
 import { protect, AuthRequest } from '../middleware/auth';
+import { invalidateCachedSession } from '../lib/redis';
 
 const router = Router();
 
@@ -268,6 +269,7 @@ router.delete('/me', async (req: AuthRequest, res: Response) => {
 
     // 3. Perform hard delete
     await supabase.from('upsa_users').delete().eq('id', userId);
+    invalidateCachedSession(userId).catch(() => {});
 
     if (user) {
       await supabase.from('upsa_admin_notifications').insert({
