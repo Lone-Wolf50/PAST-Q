@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FileText, Sparkles, User, Tag, BrainCircuit } from 'lucide-react';
+import { Home, FileText, User, Tag, BrainCircuit } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { clsx } from 'clsx';
 import { Fragment } from 'react';
