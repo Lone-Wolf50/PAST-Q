@@ -28,8 +28,8 @@ const Navbar = () => {
       <nav className="w-full flex items-center justify-between px-4 md:px-8 py-4 md:py-6 max-w-7xl mx-auto">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 border border-indigo-400/30 group-hover:border-indigo-300 transition-all duration-500 shadow-[0_0_15px_rgba(99,102,241,0.4)]">
-              <Sparkles className="w-5 h-5 text-white animate-pulse" />
+            <div className="relative flex items-center justify-center w-9 h-9 rounded-xl overflow-hidden border border-indigo-400/30 group-hover:border-indigo-300 transition-all duration-500 shadow-[0_0_15px_rgba(99,102,241,0.4)] bg-theme-surface">
+              <img src="/pwa-icon-512.png" alt="PastQ Logo" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-xl -z-10 group-hover:bg-indigo-500/50 transition-all" />
             </div>
             <span className="text-xl font-bold tracking-tight text-theme-primary">Past<span className="text-indigo-400">Q</span></span>
