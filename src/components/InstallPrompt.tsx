@@ -114,7 +114,7 @@ const InstallPrompt = () => {
             
             <div className="flex flex-col items-center text-center pt-4">
               <div className="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-4">
-                <img src="/favicon.svg" alt="App Icon" className="w-10 h-10" />
+                <img src="/pwa-icon-512.png" alt="App Icon" className="w-10 h-10" />
               </div>
               <h3 className="text-xl font-bold text-theme-primary mb-2">Install PastQ</h3>
               <p className="text-theme-muted mb-6 text-sm">
@@ -162,7 +162,7 @@ const InstallPrompt = () => {
             
             <div className="flex flex-col items-center text-center pt-4">
               <div className="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-4">
-                <img src="/favicon.svg" alt="App Icon" className="w-10 h-10" />
+                <img src="/pwa-icon-512.png" alt="App Icon" className="w-10 h-10" />
               </div>
               <h3 className="text-xl font-bold text-theme-primary mb-2">Install PastQ</h3>
               <p className="text-theme-muted mb-6 text-sm">
