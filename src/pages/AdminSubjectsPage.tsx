@@ -129,8 +129,8 @@ const AdminSubjectsPage = () => {
     const fd = new FormData(e.currentTarget);
     const token = localStorage.getItem('admin_token')!;
 
-    const name = fd.get('name') as string;
-    const code = fd.get('code') as string;
+    const name = (fd.get('name') as string)?.toUpperCase();
+    const code = (fd.get('code') as string)?.toUpperCase();
     if (!name || !code) return;
 
     // Duplicate Check — match on subject name, not course code
@@ -146,7 +146,7 @@ const AdminSubjectsPage = () => {
       if (editingSubject) {
         await apiFetch(`/hq-management/subjects/${editingSubject.id}`, {
           method: 'PATCH',
-          body: { name: fd.get('name'), code: fd.get('code') },
+          body: { name, code },
           token
         });
         handleCloseModal();
@@ -154,15 +154,15 @@ const AdminSubjectsPage = () => {
       } else {
         const res = await apiFetch('/hq-management/subjects', {
           method: 'POST',
-          body: { name: fd.get('name'), code: fd.get('code') },
+          body: { name, code },
           token
         });
         handleCloseModal();
         fetchSubjects();
         setPostCreatePrompt({
           show: true,
-          subjectName: res.subject?.name || (fd.get('name') as string),
-          subjectCode: res.subject?.code || (fd.get('code') as string)
+          subjectName: res.subject?.name || name,
+          subjectCode: res.subject?.code || code
         });
       }
     } catch (err: any) {
@@ -454,9 +454,9 @@ const AdminSubjectsPage = () => {
                   type="text"
                   required
                   value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:outline-none focus:border-indigo-500/50"
-                  placeholder="e.g. Microeconomics"
+                  onChange={(e) => setDraftName(e.target.value.toUpperCase())}
+                  className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:outline-none focus:border-indigo-500/50 uppercase"
+                  placeholder="e.g. MICROECONOMICS"
                 />
               </div>
               <div className="flex flex-col gap-2">
@@ -466,7 +466,7 @@ const AdminSubjectsPage = () => {
                   type="text"
                   required
                   value={draftCode}
-                  onChange={(e) => setDraftCode(e.target.value)}
+                  onChange={(e) => setDraftCode(e.target.value.toUpperCase())}
                   className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary uppercase font-mono focus:outline-none focus:border-indigo-500/50"
                   placeholder="e.g. ECON201"
                 />

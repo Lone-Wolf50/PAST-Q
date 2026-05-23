@@ -325,7 +325,7 @@ const AdminPapersPage = () => {
     try {
       if (editingPaper) {
         const payload = new FormData();
-        payload.append('title', fd.get('title') as string);
+        payload.append('title', (fd.get('title') as string).toUpperCase());
         payload.append('subject_id', fd.get('subject_id') as string);
         payload.append('year', fd.get('year') as string);
         payload.append('semester', fd.get('semester') as string);
@@ -351,7 +351,7 @@ const AdminPapersPage = () => {
         if (uploadMode === 'file' && pdfFiles.length > 0) {
           for (const file of pdfFiles) {
             const payload = new FormData();
-            payload.append('title', fd.get('title') as string);
+            payload.append('title', (fd.get('title') as string).toUpperCase());
             payload.append('subject_id', fd.get('subject_id') as string);
             payload.append('year', fd.get('year') as string);
             payload.append('semester', fd.get('semester') as string);
@@ -371,7 +371,7 @@ const AdminPapersPage = () => {
           }
         } else if (uploadMode === 'url') {
           const payload = new FormData();
-          payload.append('title', fd.get('title') as string);
+          payload.append('title', (fd.get('title') as string).toUpperCase());
           payload.append('subject_id', fd.get('subject_id') as string);
           payload.append('year', fd.get('year') as string);
           payload.append('semester', fd.get('semester') as string);
@@ -865,9 +865,9 @@ const AdminPapersPage = () => {
                           name="title"
                           required
                           value={draftTitle}
-                          onChange={(e) => setDraftTitle(e.target.value)}
-                          className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none transition-colors"
-                          placeholder="e.g. 2023 Principles of Management"
+                          onChange={(e) => setDraftTitle(e.target.value.toUpperCase())}
+                          className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none transition-colors uppercase"
+                          placeholder="e.g. 2023 PRINCIPLES OF MANAGEMENT"
                         />
                       </div>
 

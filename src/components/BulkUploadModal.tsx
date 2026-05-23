@@ -128,18 +128,18 @@ const CreateSubjectPopup = ({ onCreated, onClose }: CreateSubjectPopupProps) => 
               <label className="text-[10px] font-bold uppercase tracking-widest text-theme-muted">Subject Name</label>
               <input
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(e.target.value.toUpperCase())}
                 placeholder="e.g. Principles of Management"
-                className="bg-theme-surface border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-primary focus:border-indigo-500/50 outline-none transition-colors"
+                className="bg-theme-surface border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-primary focus:border-indigo-500/50 outline-none transition-colors uppercase"
               />
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-theme-muted">Course Code</label>
               <input
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="e.g. MGMT101"
-                className="bg-theme-surface border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-primary focus:border-indigo-500/50 outline-none transition-colors"
+                className="bg-theme-surface border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-primary focus:border-indigo-500/50 outline-none transition-colors uppercase"
               />
             </div>
             {err && <p className="text-xs text-red-400 font-medium">{err}</p>}
@@ -286,7 +286,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
       const toAdd = arr.slice(0, remaining).map((f): BulkRow => ({
         id: uid(),
         file: f,
-        title: stripPdf(f.name),
+        title: stripPdf(f.name).toUpperCase(),
         subjectId: '',
         year: String(new Date().getFullYear()),
         semester: 'First',
@@ -378,7 +378,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
 
       try {
         const payload = new FormData();
-        payload.append('title', row.title.trim());
+        payload.append('title', row.title.trim().toUpperCase());
         payload.append('subject_id', row.subjectId);
         payload.append('year', row.year);
         payload.append('semester', row.semester);
@@ -525,10 +525,10 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                                 <div className="flex flex-col gap-1">
                                   <input
                                     value={row.title}
-                                    onChange={(e) => updateRow(row.id, { title: e.target.value })}
+                                    onChange={(e) => updateRow(row.id, { title: e.target.value.toUpperCase() })}
                                     disabled={row.status === 'uploading' || row.status === 'done'}
                                     className={clsx(
-                                      'w-full min-w-[180px] bg-theme-surface border rounded-lg px-3 py-2 text-xs text-theme-primary focus:border-indigo-500/50 outline-none transition-colors disabled:opacity-50',
+                                      'w-full min-w-[180px] bg-theme-surface border rounded-lg px-3 py-2 text-xs text-theme-primary focus:border-indigo-500/50 outline-none transition-colors disabled:opacity-50 uppercase',
                                       dup && row.status === 'idle' ? 'border-amber-500/40' : 'border-theme-border'
                                     )}
                                     placeholder="Paper title"
