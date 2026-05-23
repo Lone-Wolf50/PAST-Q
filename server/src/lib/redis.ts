@@ -1,41 +1,26 @@
-import Redis from 'ioredis';
+import { Redis } from '@upstash/redis';
 import * as Sentry from '@sentry/node';
 
-const REDIS_URL = process.env.REDIS_URL;
+const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 let redis: Redis | null = null;
 
-if (REDIS_URL) {
+if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
   try {
-    console.log('📡 [Redis] Initializing connection...');
-    redis = new Redis(REDIS_URL, {
-      maxRetriesPerRequest: 3,
-      connectTimeout: 5000, // 5 seconds
-      disconnectTimeout: 2000,
-      reconnectOnError: (err) => {
-        const targetError = 'READONLY';
-        if (err.message.slice(0, targetError.length) === targetError) {
-          return true; // Reconnect on READONLY error
-        }
-        return false;
-      }
+    console.log('📡 [Redis] Initializing HTTP REST client...');
+    redis = new Redis({
+      url: UPSTASH_REDIS_REST_URL,
+      token: UPSTASH_REDIS_REST_TOKEN,
     });
-
-    redis.on('connect', () => {
-      console.log('✅ [Redis] Connection established successfully.');
-    });
-
-    redis.on('error', (err) => {
-      console.error('🔴 [Redis] Connection / command error:', err.message);
-      Sentry.captureException(err);
-    });
+    console.log('✅ [Redis] Connection established successfully.');
   } catch (err: any) {
     console.error('🔴 [Redis] Failed to initialize connection:', err.message);
     Sentry.captureException(err);
     redis = null;
   }
 } else {
-  console.log('ℹ️ [Redis] REDIS_URL not set. Running in serverless-fallback / local-memory mode.');
+  console.log('ℹ️ [Redis] UPSTASH_REDIS_REST_URL/TOKEN not set. Running in serverless-fallback / local-memory mode.');
 }
 
 export { redis };
@@ -52,7 +37,11 @@ export async function getCachedSession(userId: string): Promise<{ status: string
     const key = `user:session:${userId}`;
     const cached = await redis.get(key);
     if (!cached) return null;
-    return JSON.parse(cached);
+    
+    if (typeof cached === 'string') {
+      return JSON.parse(cached);
+    }
+    return cached as { status: string; session_version: number };
   } catch (err: any) {
     console.error(`⚠️ [Redis] getCachedSession failed for user ${userId}:`, err.message);
     Sentry.captureException(err);
@@ -71,7 +60,7 @@ export async function setCachedSession(
   if (!redis) return;
   try {
     const key = `user:session:${userId}`;
-    await redis.set(key, JSON.stringify(data), 'EX', SESSION_TTL);
+    await redis.set(key, JSON.stringify(data), { ex: SESSION_TTL });
   } catch (err: any) {
     console.error(`⚠️ [Redis] setCachedSession failed for user ${userId}:`, err.message);
     Sentry.captureException(err);

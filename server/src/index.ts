@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
+import { Ratelimit } from '@upstash/ratelimit';
 
 // Route imports
 import authRouter from './routes/auth';
@@ -19,7 +19,6 @@ import supportRouter from './routes/support';
 import streaksRouter from './routes/streaks';
 import { supabase } from './lib/supabase';
 import { redis } from './lib/redis';
-import RedisStore from 'rate-limit-redis';
 
 dotenv.config();
 
@@ -64,40 +63,73 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
 // ── Global Rate Limiting ───────────────────────────────────────────────────────
-const apiLimiterStore = redis
-  ? new RedisStore({
-      sendCommand: (...args: string[]) => redis!.call(args[0], ...args.slice(1)) as Promise<any>,
+const apiRatelimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(500, '15 m'),
+      prefix: 'rl:api:',
     })
-  : undefined;
+  : null;
 
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Increased to accommodate dashboard auto-refreshes
-  standardHeaders: true,
-  legacyHeaders: false,
-  store: apiLimiterStore,
-  message: { error: 'Too many requests, please try again later.' },
-});
+const apiLimiter = async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
+  if (!apiRatelimit) {
+    next();
+    return;
+  }
+  try {
+    const ip = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anonymous';
+    const { success, limit, reset, remaining } = await apiRatelimit.limit(ip);
+
+    res.setHeader('X-RateLimit-Limit', limit);
+    res.setHeader('X-RateLimit-Remaining', remaining);
+    res.setHeader('X-RateLimit-Reset', reset);
+
+    if (!success) {
+      res.status(429).json({ error: 'Too many requests, please try again later.' });
+      return;
+    }
+    next();
+  } catch (err) {
+    console.error('Rate limiting error:', err);
+    next();
+  }
+};
 app.use('/api', apiLimiter);
 
 // ── Strict AI Rate Limiting ──────────────────────────────────────────────────
 // Expensive AI operations are limited to 30 requests per 15 minutes to protect
 // API budgets and prevent loop-blocking abuse.
-const aiLimiterStore = redis
-  ? new RedisStore({
-      sendCommand: (...args: string[]) => redis!.call(args[0], ...args.slice(1)) as Promise<any>,
+const aiRatelimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, '15 m'),
       prefix: 'rl:ai:',
     })
-  : undefined;
+  : null;
 
-const aiChatLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Max 30 AI queries per 15 minutes per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  store: aiLimiterStore,
-  message: { error: 'You are sending AI queries too quickly. Please try again after 15 minutes.' },
-});
+const aiChatLimiter = async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
+  if (!aiRatelimit) {
+    next();
+    return;
+  }
+  try {
+    const ip = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anonymous';
+    const { success, limit, reset, remaining } = await aiRatelimit.limit(ip);
+
+    res.setHeader('X-RateLimit-Limit', limit);
+    res.setHeader('X-RateLimit-Remaining', remaining);
+    res.setHeader('X-RateLimit-Reset', reset);
+
+    if (!success) {
+      res.status(429).json({ error: 'You are sending AI queries too quickly. Please try again after 15 minutes.' });
+      return;
+    }
+    next();
+  } catch (err) {
+    console.error('AI Rate limiting error:', err);
+    next();
+  }
+};
 app.use('/api/ai/chat', aiChatLimiter);
 
 // ── Root Route ────────────────────────────────────────────────────────────────

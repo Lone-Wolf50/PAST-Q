@@ -1,8 +1,7 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import rateLimit from 'express-rate-limit';
-import RedisStore from 'rate-limit-redis';
+import { Ratelimit } from '@upstash/ratelimit';
 import validator from 'validator';
 import { supabase } from '../lib/supabase';
 import { invalidateCachedSession, redis } from '../lib/redis';
@@ -12,19 +11,37 @@ import crypto from 'crypto';
 const router = Router();
 
 // ─── Rate limiter ────────────────────────────────────────────
-const authLimiterStore = redis
-  ? new RedisStore({
-      sendCommand: (...args: string[]) => redis!.call(args[0], ...args.slice(1)) as Promise<any>,
+const authRatelimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, '15 m'),
       prefix: 'rl:auth:',
     })
-  : undefined;
+  : null;
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  store: authLimiterStore,
-  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
-});
+const authLimiter = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  if (!authRatelimit) {
+    next();
+    return;
+  }
+  try {
+    const ip = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anonymous';
+    const { success, limit, reset, remaining } = await authRatelimit.limit(ip);
+
+    res.setHeader('X-RateLimit-Limit', limit);
+    res.setHeader('X-RateLimit-Remaining', remaining);
+    res.setHeader('X-RateLimit-Reset', reset);
+
+    if (!success) {
+      res.status(429).json({ error: 'Too many requests from this IP, please try again after 15 minutes.' });
+      return;
+    }
+    next();
+  } catch (err) {
+    console.error('Auth rate limiting error:', err);
+    next();
+  }
+};
 
 // ─── Helpers ─────────────────────────────────────────────────
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
