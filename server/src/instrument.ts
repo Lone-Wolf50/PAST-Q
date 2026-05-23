@@ -4,6 +4,9 @@
  * before any other modules are loaded.
  */
 import * as Sentry from '@sentry/node';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const SENTRY_DSN = process.env.SENTRY_DSN;
 
