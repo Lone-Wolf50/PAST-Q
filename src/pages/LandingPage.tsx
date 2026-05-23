@@ -140,7 +140,7 @@ const LandingPage = () => {
             <div className="inline-flex p-3 rounded-2xl bg-indigo-500/10 mb-6">
               <Zap className="w-8 h-8 text-indigo-400" />
             </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-theme-primary mb-4">Stuck on a question? <br />Ask your AI Tutor.</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-theme-primary mb-4">Stuck on a question? <br />Ask Cortana.</h2>
             <p className="text-theme-muted text-lg mb-8 leading-relaxed">
               Our advanced AI model is trained specifically on university curriculum. Get instant step-by-step explanations, formulas, and guidance without waiting for office hours.
             </p>

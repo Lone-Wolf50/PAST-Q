@@ -82,7 +82,7 @@ const Navbar = () => {
                   <span className="icon-wrapper">
                     <BrainCircuit className={clsx("w-6 h-6", location.pathname === '/ask-ai' ? "text-indigo-400" : "text-theme-secondary")} />
                   </span>
-                  <span className="title">Ask AI</span>
+                  <span className="title">Cortana</span>
                 </Link>
               </li>
             </ul>
@@ -170,7 +170,7 @@ const Navbar = () => {
                 className="text-[10px] font-bold"
                 style={{ color: '#c4b5fd', textShadow: '0 0 8px rgba(139,92,246,0.8)' }}
               >
-                Ask AI
+                Cortana
               </span>
             </div>
 

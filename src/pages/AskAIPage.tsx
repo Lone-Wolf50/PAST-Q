@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Send, Loader2, Paperclip, Sparkles, GraduationCap,
+  Send, Loader2, Paperclip, Sparkles,
   RotateCcw, Menu, X, Trash2, Plus, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,14 +43,35 @@ const PLAN_LIMITS: Record<Plan, number> = {
   Pro: Infinity,
 };
 
-const INITIAL_MESSAGES: Message[] = [
-  {
+const getCleanFirstName = (fullName: string | null | undefined): string => {
+  if (!fullName) return 'Student';
+  let name = fullName.split('@')[0];
+  name = name.replace(/[._\-0-9]+/g, ' ').trim();
+  const words = name.split(/\s+/);
+  const firstWord = words.find(w => /[a-zA-Z]/.test(w));
+  if (!firstWord) return 'Student';
+  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+};
+
+const getWelcomeMessage = (username: string): Message => {
+  const greetings = [
+    `Welcome back, ${username}! Ready to ace it?`,
+    `Hey ${username}, let's tackle some past questions!`,
+    `Good to see you, ${username}! Time to study smart`,
+    `Welcome, ${username}! Your next A grade starts here`,
+    `Let's go, ${username}! Past questions await`,
+    `Hey ${username}, ready to pass with flying colours?`,
+  ];
+  const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+  return {
     id: 'welcome',
     role: 'assistant',
-    content: "Hello! I'm **PastQ Advanced AI**, your personal academic tutor. I can help you understand concepts from past papers, summarize topics, and guide your exam preparation.\n\nWhat would you like to study today?",
+    content: `${randomGreeting}\n\nI'm **Cortana**, your personal academic tutor. I can help you understand concepts from past papers, summarize topics, and guide your exam preparation.\n\nWhat would you like to study today?`,
     timestamp: Date.now(),
-  }
-];
+  };
+};
+
+const INITIAL_MESSAGES: Message[] = [];
 
 const STARTER_QUESTIONS = [
   "Explain the Second Law of Thermodynamics",
@@ -87,19 +108,30 @@ const AskAIPage = () => {
   const rawPlan = user?.plan || 'Free';
   const plan = (rawPlan.charAt(0).toUpperCase() + rawPlan.slice(1).toLowerCase()) as Plan;
 
+  const username = getCleanFirstName(user?.full_name);
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
       const saved = localStorage.getItem('pastq_ai_messages');
-      if (!saved) return INITIAL_MESSAGES;
-      const parsed: Message[] = JSON.parse(saved);
-      // Strip any stale alert blockquotes that were stored from a previous build
-      return parsed.map(m =>
-        m.role === 'assistant' ? { ...m, content: cleanAlertText(m.content) } : m
-      );
-    } catch {
-      return INITIAL_MESSAGES;
-    }
+      if (saved) {
+        const parsed: Message[] = JSON.parse(saved);
+        return parsed.map(m =>
+          m.role === 'assistant' ? { ...m, content: cleanAlertText(m.content) } : m
+        );
+      }
+    } catch {}
+    return [getWelcomeMessage(username)];
   });
+
+  // Update welcome message if username becomes available after mount
+  useEffect(() => {
+    if (messages.length === 1 && messages[0].id === 'welcome') {
+      if (username !== 'Student' && messages[0].content.includes('Student')) {
+        const freshWelcome = getWelcomeMessage(username);
+        setMessages([freshWelcome]);
+        localStorage.setItem('pastq_ai_messages', JSON.stringify([freshWelcome]));
+      }
+    }
+  }, [username, messages]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
@@ -170,13 +202,13 @@ const AskAIPage = () => {
             // Conversation may have expired — clear the mapping
             localStorage.removeItem(`pastq_paper_conv_${initialPaperId}`);
             setActiveConversationId(null);
-            setMessages(INITIAL_MESSAGES);
+            setMessages([getWelcomeMessage(username)]);
           });
       } else {
         // If there is no existing conversation for this new paper, we must reset the chat state
         // Otherwise, it will keep the messages from the previously viewed paper!
         setActiveConversationId(null);
-        setMessages(INITIAL_MESSAGES);
+        setMessages([getWelcomeMessage(username)]);
       }
     }
   }, [initialPaperId, token, plan]);
@@ -310,9 +342,9 @@ const AskAIPage = () => {
         content: m.role === 'assistant' ? cleanAlertText(m.content) : m.content,
         timestamp: new Date(m.created_at).getTime(),
       }));
-      setMessages(loaded.length ? loaded : INITIAL_MESSAGES);
+      setMessages(loaded.length ? loaded : [getWelcomeMessage(username)]);
     } catch {
-      setMessages(INITIAL_MESSAGES);
+      setMessages([getWelcomeMessage(username)]);
     }
   };
 
@@ -339,12 +371,13 @@ const AskAIPage = () => {
 
   const startNewChat = () => {
     setActiveConversationId(null);
-    setMessages(INITIAL_MESSAGES);
+    const freshWelcome = getWelcomeMessage(username);
+    setMessages([freshWelcome]);
     setInput('');
     setSelectedFile(null);
     setSelectedFileName('');
     setSidebarOpen(false);
-    localStorage.removeItem('pastq_ai_messages');
+    localStorage.setItem('pastq_ai_messages', JSON.stringify([freshWelcome]));
     localStorage.removeItem('pastq_ai_active_conv');
     // Clear the paper-specific conv mapping so the next visit creates a fresh conversation
     if (activePaperId) {
@@ -581,8 +614,9 @@ const AskAIPage = () => {
   };
 
   const confirmReset = () => {
-    setMessages(INITIAL_MESSAGES);
-    localStorage.removeItem('pastq_ai_messages');
+    const freshWelcome = getWelcomeMessage(username);
+    setMessages([freshWelcome]);
+    localStorage.setItem('pastq_ai_messages', JSON.stringify([freshWelcome]));
     localStorage.removeItem('pastq_ai_active_conv');
     setShowConfirmReset(false);
   };
@@ -609,10 +643,10 @@ const AskAIPage = () => {
         <div className="glass-panel-premium p-3.5 shadow-md shrink-0 flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md shadow-indigo-500/20">
-                Q
+              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border border-theme-border/60">
+                <img src="/lumio.jpg" alt="Cortana" className="w-full h-full object-cover" />
               </div>
-              <h1 className="text-lg font-black tracking-tight text-theme-primary">PastQ AI</h1>
+              <h1 className="text-lg font-black tracking-tight text-theme-primary">Cortana AI</h1>
             </div>
             <button className="md:hidden p-2 text-theme-muted hover:text-theme-primary hover:bg-theme-surface-2 rounded-xl transition-all" onClick={() => setSidebarOpen(false)}>
               <X size={20} />
@@ -755,7 +789,7 @@ const AskAIPage = () => {
               <Menu size={20} />
             </button>
             <div>
-              <h2 className="font-bold text-lg text-theme-primary">Academic Tutor</h2>
+              <h2 className="font-bold text-lg text-theme-primary">Cortana AI Tutor</h2>
               <p className="text-xs text-theme-muted font-medium flex items-center gap-1.5">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> Ready to help with your studies
               </p>
@@ -776,15 +810,15 @@ const AskAIPage = () => {
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-10 space-y-8 scroll-smooth">
           <AnimatePresence initial={false}>
-            {messages.length === 1 && !isLoading && (
+            {messages.length === 1 && !isLoading && !input.trim() && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
                 className="max-w-2xl mx-auto mt-12 text-center"
               >
-                <div className="w-20 h-20 glass-panel-premium rounded-[1.8rem] shadow-lg flex items-center justify-center mx-auto mb-8 relative group">
-                  <div className="absolute inset-0 bg-indigo-500/5 rounded-[1.8rem] blur-md opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <GraduationCap className="text-indigo-500 relative z-10" size={40} />
+                <div className="w-20 h-20 rounded-[1.8rem] shadow-lg flex items-center justify-center mx-auto mb-8 relative group overflow-hidden border-2 border-indigo-500/30">
+                  <img src="/lumio.jpg" alt="Cortana" className="w-full h-full object-cover" />
                 </div>
                 <h3 className="text-3xl font-extrabold text-theme-primary mb-3 tracking-tight">How can I help you today?</h3>
                 <p className="text-theme-muted max-w-sm mx-auto mb-10 text-sm font-medium leading-relaxed">
@@ -916,7 +950,7 @@ const AskAIPage = () => {
                   message.role === 'user' ? "mr-1" : "ml-1"
                 )}>
                   {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {message.role === 'assistant' && <span className="opacity-50">• PastQ AI</span>}
+                  {message.role === 'assistant' && <span className="opacity-50">• Cortana</span>}
                 </div>
               </motion.div>
             ))}
@@ -1030,7 +1064,7 @@ const AskAIPage = () => {
                 </Link>
               ) : (
                 <p className="text-[10px] text-theme-muted uppercase tracking-widest font-bold">
-                  {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-indigo-500 dark:text-indigo-400">PastQ Premium AI v3.0</span>
+                  {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-indigo-500 dark:text-indigo-400">Cortana Premium AI v3.0</span>
                 </p>
               )}
             </div>
