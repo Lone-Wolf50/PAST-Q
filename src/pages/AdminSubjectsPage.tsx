@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, Menu, BookOpen, Clock, FileStack, LayoutGrid, List, RotateCw, CheckCircle2, CloudUpload, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Menu, BookOpen, Clock, FileStack, LayoutGrid, List, RotateCw, CheckCircle2, CloudUpload, ChevronLeft, ChevronRight, ShieldAlert, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import AdminSidebar from '../components/AdminSidebar';
@@ -12,7 +12,13 @@ const AdminSubjectsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [postCreatePrompt, setPostCreatePrompt] = useState<{ show: boolean, subjectName: string, subjectCode: string } | null>(null);
   const [emptySubjectWarning, setEmptySubjectWarning] = useState<{ show: boolean, emptySubjects: any[] }>({ show: false, emptySubjects: [] });
-  const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, name: string, code: string } | null>(null);
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    show: boolean;
+    name: string;
+    code: string;
+    existingSubject: any;
+    onSaveDifferent: () => void;
+  } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,59 +139,69 @@ const AdminSubjectsPage = () => {
     const code = (fd.get('code') as string)?.toUpperCase();
     if (!name || !code) return;
 
+    const saveSubject = async () => {
+      setSaving(true);
+      try {
+        if (editingSubject) {
+          await apiFetch(`/hq-management/subjects/${editingSubject.id}`, {
+            method: 'PATCH',
+            body: { name, code },
+            token
+          });
+          handleCloseModal();
+          fetchSubjects();
+        } else {
+          const res = await apiFetch('/hq-management/subjects', {
+            method: 'POST',
+            body: { name, code },
+            token
+          });
+          handleCloseModal();
+          fetchSubjects();
+          setPostCreatePrompt({
+            show: true,
+            subjectName: res.subject?.name || name,
+            subjectCode: res.subject?.code || code
+          });
+        }
+      } catch (err: any) {
+        // 409 = server detected a duplicate name or code in the database
+        if (err?.status === 409) {
+          handleCloseModal();
+          setAlert({
+            show: true,
+            title: 'Duplicate Subject',
+            message: err.message || 'A subject with this name or course code already exists.',
+            variant: 'error'
+          });
+        } else {
+          setAlert({
+            show: true,
+            title: 'Save Failed',
+            message: err.message || 'Failed to save subject.',
+            variant: 'error'
+          });
+        }
+      } finally {
+        setSaving(false);
+      }
+    };
+
     // Duplicate Check — match on subject name, not course code
     const duplicate = subjects.find(s => s.name.toLowerCase() === name.toLowerCase() && s.id !== editingSubject?.id);
     if (duplicate) {
       setShowModal(false);
-      setDuplicatePrompt({ show: true, name: duplicate.name, code: duplicate.code });
+      setDuplicatePrompt({
+        show: true,
+        name: duplicate.name,
+        code: duplicate.code,
+        existingSubject: duplicate,
+        onSaveDifferent: saveSubject
+      });
       return;
     }
 
-    setSaving(true);
-    try {
-      if (editingSubject) {
-        await apiFetch(`/hq-management/subjects/${editingSubject.id}`, {
-          method: 'PATCH',
-          body: { name, code },
-          token
-        });
-        handleCloseModal();
-        fetchSubjects();
-      } else {
-        const res = await apiFetch('/hq-management/subjects', {
-          method: 'POST',
-          body: { name, code },
-          token
-        });
-        handleCloseModal();
-        fetchSubjects();
-        setPostCreatePrompt({
-          show: true,
-          subjectName: res.subject?.name || name,
-          subjectCode: res.subject?.code || code
-        });
-      }
-    } catch (err: any) {
-      // 409 = server detected a duplicate name or code in the database
-      if (err?.status === 409) {
-        handleCloseModal();
-        setAlert({
-          show: true,
-          title: 'Duplicate Subject',
-          message: err.message || 'A subject with this name or course code already exists.',
-          variant: 'error'
-        });
-      } else {
-        setAlert({
-          show: true,
-          title: 'Save Failed',
-          message: err.message || 'Failed to save subject.',
-          variant: 'error'
-        });
-      }
-    } finally {
-      setSaving(false);
-    }
+    await saveSubject();
   };
 
   const openEditModal = (subject: any) => {
@@ -559,20 +575,94 @@ const AdminSubjectsPage = () => {
         variant="warning"
       />
 
-      <ConfirmModal
-        isOpen={duplicatePrompt?.show || false}
-        onClose={() => setDuplicatePrompt(null)}
-        onConfirm={() => {
-          const code = duplicatePrompt?.code;
-          setDuplicatePrompt(null);
-          navigate('/hq-portal/papers', { state: { openUploadForSubjectCode: code, filterToSubject: code } });
-        }}
-        title="Subject Already Exists"
-        message={`"${duplicatePrompt?.name}" is already in your catalogue. Would you like to go to the Papers page to manage its contents?`}
-        confirmText="Yes, Go to Papers"
-        cancelText="Cancel"
-        variant="info"
-      />
+      {duplicatePrompt?.show && duplicatePrompt.existingSubject && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-md border-theme-border relative overflow-hidden">
+            <button
+              onClick={() => {
+                setDuplicatePrompt(null);
+                setShowModal(true);
+              }}
+              className="absolute top-4 right-4 p-2 text-theme-muted hover:text-theme-primary transition-colors z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                  <ShieldAlert className="w-6 h-6 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-theme-primary">Possible Duplicate Found</h3>
+                  <p className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Same Name, Different Code?</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-theme-secondary mb-5 leading-relaxed">
+                A subject named <span className="font-bold text-theme-primary">"{duplicatePrompt.name}"</span> already exists under the course code <span className="font-mono font-bold text-indigo-400">{duplicatePrompt.code}</span>. Are you sure you want to add this as a new subject, or did you mean to edit the existing one?
+              </p>
+
+              <div className="bg-theme-surface/50 border border-amber-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
+                <div className="flex flex-col gap-1 pr-4">
+                  <p className="text-sm font-bold text-theme-primary line-clamp-1">{duplicatePrompt.existingSubject.name}</p>
+                  <div className="flex items-center gap-2 text-xs font-bold text-theme-muted uppercase">
+                    <span className="text-indigo-400 font-mono">{duplicatePrompt.existingSubject.code}</span>
+                    <span>•</span>
+                    <span>{duplicatePrompt.existingSubject.count || 0} Papers</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const code = duplicatePrompt.code;
+                    setDuplicatePrompt(null);
+                    navigate('/hq-portal/papers', { state: { openUploadForSubjectCode: code, filterToSubject: code } });
+                  }}
+                  className="p-2.5 shrink-0 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all font-semibold text-xs flex items-center gap-1"
+                  title="View Papers for Subject"
+                >
+                  <FileStack className="w-4 h-4" />
+                  <span>Papers</span>
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    const onSave = duplicatePrompt.onSaveDifferent;
+                    setDuplicatePrompt(null);
+                    onSave();
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] flex justify-center items-center gap-2 text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  No, they're different — Save Subject
+                </button>
+                <button
+                  onClick={() => {
+                    const existingSub = duplicatePrompt.existingSubject;
+                    setDuplicatePrompt(null);
+                    openEditModal(existingSub);
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary font-bold transition-all flex justify-center items-center gap-2 text-sm"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit the Existing Subject Instead
+                </button>
+                <button
+                  onClick={() => {
+                    setDuplicatePrompt(null);
+                    setShowModal(true);
+                  }}
+                  className="w-full py-2.5 rounded-xl text-theme-muted hover:text-theme-primary font-semibold transition-all text-sm flex justify-center items-center gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Cancel &amp; Modify details
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
