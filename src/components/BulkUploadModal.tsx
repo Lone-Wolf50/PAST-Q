@@ -6,6 +6,7 @@ import {
 import { clsx } from 'clsx';
 import { apiFetch, apiFetchMultipart } from '../lib/api';
 import { saveBulkUploadDraft, getBulkUploadDraft, clearBulkUploadDraft, type BulkRow } from '../lib/bulkUploadDb';
+import { ConfirmModal } from './ui/ConfirmModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -218,6 +219,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   const [allDone, setAllDone] = useState(false);
   const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, row: BulkRow | null, duplicateInSystem: any | null }>({ show: false, row: null, duplicateInSystem: null });
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [deleteConfirmRow, setDeleteConfirmRow] = useState<BulkRow | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isLoadedRef = useRef(false);
@@ -627,7 +629,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                                   </button>
                                   {(row.status === 'idle' || row.status === 'error') && (
                                     <button
-                                      onClick={() => removeRow(row.id)}
+                                      onClick={() => setDeleteConfirmRow(row)}
                                       className="p-1.5 rounded-lg text-theme-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
                                       title="Remove file"
                                     >
@@ -837,6 +839,22 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
           </div>
         </div>
       )}
+      {/* ── Delete Row Confirmation Modal ── */}
+      <ConfirmModal
+        isOpen={!!deleteConfirmRow}
+        onClose={() => setDeleteConfirmRow(null)}
+        onConfirm={() => {
+          if (deleteConfirmRow) {
+            removeRow(deleteConfirmRow.id);
+            setDeleteConfirmRow(null);
+          }
+        }}
+        title="Remove Paper from Batch"
+        message={`Are you sure you want to remove the paper "${deleteConfirmRow?.title || deleteConfirmRow?.file.name || 'this paper'}" from your bulk upload batch?`}
+        confirmText="Remove Paper"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </>
   );
 };
