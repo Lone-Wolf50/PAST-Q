@@ -20,6 +20,7 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 
 ### 💼 Student Dashboard
 - **Browse & Filter**: Advanced filtering by academic year, semester, and department.
+- **Visual Active Tabs**: Active visual indicator states on the subject tabs, improving navigation feedback.
 - **Smart Empty States**: Intuitive "Not Found" feedback with quick-reset filter capabilities for a seamless browsing experience.
 - **Progress Tracking**: Statistics on AI usage, plan status, and study sessions.
 - **Session Management**: Persistent chat histories that allow students to resume their tutoring sessions across different papers.
@@ -46,6 +47,9 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 - **Bulk Upload Workflow**: High-efficiency spreadsheet-style interface for uploading hundreds of papers simultaneously with real-time duplicate detection.
 - **Form Draft Persistence**: Admin upload/add forms (Papers & Subjects) automatically save to `localStorage` as you type. If the page refreshes accidentally, the modal re-opens with all fields restored — only the file picker must be re-selected (browser security restriction). A clear notice is shown to remind the admin.
 - **Payment Report Export**: The Revenue & Transactions page features a fully functional **Export Report** button that generates and downloads a UTF-8 CSV file (`payment_report_YYYY-MM-DD.csv`) covering all transaction records (Transaction ID, Student Name, Email, Plan, Amount, Status, Date) with proper comma and quote escaping for Excel compatibility.
+- **Failed Join Attempts Monitor**: Comprehensive logging and real-time dashboard monitoring of registration failures (validation errors, blocked domains, database issues, email dispatch failures) with live admin notifications.
+- **Searchable Logging Panels**: Dynamic live search filters across both **Recent Deletions** and **Failed Join Attempts** lists, enabling instant lookup by email, name, or failure reason.
+- **Permanent Log Dismissal**: Support for dismissing deletion logs and failed registration logs, permanently deleting them from the database directly from the dashboard UI.
 - **AI Health Monitoring**: Real-time status indicators for API quota and processing status.
 - **Live Processing Logs**: Visual feedback for background PDF analysis and insight generation.
 
