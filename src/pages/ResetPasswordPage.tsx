@@ -91,7 +91,7 @@ const ResetPasswordPage = () => {
 
   return (
     <div className="w-full flex-grow flex items-center justify-center px-4 py-12">
-      <div className="glass-card w-full max-w-md p-8 md:p-10 relative overflow-hidden">
+      <div className="glass-card w-full max-w-md p-6 sm:p-8 md:p-10 relative overflow-hidden">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10">
@@ -132,7 +132,7 @@ const ResetPasswordPage = () => {
                     value={digit}
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    className="w-12 h-13 text-center text-xl font-semibold bg-theme-surface border border-theme-border rounded-xl text-theme-primary focus:outline-none focus:border-indigo-500/50 focus:bg-theme-surface-2 transition-colors py-3"
+                    className="flex-1 min-w-0 max-w-[3rem] sm:max-w-[3.5rem] h-12 sm:h-13 text-center text-lg sm:text-xl font-semibold bg-theme-surface border border-theme-border rounded-xl text-theme-primary focus:outline-none focus:border-indigo-500/50 focus:bg-theme-surface-2 transition-colors py-3"
                   />
                 ))}
               </div>

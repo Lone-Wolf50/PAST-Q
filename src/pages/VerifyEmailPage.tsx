@@ -108,7 +108,7 @@ const VerifyEmailPage = () => {
 
   return (
     <div className="w-full flex-grow flex items-center justify-center px-4 py-12">
-      <div className="glass-card w-full max-w-md p-8 md:p-10 relative overflow-hidden">
+      <div className="glass-card w-full max-w-md p-6 sm:p-8 md:p-10 relative overflow-hidden">
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10">
@@ -156,7 +156,7 @@ const VerifyEmailPage = () => {
                   value={digit}
                   onChange={(e) => handleChange(index, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(index, e)}
-                  className="w-12 h-14 md:w-14 md:h-16 text-center text-2xl font-semibold bg-theme-surface border border-theme-border rounded-xl text-theme-primary focus:outline-none focus:border-indigo-500/50 focus:bg-theme-surface-2 transition-colors"
+                  className="flex-1 min-w-0 max-w-[3rem] sm:max-w-[3.5rem] h-12 sm:h-14 md:h-16 text-center text-xl sm:text-2xl font-semibold bg-theme-surface border border-theme-border rounded-xl text-theme-primary focus:outline-none focus:border-indigo-500/50 focus:bg-theme-surface-2 transition-colors"
                 />
               ))}
             </div>

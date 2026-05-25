@@ -62,7 +62,7 @@ const OTPPage = () => {
 
         <div className="glass-card p-6 md:p-8">
           <form className="flex flex-col gap-6" onSubmit={(e) => e.preventDefault()}>
-            <div className="flex justify-between gap-2 sm:gap-4">
+            <div className="flex justify-between gap-2 sm:gap-3">
               {otp.map((digit, index) => (
                 <input
                   key={index}
@@ -71,7 +71,7 @@ const OTPPage = () => {
                   inputMode="numeric"
                   value={digit}
                   onChange={(e) => handleChange(index, e.target.value)}
-                  className="w-10 h-12 sm:w-12 sm:h-14 text-center text-xl font-bold bg-theme-surface border border-theme-border rounded-xl text-theme-primary focus:outline-none focus:border-indigo-500/50"
+                  className="flex-1 min-w-0 max-w-[3rem] h-12 sm:h-14 text-center text-lg sm:text-xl font-bold bg-theme-surface border border-theme-border rounded-xl text-theme-primary focus:outline-none focus:border-indigo-500/50"
                   maxLength={1}
                 />
               ))}
