@@ -17,6 +17,18 @@
   --animate-spin-slow: spin 3s linear infinite;
 }
 
+@property --glow-a {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(99, 102, 241, 0.20);
+}
+
+@property --glow-b {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(139, 92, 246, 0.15);
+}
+
 /* ── CSS Variables for Dark/Light Theme ───────────────────────────────────── */
 :root {
   color-scheme: dark;
@@ -82,6 +94,21 @@
   --glass-sidebar-bg: rgba(245, 246, 250, 0.6);
   --glass-header-bg: rgba(245, 246, 250, 0.55);
   --glass-footer-bg: rgba(245, 246, 250, 0.5);
+}
+
+/* Enable smooth transitions globally ONLY when changing themes */
+.theme-transitioning,
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition: background-color 0.3s ease !important,
+              border-color 0.3s ease !important,
+              color 0.3s ease !important,
+              fill 0.3s ease !important,
+              stroke 0.3s ease !important,
+              box-shadow 0.3s ease !important,
+              backdrop-filter 0.3s ease !important,
+              -webkit-backdrop-filter 0.3s ease !important;
 }
 
 /* ── Base Styles ──────────────────────────────────────────────────────────── */

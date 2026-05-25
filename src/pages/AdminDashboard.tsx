@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { Link } from 'react-router-dom';
-import { Users, FileText, TrendingUp, UserMinus, Menu, Bell, Search, RotateCw, Trash2 } from 'lucide-react';
+import { Users, FileText, TrendingUp, UserMinus, UserX, Menu, Bell, Search, RotateCw, Trash2, XCircle } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend, AreaChart, Area } from 'recharts';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
@@ -24,6 +24,17 @@ const AdminDashboard = () => {
       return [];
     }
   });
+  const [failedAccounts, setFailedAccounts] = useState<any[]>([]);
+  const [dismissedFailed, setDismissedFailed] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('pastq_dismissed_failed');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [deletionsSearch, setDeletionsSearch] = useState('');
+  const [failedSearch, setFailedSearch] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
   const [timeRange, setTimeRange] = useState('30d');
   const [globalAiBlock, setGlobalAiBlock] = useState(false);
@@ -37,18 +48,20 @@ const AdminDashboard = () => {
       const token = localStorage.getItem('admin_token');
       if (!token) return;
 
-      const [statsData, usersData, deletionsData, notifData, aiConfigData] = await Promise.all([
+      const [statsData, usersData, deletionsData, notifData, aiConfigData, failedData] = await Promise.all([
         apiFetch(`/hq-management/stats?range=${timeRange}`, { token }),
         apiFetch('/hq-management/users', { token }),
         apiFetch('/hq-management/deletions', { token }),
         apiFetch('/hq-management/notifications', { token }),
-        apiFetch('/hq-management/ai-config', { token })
+        apiFetch('/hq-management/ai-config', { token }),
+        apiFetch('/hq-management/failed-accounts', { token }),
       ]);
 
       setStats(statsData);
       setRecentSignups((usersData.users || []).slice(0, 5));
       setDeletions(deletionsData.deletions || []);
       setNotifications(notifData.notifications || []);
+      setFailedAccounts(failedData.failedAccounts || []);
       if (aiConfigData) {
         setGlobalAiBlock(aiConfigData.globalAiBlock || false);
         setGlobalBannerActive(aiConfigData.globalBannerActive || false);
@@ -61,12 +74,28 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleDismissDeletion = (id: string | undefined, email: string) => {
+  const handleDismissDeletion = async (id: string | undefined, email: string) => {
     const identifier = id || email;
     if (!identifier) return;
     const updated = [...dismissedDeletions, identifier];
     setDismissedDeletions(updated);
     localStorage.setItem('pastq_dismissed_deletions', JSON.stringify(updated));
+    if (id) {
+      try {
+        const token = localStorage.getItem('admin_token');
+        await apiFetch(`/hq-management/deletions/${id}`, { method: 'DELETE', token: token ?? undefined });
+      } catch { /* silently fail — already dismissed locally */ }
+    }
+  };
+
+  const handleDismissFailed = async (id: string) => {
+    const updated = [...dismissedFailed, id];
+    setDismissedFailed(updated);
+    localStorage.setItem('pastq_dismissed_failed', JSON.stringify(updated));
+    try {
+      const token = localStorage.getItem('admin_token');
+      await apiFetch(`/hq-management/failed-accounts/${id}`, { method: 'DELETE', token: token ?? undefined });
+    } catch { /* silently fail — already dismissed locally */ }
   };
 
   useEffect(() => {
@@ -115,6 +144,7 @@ const AdminDashboard = () => {
     { label: 'Active Subscriptions', value: stats?.activePlans || 0, change: '', icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
     { label: 'Total Papers', value: stats?.totalPapers || 0, change: '', icon: FileText, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
     { label: 'Deleted Accounts', value: stats?.totalDeleted || 0, change: '', icon: UserMinus, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+    { label: 'Failed Join Attempts', value: stats?.totalFailed || 0, change: '', icon: UserX, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
   ];
 
   const pieData = [
@@ -511,6 +541,9 @@ const AdminDashboard = () => {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(0, 1fr))' }}>
+          </div>
+
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             {/* Recent Signups */}
             <div className="xl:col-span-2 glass-card p-4 md:p-6 border-theme-border">
@@ -575,38 +608,157 @@ const AdminDashboard = () => {
 
             {/* Recent Deletions */}
             <div className="glass-card p-4 md:p-6 border-theme-border">
-              <h2 className="text-lg font-semibold text-theme-primary mb-6">Recent Deletions</h2>
+              <div className="flex items-center gap-2 mb-6">
+                <div className="p-1.5 rounded-lg bg-rose-500/10">
+                  <UserMinus className="w-4 h-4 text-rose-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-theme-primary">Recent Deletions</h2>
+              </div>
+              <div className="relative mb-4 w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-theme-muted" />
+                <input 
+                  type="text" 
+                  placeholder="Search deletions..." 
+                  value={deletionsSearch}
+                  onChange={(e) => setDeletionsSearch(e.target.value)}
+                  className="w-full bg-theme-surface border border-theme-border rounded-lg py-1.5 pl-8 pr-3 text-xs text-theme-primary focus:outline-none focus:border-rose-500/50"
+                />
+              </div>
               <div className="flex flex-col gap-3">
-                {deletions
-                  .filter(d => !dismissedDeletions.includes(d.id?.toString() || d.email))
-                  .map((d, i) => (
-                    <div key={d.id || d.email || i} className="flex items-center justify-between p-3 rounded-xl bg-red-500/5 border border-red-500/10 group transition-all hover:bg-red-500/10">
+                {(() => {
+                  const items = deletions
+                    .filter(d => !dismissedDeletions.includes(d.id?.toString() || d.email))
+                    .filter(d => {
+                      if (!deletionsSearch) return true;
+                      const search = deletionsSearch.toLowerCase();
+                      return (d.full_name?.toLowerCase().includes(search) || d.email?.toLowerCase().includes(search));
+                    });
+                  if (items.length === 0) {
+                    return (
+                      <p className="text-sm text-theme-muted text-center py-4">
+                        {deletionsSearch ? `No matches for "${deletionsSearch}"` : 'No recent account deletions.'}
+                      </p>
+                    );
+                  }
+                  return items.slice(0, 5).map((d, i) => (
+                    <div key={d.id || d.email || i} className="flex items-center justify-between p-3 rounded-xl bg-rose-500/5 border border-rose-500/10 group transition-all hover:bg-rose-500/10">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2 rounded-lg bg-red-500/10 text-red-400 shrink-0">
+                        <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 shrink-0">
                           <UserMinus className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-theme-primary truncate">{d.full_name}</p>
-                          <p className="text-xs text-theme-muted">{d.plan} - {new Date(d.deleted_at).toLocaleDateString()}</p>
+                          <p className="text-xs text-theme-muted">{d.plan} · {new Date(d.deleted_at).toLocaleDateString()}</p>
                         </div>
                       </div>
                       <button
                         onClick={() => handleDismissDeletion(d.id?.toString(), d.email)}
-                        className="p-1.5 rounded-lg text-theme-muted hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
-                        title="Dismiss notification"
+                        className="p-1.5 rounded-lg text-theme-muted hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                        title="Dismiss"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  ))}
-                {deletions.filter(d => !dismissedDeletions.includes(d.id?.toString() || d.email)).length === 0 && (
-                  <p className="text-sm text-theme-muted text-center py-4">No recent account deletions.</p>
-                )}
+                  ));
+                })()}
               </div>
-              <button className="w-full mt-6 py-2 text-sm text-theme-muted hover:text-theme-primary transition-colors border border-theme-border rounded-lg hover:bg-theme-surface">
-                View All
-              </button>
             </div>
+          </div>
+
+          {/* Failed Join Attempts Panel */}
+          <div className="glass-card p-4 md:p-6 border-orange-500/20 bg-orange-500/5 mt-6">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-orange-500/10 border border-orange-500/20">
+                  <UserX className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-theme-primary">Failed Join Attempts</h2>
+                  <p className="text-xs text-theme-muted">Registration attempts that did not complete successfully</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
+                  <input 
+                    type="text" 
+                    placeholder="Search failed attempts..." 
+                    value={failedSearch}
+                    onChange={(e) => setFailedSearch(e.target.value)}
+                    className="w-full bg-theme-surface border border-theme-border rounded-xl py-1.5 pl-9 pr-4 text-xs text-theme-primary focus:outline-none focus:border-orange-500/50"
+                  />
+                </div>
+                <span className="px-3 py-1 rounded-full bg-orange-500/15 border border-orange-500/20 text-orange-400 text-xs font-black shrink-0">
+                  {failedAccounts.filter(f => !dismissedFailed.includes(f.id)).length} attempts
+                </span>
+              </div>
+            </div>
+
+            {(() => {
+              const items = failedAccounts
+                .filter(f => !dismissedFailed.includes(f.id))
+                .filter(f => {
+                  if (!failedSearch) return true;
+                  const search = failedSearch.toLowerCase();
+                  return (f.email?.toLowerCase().includes(search) || f.full_name?.toLowerCase().includes(search) || f.reason?.toLowerCase().includes(search));
+                });
+              if (items.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+                      <UserX className="w-7 h-7 text-orange-400" />
+                    </div>
+                    <p className="text-sm text-theme-muted">
+                      {failedSearch ? `No attempts match "${failedSearch}"` : 'No failed registration attempts on record.'}
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-theme-border text-[10px] text-theme-muted uppercase tracking-wider">
+                        <th className="pb-3 font-bold">Email</th>
+                        <th className="pb-3 font-bold hidden sm:table-cell">Name</th>
+                        <th className="pb-3 font-bold">Reason</th>
+                        <th className="pb-3 font-bold hidden md:table-cell">Time</th>
+                        <th className="pb-3 font-bold text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.slice(0, 10).map((f) => (
+                        <tr key={f.id} className="border-b border-theme-border last:border-0 hover:bg-orange-500/5 transition-colors group">
+                          <td className="py-3 pr-4">
+                            <span className="text-sm text-theme-primary font-medium">{f.email}</span>
+                          </td>
+                          <td className="py-3 pr-4 hidden sm:table-cell">
+                            <span className="text-sm text-theme-muted">{f.full_name || '—'}</span>
+                          </td>
+                          <td className="py-3 pr-4 max-w-xs">
+                            <span className="text-xs text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-1 rounded-lg line-clamp-1 inline-block max-w-[200px] truncate">
+                              {f.reason || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="py-3 pr-4 hidden md:table-cell">
+                            <span className="text-xs text-theme-muted">{new Date(f.failed_at).toLocaleString()}</span>
+                          </td>
+                          <td className="py-3 text-right">
+                            <button
+                              onClick={() => handleDismissFailed(f.id)}
+                              className="p-1.5 rounded-lg text-theme-muted hover:text-orange-400 hover:bg-orange-500/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                              title="Dismiss log"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </main>
       </div>

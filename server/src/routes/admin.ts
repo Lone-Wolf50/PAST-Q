@@ -328,7 +328,7 @@ router.get('/users', async (_req: AuthRequest, res: Response) => {
     const { data, error } = await supabase
       .from('upsa_users')
       .select('id, full_name, email, plan, role, status, is_verified, ai_enabled, created_at')
-      .order('created_at', { ascending: false });
+      .order('full_name', { ascending: true });
     if (error) throw error;
     res.status(200).json({ users: data });
   } catch {
@@ -398,6 +398,40 @@ router.get('/deletions', async (_req: AuthRequest, res: Response) => {
     res.status(200).json({ deletions: data });
   } catch {
     res.status(500).json({ error: 'Failed to fetch deletions.' });
+  }
+});
+
+router.delete('/deletions/:id', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    await supabase.from('upsa_deleted_accounts').delete().eq('id', id);
+    res.status(200).json({ message: 'Deleted account log dismissed.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to dismiss deleted account log.' });
+  }
+});
+
+// ── Failed Accounts ───────────────────────────────────────────────────────────
+router.get('/failed-accounts', async (_req: AuthRequest, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('upsa_failed_accounts')
+      .select('*')
+      .order('failed_at', { ascending: false });
+    if (error) throw error;
+    res.status(200).json({ failedAccounts: data });
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch failed accounts.' });
+  }
+});
+
+router.delete('/failed-accounts/:id', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    await supabase.from('upsa_failed_accounts').delete().eq('id', id);
+    res.status(200).json({ message: 'Failed account log dismissed.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to dismiss failed account log.' });
   }
 });
 
@@ -488,6 +522,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       supabase.from('upsa_deleted_accounts').select('*', { count: 'exact', head: true }),
       supabase.from('upsa_users').select('plan').eq('role', 'student').neq('plan', 'free'),
       supabase.from('upsa_transactions').select('amount, status, created_at').gte('created_at', gteDate.toISOString()),
+      supabase.from('upsa_failed_accounts').select('*', { count: 'exact', head: true }),
     ]);
 
     const totalStudents = results[0].count || 0;
@@ -496,6 +531,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     const totalDeleted = results[3].count || 0;
     const planRows = results[4].data || [];
     const transactions = results[5].data || [];
+    const totalFailed = results[6].count || 0;
 
     const planBreakdown = { basic: 0, plus: 0, pro: 0 };
     planRows.forEach((u: any) => {
@@ -622,6 +658,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       planBreakdown,
       totalPapers,
       totalDeleted,
+      totalFailed,
       totalRevenue,
       failedTransactions,
       activeSubscribers: activePlans,

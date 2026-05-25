@@ -112,11 +112,27 @@ const sanitizeOtp = (value: unknown): string | null => {
 };
 
 
+// ─── Helper: Log a failed account attempt ────────────────────
+const logFailedAccount = async (email: string, full_name: string, reason: string) => {
+  try {
+    await supabase.from('upsa_failed_accounts').insert({ email, full_name, reason });
+    await supabase.from('upsa_admin_notifications').insert({
+      title: '⚠️ Failed Registration Attempt',
+      message: `User ${email} (${full_name || 'No Name'}) failed to register. Reason: ${reason}`,
+      type: 'warning',
+    });
+  } catch (logErr) {
+    console.error('Failed to log failed account:', logErr);
+  }
+};
+
 // ─── REGISTER ────────────────────────────────────────────────
 router.post('/register', authLimiter, async (req: Request, res: Response) => {
   const full_name = sanitizeText(req.body.full_name);
   const email = sanitizeEmail(req.body.email);
   const password = typeof req.body.password === 'string' ? req.body.password : '';
+  // Store raw email for logging purposes (in case sanitizeEmail returns null)
+  const rawEmail = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : 'unknown';
 
   // Validate full_name
   if (!full_name || full_name.length < 2) {
@@ -130,12 +146,14 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
 
   // Validate email
   if (!email) {
+    logFailedAccount(rawEmail, full_name, 'Invalid email address provided').catch(() => {});
     res.status(400).json({ error: 'A valid email address is required.' });
     return;
   }
 
   // Restrict emails
   if (!isAllowedEmail(email)) {
+    logFailedAccount(email, full_name, 'Blocked email domain — only Gmail or staff upsamail allowed').catch(() => {});
     res.status(400).json({ 
       error: 'Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.' 
     });
@@ -185,6 +203,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
 
     if (error || !user) {
       console.error('❌ DB Error during registration:', error);
+      logFailedAccount(email, full_name, `DB error during account creation: ${error?.message || 'unknown'}`).catch(() => {});
       res.status(500).json({ error: 'Failed to create account. Please try again.', detail: error?.message });
       return;
     }
@@ -197,6 +216,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
       console.error('❌ Email Error:', emailErr);
       // Rollback: delete the unverified user from the database since the email failed to send
       await supabase.from('upsa_users').delete().eq('id', user.id);
+      logFailedAccount(email, full_name, `Verification email delivery failed: ${emailErr.message}`).catch(() => {});
       res.status(500).json({ error: 'Failed to send verification email. Please check your email address and try again.', detail: emailErr.message });
       return;
     }
@@ -204,6 +224,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
     res.status(201).json({ message: 'Account created. Please check your email for the verification code.' });
   } catch (err: any) {
     console.error('❌ Unexpected Registration Error:', err);
+    logFailedAccount(email, full_name, `Unexpected server error: ${err.message}`).catch(() => {});
     res.status(500).json({ error: 'Internal server error.', detail: err.message });
   }
 });
@@ -548,19 +569,20 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
     }
 
     const email = googleUser.email.toLowerCase().trim();
+    const full_name = sanitizeText(
+      googleUser.user_metadata?.full_name ||
+      googleUser.user_metadata?.name ||
+      email.split('@')[0]
+    );
 
     if (!isAllowedEmail(email)) {
+      logFailedAccount(email, full_name, 'Google OAuth: Blocked email domain — only Gmail or staff upsamail allowed').catch(() => {});
       res.status(403).json({ 
         error: 'Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.' 
       });
       return;
     }
 
-    const full_name = sanitizeText(
-      googleUser.user_metadata?.full_name ||
-      googleUser.user_metadata?.name ||
-      email.split('@')[0]
-    );
     const avatar_url = googleUser.user_metadata?.avatar_url || googleUser.user_metadata?.picture || null;
 
     console.log(`🔑 Google OAuth login: ${email}`);
@@ -624,6 +646,7 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
 
       if (insertError || !newUser) {
         console.error('❌ Failed to create Google OAuth user:', insertError?.message);
+        logFailedAccount(email, full_name, `Google OAuth: DB insert error: ${insertError?.message || 'unknown'}`).catch(() => {});
         res.status(500).json({ error: 'Failed to create account. Please try again.' });
         return;
       }

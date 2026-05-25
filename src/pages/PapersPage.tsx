@@ -341,27 +341,31 @@ const PapersPage = () => {
           onClick={() => { setSelectedDepartment(null); setShowSaved(false); setPage(1); }}
           className={clsx(
             "px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-center shrink-0",
-            "bg-theme-surface-2 text-theme-primary border-theme-border shadow-sm hover:border-indigo-400/50"
+            selectedDepartment === null && !showSaved
+              ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent shadow-lg shadow-indigo-500/30 scale-105"
+              : "bg-theme-surface-2 text-theme-primary border-theme-border shadow-sm hover:border-indigo-400/50"
           )}
         >
           All Subjects
         </button>
         {[
-          { name: "IT", pillClass: "tab-pill-blue" },
-          { name: "Accounting", pillClass: "tab-pill-emerald" },
-          { name: "Marketing", pillClass: "tab-pill-fuchsia" },
-          { name: "LLB (Law)", pillClass: "tab-pill-rose" },
-          { name: "Actuarial Science", pillClass: "tab-pill-indigo" },
-          { name: "Business Admin", pillClass: "tab-pill-violet" },
-          { name: "Logistics", pillClass: "tab-pill-orange" },
-          { name: "PR", pillClass: "tab-pill-red" }
+          { name: "IT", pillClass: "tab-pill-blue", activeClass: "bg-blue-500 text-white border-transparent shadow-lg shadow-blue-500/30 scale-105" },
+          { name: "Accounting", pillClass: "tab-pill-emerald", activeClass: "bg-emerald-500 text-white border-transparent shadow-lg shadow-emerald-500/30 scale-105" },
+          { name: "Marketing", pillClass: "tab-pill-fuchsia", activeClass: "bg-fuchsia-500 text-white border-transparent shadow-lg shadow-fuchsia-500/30 scale-105" },
+          { name: "LLB (Law)", pillClass: "tab-pill-rose", activeClass: "bg-rose-500 text-white border-transparent shadow-lg shadow-rose-500/30 scale-105" },
+          { name: "Actuarial Science", pillClass: "tab-pill-indigo", activeClass: "bg-indigo-500 text-white border-transparent shadow-lg shadow-indigo-500/30 scale-105" },
+          { name: "Business Admin", pillClass: "tab-pill-violet", activeClass: "bg-violet-500 text-white border-transparent shadow-lg shadow-violet-500/30 scale-105" },
+          { name: "Logistics", pillClass: "tab-pill-orange", activeClass: "bg-orange-500 text-white border-transparent shadow-lg shadow-orange-500/30 scale-105" },
+          { name: "PR", pillClass: "tab-pill-red", activeClass: "bg-red-500 text-white border-transparent shadow-lg shadow-red-500/30 scale-105" }
         ].map(dept => (
           <button
             key={dept.name}
             onClick={() => { setSelectedDepartment(dept.name); setShowSaved(false); setPage(1); }}
             className={clsx(
               "px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all snap-center shrink-0 hover:opacity-80",
-              dept.pillClass
+              selectedDepartment === dept.name
+                ? dept.activeClass
+                : dept.pillClass
             )}
           >
             <span className="relative z-10">{dept.name}</span>

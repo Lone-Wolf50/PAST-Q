@@ -13,7 +13,7 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
     const { data, error } = await supabase
       .from('upsa_users')
       .select('id, full_name, email, plan, role, is_verified, created_at')
-      .order('created_at', { ascending: false });
+      .order('full_name', { ascending: true });
 
     if (error) throw error;
     res.status(200).json({ users: data });

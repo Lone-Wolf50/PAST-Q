@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 
 type Theme = 'dark' | 'light';
 
@@ -21,6 +21,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem(storageKey) as Theme) || 'dark';
   });
+  const isFirstRender = useRef(true);
 
   // Re-sync theme when path changes (for SPA navigation)
   useEffect(() => {
@@ -50,6 +51,14 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const root = document.documentElement;
+
+    // Enable smooth transitioning across elements if it is not the first render
+    if (!isFirstRender.current) {
+      root.classList.add('theme-transitioning');
+    } else {
+      isFirstRender.current = false;
+    }
+
     if (theme === 'light') {
       root.classList.add('light');
       root.style.colorScheme = 'light';
@@ -58,9 +67,18 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
       root.style.colorScheme = 'dark';
     }
     
-    const currentIsAdmin = window.location.pathname.startsWith('/admin');
+    const currentIsAdmin = window.location.pathname.startsWith('/hq-portal');
     const currentKey = currentIsAdmin ? 'pastq-admin-theme' : 'pastq-theme';
     localStorage.setItem(currentKey, theme);
+
+    // Remove the transitioning class after transition finishes (300ms)
+    const timeout = setTimeout(() => {
+      root.classList.remove('theme-transitioning');
+    }, 320);
+
+    return () => {
+      clearTimeout(timeout);
+    };
   }, [theme]);
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));

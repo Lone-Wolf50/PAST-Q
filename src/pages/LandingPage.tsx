@@ -172,10 +172,14 @@ const LandingPage = () => {
             </p>
             <div className="grid grid-cols-2 gap-4">
               {[
-                { title: "IT & CS", desc: "Latest tech trends" },
+                { title: "IT", desc: "Latest tech trends" },
                 { title: "Accounting", desc: "Financial mastery" },
                 { title: "Marketing", desc: "Brand strategies" },
-                { title: "Business Admin", desc: "Management core" }
+                { title: "LLB (Law)", desc: "Legal frameworks" },
+                { title: "Actuarial Science", desc: "Risk analysis" },
+                { title: "Business Admin", desc: "Management core" },
+                { title: "Logistics", desc: "Supply chain" },
+                { title: "PR", desc: "Media communications" }
               ].map((dept) => (
                 <div key={dept.title} className="p-4 rounded-2xl bg-theme-surface border border-theme-border">
                   <p className="text-theme-primary font-bold">{dept.title}</p>
