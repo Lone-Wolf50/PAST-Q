@@ -1,6 +1,6 @@
 # PastQ — AI-Powered Academic Tutoring Platform 🎓🤖
 
-> **Live at → [pastqhub.com](https://www.pastqhub.com)**
+> **Live at → [pastqhub.com](https://pastqhub.com)**
 
 PastQ is a premium, state-of-the-art educational platform designed to help students master past examination papers using cutting-edge Artificial Intelligence. It combines an immersive PDF viewing experience with specialized AI tutoring that "decodes" papers, providing instant insights, summaries, and deep-dive explanations.
 
@@ -162,7 +162,7 @@ This section documents how to connect the custom domain **pastqhub.com** to the 
 1. Go to your [Vercel Dashboard](https://vercel.com/dashboard) and open the **PastQ** project.
 2. Click **Settings** → **Domains**.
 3. Type `pastqhub.com` and click **Add**.
-4. Also add `www.pastqhub.com` and configure it to **redirect to** `pastqhub.com` (or vice-versa — pick one as canonical).
+4. Also add `www.pastqhub.com` and configure it to **redirect to** `pastqhub.com` (canonical).
 
 Vercel will display the DNS records you need to add next.
 
@@ -204,12 +204,12 @@ Once the domain is live, update these values in your **Vercel project environmen
 VITE_API_URL=https://your-render-backend.onrender.com/api
 
 # Backend (Render env)
-FRONTEND_URL=https://www.pastqhub.com
+FRONTEND_URL=https://pastqhub.com
 ```
 
 And in **Supabase** → Authentication → URL Configuration:
-- **Site URL**: `https://www.pastqhub.com`
-- **Redirect URLs**: Add `https://www.pastqhub.com/auth/callback`
+- **Site URL**: `https://pastqhub.com`
+- **Redirect URLs**: Add `https://pastqhub.com/auth/callback`
 
 ---
 
@@ -221,16 +221,16 @@ A `sitemap.xml` is already included in `/public/sitemap.xml` with all public rou
 User-agent: *
 Allow: /
 
-Sitemap: https://www.pastqhub.com/sitemap.xml
+Sitemap: https://pastqhub.com/sitemap.xml
 ```
 
 After deploying, verify Google can reach your sitemap at:
-`https://www.pastqhub.com/sitemap.xml`
+`https://pastqhub.com/sitemap.xml`
 
 Then submit it via [Google Search Console](https://search.google.com/search-console):
 1. Add `pastqhub.com` as a property.
 2. Verify ownership (use the **HTML tag** method — Vercel makes this easy).
-3. Go to **Sitemaps** and submit: `https://www.pastqhub.com/sitemap.xml`.
+3. Go to **Sitemaps** and submit: `https://pastqhub.com/sitemap.xml`.
 
 ---
 
@@ -341,7 +341,7 @@ UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
 The XML sitemap is located at [`/public/sitemap.xml`](./public/sitemap.xml) and will be publicly accessible at:
 
 ```
-https://www.pastqhub.com/sitemap.xml
+https://pastqhub.com/sitemap.xml
 ```
 
 | URL | Priority | Change Frequency |

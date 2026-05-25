@@ -13,4 +13,4 @@ Disallow: /delete-account
 Disallow: /hq-portal/
 Disallow: /auth/
 
-Sitemap: https://www.pastqhub.com/sitemap.xml
+Sitemap: https://pastqhub.com/sitemap.xml
