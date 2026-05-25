@@ -42,6 +42,9 @@ const corsOptions = {
     'https://past-q-three.vercel.app',
     'https://past-q.vercel.app',
     /^https:\/\/past-q.*\.vercel\.app$/,
+    // Custom domain
+    'https://pastqhub.com',
+    'https://www.pastqhub.com',
   ] as (string | RegExp)[],
   credentials: true,
 };
