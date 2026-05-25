@@ -325,13 +325,123 @@ router.delete('/papers/:id', async (req: AuthRequest, res: Response) => {
 // ── Users Management ──────────────────────────────────────────────────────────
 router.get('/users', async (_req: AuthRequest, res: Response) => {
   try {
-    const { data, error } = await supabase
+    const { data: users, error } = await supabase
       .from('upsa_users')
-      .select('id, full_name, email, plan, role, status, is_verified, ai_enabled, created_at')
+      .select(`
+        id, 
+        full_name, 
+        email, 
+        plan, 
+        role, 
+        status, 
+        is_verified, 
+        ai_enabled, 
+        created_at,
+        pdf_downloads_count,
+        pdf_downloads_blocked_until,
+        upsa_ai_queries(count)
+      `)
       .order('full_name', { ascending: true });
     if (error) throw error;
-    res.status(200).json({ users: data });
-  } catch {
+
+    const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: recentQueries, error: queriesError } = await supabase
+      .from('upsa_ai_queries')
+      .select('user_id, created_at, has_file')
+      .gte('created_at', thirtyDaysAgo);
+
+    const recentQueriesByUser = new Map<string, { queries10h: number; queries30d: number; files30d: number }>();
+    if (recentQueries) {
+      for (const q of recentQueries) {
+        const userId = q.user_id;
+        const createdAt = q.created_at;
+        const hasFile = q.has_file;
+
+        if (!recentQueriesByUser.has(userId)) {
+          recentQueriesByUser.set(userId, { queries10h: 0, queries30d: 0, files30d: 0 });
+        }
+        const stats = recentQueriesByUser.get(userId)!;
+        stats.queries30d++;
+        if (hasFile) {
+          stats.files30d++;
+        }
+        if (new Date(createdAt) >= new Date(tenHoursAgo)) {
+          stats.queries10h++;
+        }
+      }
+    }
+
+    const usersWithStats = (users || []).map((u: any) => {
+      const stats = recentQueriesByUser.get(u.id) || { queries10h: 0, queries30d: 0, files30d: 0 };
+      const totalQueries = u.upsa_ai_queries?.[0]?.count ?? 0;
+
+      const plan = (u.plan || 'Free').toLowerCase();
+      let limitMsg = '';
+      let usageMsg = '';
+      let limitReached = false;
+
+      if (plan === 'free') {
+        limitMsg = '5 queries / 10h';
+        usageMsg = `${stats.queries10h} / 5 queries`;
+        limitReached = stats.queries10h >= 5;
+      } else if (plan === 'basic') {
+        limitMsg = '10 queries & 5 files / month';
+        usageMsg = `${stats.queries30d}/10 q, ${stats.files30d}/5 files`;
+        limitReached = stats.queries30d >= 10 || stats.files30d >= 5;
+      } else if (plan === 'plus' || plan === 'pro') {
+        limitMsg = 'Unlimited';
+        usageMsg = 'Unlimited';
+        limitReached = false;
+      } else {
+        limitMsg = 'N/A';
+        usageMsg = 'N/A';
+      }
+
+      // Calculate PDF Downloads limits
+      const pdfCount = u.pdf_downloads_count || 0;
+      const pdfBlockedUntil = u.pdf_downloads_blocked_until;
+      const pdfLimitReached = !!(pdfBlockedUntil && new Date(pdfBlockedUntil) > new Date());
+
+      let pdfLimitMsg = '';
+      let pdfUsageMsg = '';
+
+      if (plan === 'free') {
+        pdfLimitMsg = '7 downloads / week';
+        pdfUsageMsg = `${pdfCount} / 7`;
+      } else if (plan === 'basic') {
+        pdfLimitMsg = '20 downloads / week';
+        pdfUsageMsg = `${pdfCount} / 20`;
+      } else if (plan === 'plus' || plan === 'pro') {
+        pdfLimitMsg = 'Unlimited';
+        pdfUsageMsg = 'Unlimited';
+      } else {
+        pdfLimitMsg = 'N/A';
+        pdfUsageMsg = 'N/A';
+      }
+
+      return {
+        ...u,
+        upsa_ai_queries: undefined,
+        total_ai_queries: totalQueries,
+        ai_limit: limitMsg,
+        ai_usage: usageMsg,
+        ai_limit_reached: limitReached,
+        queries_10h: stats.queries10h,
+        queries_30d: stats.queries30d,
+        files_30d: stats.files30d,
+        pdf_limit: pdfLimitMsg,
+        pdf_usage: pdfUsageMsg,
+        pdf_limit_reached: pdfLimitReached,
+        pdf_downloads_count: pdfCount,
+        pdf_downloads_blocked_until: pdfBlockedUntil
+      };
+    });
+
+    res.status(200).json({ users: usersWithStats });
+  } catch (err: any) {
+    console.error('[GET /users]', err?.message || err);
     res.status(500).json({ error: 'Failed to fetch users.' });
   }
 });

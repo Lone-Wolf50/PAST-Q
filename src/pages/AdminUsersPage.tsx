@@ -16,6 +16,7 @@ const AdminUsersPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPlan, setSelectedPlan] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [activeTab, setActiveTab] = useState<'directory' | 'limits'>('directory');
 
   // UI States
   const [alert, setAlert] = useState<{ show: boolean, title: string, message: string, variant: 'success' | 'error' | 'info' }>({
@@ -139,6 +140,195 @@ const AdminUsersPage = () => {
     }
   };
 
+  const renderAiGauge = (user: any) => {
+    const plan = (user.plan || 'Free').toLowerCase();
+    
+    if (plan === 'plus' || plan === 'pro') {
+      return (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full flex items-center gap-1 border border-indigo-500/20 shadow-sm shadow-indigo-500/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+              Unlimited
+            </span>
+          </div>
+          <span className="text-[10px] text-theme-muted font-mono">Total Queries: {user.total_ai_queries || 0}</span>
+        </div>
+      );
+    }
+
+    if (plan === 'basic') {
+      const qCount = user.queries_30d || 0;
+      const fCount = user.files_30d || 0;
+      const qPct = Math.min((qCount / 10) * 100, 100);
+      const fPct = Math.min((fCount / 5) * 100, 100);
+
+      return (
+        <div className="flex flex-col gap-2 min-w-[140px] max-w-[200px]">
+          {/* Queries Gauge */}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex justify-between text-[9px] font-bold text-theme-secondary">
+              <span>Queries</span>
+              <span className={clsx(qCount >= 10 ? "text-red-400" : "text-theme-primary")}>{qCount}/10</span>
+            </div>
+            <div className="w-full bg-theme-surface rounded-full h-1 overflow-hidden border border-theme-border/20">
+              <div 
+                className={clsx(
+                  "h-full rounded-full transition-all duration-500",
+                  qCount >= 10 ? "bg-red-500" : 
+                  qCount >= 8 ? "bg-amber-500" : 
+                  "bg-indigo-500"
+                )}
+                style={{ width: `${qPct}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Files Gauge */}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex justify-between text-[9px] font-bold text-theme-secondary">
+              <span>Files</span>
+              <span className={clsx(fCount >= 5 ? "text-red-400" : "text-theme-primary")}>{fCount}/5</span>
+            </div>
+            <div className="w-full bg-theme-surface rounded-full h-1 overflow-hidden border border-theme-border/20">
+              <div 
+                className={clsx(
+                  "h-full rounded-full transition-all duration-500",
+                  fCount >= 5 ? "bg-red-500" : 
+                  fCount >= 4 ? "bg-amber-500" : 
+                  "bg-emerald-500"
+                )}
+                style={{ width: `${fPct}%` }}
+              />
+            </div>
+          </div>
+          <span className="text-[9px] text-theme-muted font-mono">Total Queries: {user.total_ai_queries || 0}</span>
+        </div>
+      );
+    }
+
+    // Free Plan
+    const qCount = user.queries_10h || 0;
+    const qPct = Math.min((qCount / 5) * 100, 100);
+
+    return (
+      <div className="flex flex-col gap-1 min-w-[140px] max-w-[200px]">
+        <div className="flex justify-between text-[9px] font-bold text-theme-secondary">
+          <span>Queries (10h)</span>
+          <span className={clsx(qCount >= 5 ? "text-red-400" : "text-theme-primary")}>{qCount}/5</span>
+        </div>
+        <div className="w-full bg-theme-surface rounded-full h-1 overflow-hidden border border-theme-border/20">
+          <div 
+            className={clsx(
+              "h-full rounded-full transition-all duration-500",
+              qCount >= 5 ? "bg-red-500" : 
+              qCount >= 4 ? "bg-amber-500" : 
+              "bg-indigo-500"
+            )}
+            style={{ width: `${qPct}%` }}
+          />
+        </div>
+        <span className="text-[9px] text-theme-muted font-mono">Total Queries: {user.total_ai_queries || 0}</span>
+      </div>
+    );
+  };
+
+  const renderPdfGauge = (user: any) => {
+    const plan = (user.plan || 'Free').toLowerCase();
+    
+    if (plan === 'plus' || plan === 'pro') {
+      return (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-500/20 shadow-sm shadow-emerald-500/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Unlimited
+            </span>
+          </div>
+          <span className="text-[10px] text-theme-muted font-mono">Downloads Blocked: No</span>
+        </div>
+      );
+    }
+
+    const pdfCount = user.pdf_downloads_count || 0;
+    const limit = plan === 'basic' ? 20 : 7;
+    const pct = Math.min((pdfCount / limit) * 100, 100);
+    const limitReached = user.pdf_limit_reached;
+
+    return (
+      <div className="flex flex-col gap-1 min-w-[140px] max-w-[200px]">
+        <div className="flex justify-between text-[9px] font-bold text-theme-secondary">
+          <span>Downloads</span>
+          <span className={clsx(limitReached ? "text-red-400" : "text-theme-primary")}>
+            {pdfCount}/{limit}
+          </span>
+        </div>
+        <div className="w-full bg-theme-surface rounded-full h-1 overflow-hidden border border-theme-border/20">
+          <div 
+            className={clsx(
+              "h-full rounded-full transition-all duration-500",
+              limitReached ? "bg-red-500" : 
+              pdfCount >= (limit - 2) ? "bg-amber-500" : 
+              "bg-emerald-500"
+            )}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex justify-between items-center text-[9px] text-theme-muted font-mono">
+          <span>Blocked: {limitReached ? 'Yes 🔴' : 'No 🟢'}</span>
+          {limitReached && user.pdf_downloads_blocked_until && (
+            <span className="text-red-400/80 font-bold scale-90">
+              Until {new Date(user.pdf_downloads_blocked_until).toLocaleDateString(undefined, { dateStyle: 'short' })}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderUsageFlag = (user: any) => {
+    const plan = (user.plan || 'Free').toLowerCase();
+    if (plan === 'plus' || plan === 'pro') {
+      return (
+        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 whitespace-nowrap">
+          Unlimited Access
+        </span>
+      );
+    }
+    
+    const isAiBlocked = user.ai_limit_reached;
+    const isPdfBlocked = user.pdf_limit_reached;
+
+    if (isAiBlocked || isPdfBlocked) {
+      let msg = 'Blocked';
+      if (isAiBlocked && isPdfBlocked) msg = 'AI & PDF Blocked';
+      else if (isAiBlocked) msg = 'AI Blocked';
+      else msg = 'PDF Blocked';
+      return (
+        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20 animate-pulse whitespace-nowrap">
+          {msg}
+        </span>
+      );
+    }
+
+    const isAiNearing = (plan === 'free' && user.queries_10h >= 4) || (plan === 'basic' && (user.queries_30d >= 8 || user.files_30d >= 4));
+    const isPdfNearing = (plan === 'free' && user.pdf_downloads_count >= 5) || (plan === 'basic' && user.pdf_downloads_count >= 16);
+
+    if (isAiNearing || isPdfNearing) {
+      return (
+        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
+          Nearing Limit
+        </span>
+      );
+    }
+
+    return (
+      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
+        Active Quota
+      </span>
+    );
+  };
+
   const filteredUsers = users.filter(user => {
     const matchSearch = !searchTerm || 
       user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -176,6 +366,35 @@ const AdminUsersPage = () => {
           <div className="mb-10">
             <h1 className="text-3xl font-bold text-theme-primary mb-2">User Management</h1>
             <p className="text-theme-muted">Monitor user activity, manage subscriptions, and moderate accounts.</p>
+          </div>
+
+          {/* Premium Glassmorphic Tab Switcher */}
+          <div className="flex border-b border-theme-border mb-8 gap-6">
+            <button
+              onClick={() => setActiveTab('directory')}
+              className={clsx(
+                "pb-3.5 text-sm font-bold transition-all relative outline-none",
+                activeTab === 'directory' 
+                  ? "text-indigo-400 border-b-2 border-indigo-500 font-extrabold" 
+                  : "text-theme-muted hover:text-theme-secondary"
+              )}
+            >
+              User Directory
+            </button>
+            <button
+              onClick={() => setActiveTab('limits')}
+              className={clsx(
+                "pb-3.5 text-sm font-bold transition-all relative flex items-center gap-2 outline-none",
+                activeTab === 'limits' 
+                  ? "text-indigo-400 border-b-2 border-indigo-500 font-extrabold" 
+                  : "text-theme-muted hover:text-theme-secondary"
+              )}
+            >
+              AI & Downloads Usage Panel
+              <span className="bg-indigo-500/10 border border-indigo-500/20 text-[9px] font-bold text-indigo-400 px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                Monitor Quotas
+              </span>
+            </button>
           </div>
 
           {/* Filters Bar */}
@@ -216,15 +435,16 @@ const AdminUsersPage = () => {
               </select>
             </div>
           </div>
-
-          {/* Mobile Cards View (Visible on mobile only) */}
+          {/* Mobile Cards View */}
           <div className="grid grid-cols-1 gap-4 lg:hidden">
             {loading ? (
               <div className="glass-card p-12 text-center text-theme-muted">Loading user database...</div>
             ) : filteredUsers.length === 0 ? (
               <div className="glass-card p-12 text-center text-theme-muted">No users found.</div>
-            ) : (
-              filteredUsers.map((user) => (
+            ) : activeTab === 'directory' ? (
+              /* DIRECTORY MOBILE CARDS */
+              <div key="directory-mobile" className="flex flex-col gap-4 animate-fade-in w-full">
+                {filteredUsers.map((user) => (
                 <div key={user.id} className="glass-card p-5 border-theme-border flex flex-col gap-4 relative overflow-hidden">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 shadow-inner">
@@ -311,143 +531,282 @@ const AdminUsersPage = () => {
                     </div>
                   </div>
                 </div>
-              ))
+              ))}
+              </div>
+            ) : (
+              /* AI & PDF LIMITS MOBILE CARDS */
+              <div key="limits-mobile" className="flex flex-col gap-4 animate-fade-in w-full">
+                {filteredUsers.map((user) => (
+                  <div key={user.id} className="glass-card p-5 border-theme-border flex flex-col gap-4 relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+                          <UserIcon className="w-5 h-5 text-indigo-400" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-theme-primary">{user.full_name}</span>
+                          <span className="text-[10px] text-theme-muted font-mono tracking-tighter line-clamp-1">{user.email}</span>
+                        </div>
+                      </div>
+                      <div>{renderUsageFlag(user)}</div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 py-4 border-y border-theme-border/50">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">AI Limit badge</span>
+                        <span className={clsx(
+                          "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase self-start border whitespace-nowrap",
+                          user.plan === 'pro' || user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
+                          user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-theme-surface text-theme-muted border-theme-border"
+                        )}>
+                          {user.ai_limit || '5 queries / 10h'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 items-end">
+                        <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">AI Access</span>
+                        <button
+                          onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
+                          className={clsx(
+                            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
+                            (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
+                          )}
+                        >
+                          <span
+                            className={clsx(
+                              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+                              (user.ai_enabled ?? true) ? "translate-x-4.5" : "translate-x-1"
+                            )}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">AI Queries & Files Usage</span>
+                        {renderAiGauge(user)}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">PDF Downloads Limit</span>
+                        {renderPdfGauge(user)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
           {/* Desktop Table (Hidden on mobile) */}
           <div className="hidden lg:block glass-card border-theme-border overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[900px]">
-                <thead>
-                  <tr className="border-b border-theme-border text-[11px] text-theme-muted uppercase tracking-widest bg-theme-surface/30 font-bold">
-                    <th className="px-6 py-4">User Details</th>
-                    <th className="px-6 py-4">Subscription</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4 text-center">AI Access</th>
-                    <th className="px-6 py-4">Joined Date</th>
-                    <th className="px-6 py-4 text-right">Moderation</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-theme-border">
-                  {loading ? (
-                    <tr><td colSpan={6} className="py-20 text-center text-theme-muted">Loading user database...</td></tr>
-                  ) : filteredUsers.length === 0 ? (
-                    <tr><td colSpan={6} className="py-20 text-center text-theme-muted">No users found.</td></tr>
-                  ) : (
-                    filteredUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
-                              <UserIcon className="w-5 h-5 text-indigo-400" />
+              {activeTab === 'directory' ? (
+                /* DIRECTORY TABLE */
+                <table key="directory-table" className="w-full text-left border-collapse min-w-[900px] animate-fade-in">
+                  <thead>
+                    <tr className="border-b border-theme-border text-[11px] text-theme-muted uppercase tracking-widest bg-theme-surface/30 font-bold whitespace-nowrap">
+                      <th className="px-6 py-4">User Details</th>
+                      <th className="px-6 py-4">Subscription</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4 text-center">AI Access</th>
+                      <th className="px-6 py-4">Joined Date</th>
+                      <th className="px-6 py-4 text-right">Moderation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border">
+                    {loading ? (
+                      <tr><td colSpan={6} className="py-20 text-center text-theme-muted">Loading user database...</td></tr>
+                    ) : filteredUsers.length === 0 ? (
+                      <tr><td colSpan={6} className="py-20 text-center text-theme-muted">No users found.</td></tr>
+                    ) : (
+                      filteredUsers.map((user) => (
+                        <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+                                <UserIcon className="w-5 h-5 text-indigo-400" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold text-theme-primary">{user.full_name}</span>
+                                <span className="text-[11px] text-theme-muted font-mono">{user.email}</span>
+                              </div>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-semibold text-theme-primary">{user.full_name}</span>
-                              <span className="text-[11px] text-theme-muted font-mono">{user.email}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <select
-                            value={user.plan}
-                            onChange={(e) => updateUserPlan(user.id, e.target.value)}
-                            className={clsx(
-                              "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border cursor-pointer outline-none transition-colors",
-                              user.plan === 'pro' ? "bg-orange-500/10 text-orange-400 border-orange-500/20 hover:border-orange-500/40" :
-                              user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:border-indigo-500/40" :
-                              user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:border-emerald-500/40" :
-                              "bg-theme-surface text-theme-muted border-theme-border hover:border-theme-primary/20"
-                            )}
-                          >
-                            <option value="free" className="text-theme-primary bg-theme-base">FREE</option>
-                            <option value="basic" className="text-theme-primary bg-theme-base">BASIC</option>
-                            <option value="plus" className="text-theme-primary bg-theme-base">PLUS</option>
-                            <option value="pro" className="text-theme-primary bg-theme-base">PRO</option>
-                          </select>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1.5">
-                            {user.status === 'active' ? (
-                              <span className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Active
-                              </span>
-                            ) : user.status === 'suspended' ? (
-                              <span className="flex items-center gap-1 text-amber-400 text-xs font-semibold">
-                                <Ban className="w-3.5 h-3.5" /> Suspended
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-red-400 text-xs font-semibold">
-                                <UserX className="w-3.5 h-3.5" /> Deactivated
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
+                          </td>
+                          <td className="px-6 py-4">
+                            <select
+                              value={user.plan}
+                              onChange={(e) => updateUserPlan(user.id, e.target.value)}
                               className={clsx(
-                                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
-                                (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
+                                "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border cursor-pointer outline-none transition-colors",
+                                user.plan === 'pro' ? "bg-orange-500/10 text-orange-400 border-orange-500/20 hover:border-orange-500/40" :
+                                user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:border-indigo-500/40" :
+                                user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:border-emerald-500/40" :
+                                "bg-theme-surface text-theme-muted border-theme-border hover:border-theme-primary/20"
                               )}
                             >
-                              <span
+                              <option value="free" className="text-theme-primary bg-theme-base">FREE</option>
+                              <option value="basic" className="text-theme-primary bg-theme-base">BASIC</option>
+                              <option value="plus" className="text-theme-primary bg-theme-base">PLUS</option>
+                              <option value="pro" className="text-theme-primary bg-theme-base">PRO</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-1.5">
+                              {user.status === 'active' ? (
+                                <span className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Active
+                                </span>
+                              ) : user.status === 'suspended' ? (
+                                <span className="flex items-center gap-1 text-amber-400 text-xs font-semibold">
+                                  <Ban className="w-3.5 h-3.5" /> Suspended
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-red-400 text-xs font-semibold">
+                                  <UserX className="w-3.5 h-3.5" /> Deactivated
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-center">
+                              <button
+                                onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
                                 className={clsx(
-                                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                                  (user.ai_enabled ?? true) ? "translate-x-6" : "translate-x-1"
+                                  "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
+                                  (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
                                 )}
-                              />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-xs text-theme-muted">
-                          {new Date(user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-2">
-                            {user.status === 'active' ? (
-                              <button 
-                                onClick={() => updateUserStatus(user.id, 'suspended')} 
-                                title="Suspend User" 
-                                className="p-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition-colors"
                               >
-                                <Ban className="w-4 h-4" />
+                                <span
+                                  className={clsx(
+                                    "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                                    (user.ai_enabled ?? true) ? "translate-x-6" : "translate-x-1"
+                                  )}
+                                />
                               </button>
-                            ) : (
-                              <button 
-                                onClick={() => updateUserStatus(user.id, 'active')} 
-                                title="Activate User" 
-                                className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                              </button>
-                            )}
-                            
-                            {user.status !== 'deactivated' && (
-                              <button 
-                                onClick={() => updateUserStatus(user.id, 'deactivated')} 
-                                title="Deactivate User" 
-                                className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
-                              >
-                                <UserX className="w-4 h-4" />
-                              </button>
-                            )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-theme-muted">
+                            {new Date(user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-end gap-2">
+                              {user.status === 'active' ? (
+                                <button 
+                                  onClick={() => updateUserStatus(user.id, 'suspended')} 
+                                  title="Suspend User" 
+                                  className="p-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition-colors"
+                                >
+                                  <Ban className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={() => updateUserStatus(user.id, 'active')} 
+                                  title="Activate User" 
+                                  className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                </button>
+                              )}
+                              
+                              {user.status !== 'deactivated' && (
+                                <button 
+                                  onClick={() => updateUserStatus(user.id, 'deactivated')} 
+                                  title="Deactivate User" 
+                                  className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
+                                >
+                                  <UserX className="w-4 h-4" />
+                                </button>
+                              )}
 
-                            <button 
-                              onClick={() => handleDeleteClick(user.id)} 
-                              title="Delete Permanently" 
-                              className="p-2 rounded-lg bg-theme-surface hover:bg-red-500/20 text-theme-muted hover:text-red-400 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                              <button 
+                                onClick={() => handleDeleteClick(user.id)} 
+                                title="Delete Permanently" 
+                                className="p-2 rounded-lg bg-theme-surface hover:bg-red-500/20 text-theme-muted hover:text-red-400 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                /* AI & DOWNLOADS LIMITS PANEL */
+                <table key="limits-table" className="w-full text-left border-collapse min-w-[900px] animate-fade-in">
+                  <thead>
+                    <tr className="border-b border-theme-border text-[11px] text-theme-muted uppercase tracking-widest bg-theme-surface/30 font-bold whitespace-nowrap">
+                      <th className="px-6 py-4">User Details</th>
+                      <th className="px-6 py-4">Status Flag</th>
+                      <th className="px-6 py-4 text-center">AI Access</th>
+                      <th className="px-6 py-4">AI Limit badge</th>
+                      <th className="px-6 py-4">AI Queries & Files Gauge</th>
+                      <th className="px-6 py-4">PDF Downloads Gauge</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border">
+                    {loading ? (
+                      <tr><td colSpan={6} className="py-20 text-center text-theme-muted">Loading limit analytics...</td></tr>
+                    ) : filteredUsers.length === 0 ? (
+                      <tr><td colSpan={6} className="py-20 text-center text-theme-muted">No users found.</td></tr>
+                    ) : (
+                      filteredUsers.map((user) => (
+                        <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+                                <UserIcon className="w-5 h-5 text-indigo-400" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold text-theme-primary">{user.full_name}</span>
+                                <span className="text-[11px] text-theme-muted font-mono">{user.email}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-semibold">
+                            {renderUsageFlag(user)}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-center">
+                              <button
+                                onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
+                                className={clsx(
+                                  "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
+                                  (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
+                                )}
+                              >
+                                <span
+                                  className={clsx(
+                                    "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                                    (user.ai_enabled ?? true) ? "translate-x-6" : "translate-x-1"
+                                  )}
+                                />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-semibold text-theme-primary">
+                          <span className={clsx(
+                            "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border whitespace-nowrap",
+                            user.plan === 'pro' || user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
+                            user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-theme-surface text-theme-muted border-theme-border"
+                          )}>
+                            {user.ai_limit || '5 queries / 10h'}
+                          </span>
                         </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                          <td className="px-6 py-4 text-xs">
+                            {renderAiGauge(user)}
+                          </td>
+                          <td className="px-6 py-4 text-xs">
+                            {renderPdfGauge(user)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </main>

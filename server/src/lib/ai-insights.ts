@@ -49,7 +49,7 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       return;
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1' });
 
     const prompt = `
       You are an expert academic tutor. Analyze this past paper PDF ("${paperTitle}") and provide the following insights for students:
@@ -150,21 +150,11 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
         const code = parsed?.error?.code ?? err.status;
 
         if (code === 429) {
-
-          // Note: we no longer break here. We will try 1.5-flash just in case it works.
+          // Note: we no longer break here. We will try fallback models just in case.
           quotaExhausted = true;
-          continue;
         }
-        if (code === 404) {
-
-          continue;
-        }
-        if (err.message === 'AI Request Timeout') {
-
-          continue;
-        }
-
-        break;
+        // Silently fall back to the next model for any error
+        continue;
       }
     }
 
