@@ -51,7 +51,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       cacheHit = false;
       const { data: dbUser, error } = await supabase
         .from('upsa_users')
-        .select('status, session_version')
+        .select('status, session_version, role')
         .eq('id', decoded.id)
         .single();
 
@@ -64,6 +64,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       user = {
         status: dbUser.status || 'active',
         session_version: dbUser.session_version ?? 0,
+        role: dbUser.role || 'student',
       };
 
       // Populate Cache asynchronously
@@ -75,7 +76,9 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       // console.log(`⚡ [Redis] Session cache HIT for user: ${decoded.email}`);
     }
 
-    if (decoded.session_version !== undefined && user.session_version !== undefined && user.session_version !== null) {
+    const isAdmin = decoded.role === 'admin' || user.role === 'admin';
+
+    if (!isAdmin && decoded.session_version !== undefined && user.session_version !== undefined && user.session_version !== null) {
       if (String(decoded.session_version) !== String(user.session_version)) {
         console.warn(`🔐 Auth failed: Session version mismatch for user ${decoded.email}. Expected ${user.session_version}, got ${decoded.session_version}`);
         res.status(401).json({ code: 'SESSION_EXPIRED', error: 'Session expired' });

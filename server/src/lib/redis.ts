@@ -31,7 +31,7 @@ const SESSION_TTL = 86400; // 24 hours in seconds
  * Fetch cached session metadata from Redis.
  * Safely falls back to null on any Redis failures.
  */
-export async function getCachedSession(userId: string): Promise<{ status: string; session_version: number } | null> {
+export async function getCachedSession(userId: string): Promise<{ status: string; session_version: number; role?: string } | null> {
   if (!redis) return null;
   try {
     const key = `user:session:${userId}`;
@@ -41,7 +41,7 @@ export async function getCachedSession(userId: string): Promise<{ status: string
     if (typeof cached === 'string') {
       return JSON.parse(cached);
     }
-    return cached as { status: string; session_version: number };
+    return cached as { status: string; session_version: number; role?: string };
   } catch (err: any) {
     console.error(`⚠️ [Redis] getCachedSession failed for user ${userId}:`, err.message);
     Sentry.captureException(err);
@@ -55,7 +55,7 @@ export async function getCachedSession(userId: string): Promise<{ status: string
  */
 export async function setCachedSession(
   userId: string,
-  data: { status: string; session_version: number }
+  data: { status: string; session_version: number; role?: string }
 ): Promise<void> {
   if (!redis) return;
   try {

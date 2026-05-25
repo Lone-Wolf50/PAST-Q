@@ -61,6 +61,13 @@ const GuestRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Redirects to /hq-portal/login if not authenticated as admin
+const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const token = localStorage.getItem('admin_token');
+  if (!token) return <Navigate to="/hq-portal/login" replace />;
+  return <>{children}</>;
+};
+
 function AppRoutes() {
   const { isLoggedIn } = useAuth();
   const location = useLocation();
@@ -114,15 +121,17 @@ function AppRoutes() {
 
           {/* Admin Routes (Standalone Layout) */}
           <Route path="/hq-portal/*" element={
-            <Routes>
-              <Route path="/" element={<AdminDashboard />} />
-              <Route path="/subjects" element={<AdminSubjectsPage />} />
-              <Route path="/papers" element={<AdminPapersPage />} />
-              <Route path="/users" element={<AdminUsersPage />} />
-              <Route path="/payments" element={<AdminPaymentsPage />} />
-              <Route path="/notifications" element={<AdminNotificationsPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
+            <ProtectedAdminRoute>
+              <Routes>
+                <Route path="/" element={<AdminDashboard />} />
+                <Route path="/subjects" element={<AdminSubjectsPage />} />
+                <Route path="/papers" element={<AdminPapersPage />} />
+                <Route path="/users" element={<AdminUsersPage />} />
+                <Route path="/payments" element={<AdminPaymentsPage />} />
+                <Route path="/notifications" element={<AdminNotificationsPage />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </ProtectedAdminRoute>
           } />
 
           <Route path="*" element={<NotFoundPage />} />
