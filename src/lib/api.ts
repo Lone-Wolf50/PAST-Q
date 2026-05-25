@@ -12,8 +12,14 @@ const checkSessionExpiry = (res: Response, wasAuthenticated: boolean) => {
   // This prevents login failures (401 from bad credentials) from being
   // mistaken for session revocations, which would erroneously log the
   // user "out" of a session they never had.
+  const isAdminRoute = window.location.pathname.startsWith('/hq-portal');
   if (res.status === 401 && wasAuthenticated) {
-    window.dispatchEvent(new CustomEvent('session_expired'));
+    if (isAdminRoute) {
+      localStorage.removeItem('admin_token');
+      window.location.href = '/hq-portal/login';
+    } else {
+      window.dispatchEvent(new CustomEvent('session_expired'));
+    }
   }
 };
 
