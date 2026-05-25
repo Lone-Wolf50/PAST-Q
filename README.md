@@ -1,5 +1,7 @@
 # PastQ — AI-Powered Academic Tutoring Platform 🎓🤖
 
+> **Live at → [pastqhub.com](https://www.pastqhub.com)**
+
 PastQ is a premium, state-of-the-art educational platform designed to help students master past examination papers using cutting-edge Artificial Intelligence. It combines an immersive PDF viewing experience with specialized AI tutoring that "decodes" papers, providing instant insights, summaries, and deep-dive explanations.
 
 ---
@@ -35,7 +37,7 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 
 ### 🔒 Advanced Security & Session Management
 - **Single-Device Login**: Strict concurrent session control. If a user logs into a new device, any older active sessions are instantly invalidated and the user is presented with a professional expiry notification.
-- **Smart Storage**: 
+- **Smart Storage**:
   - *Browser Users*: Temporary session storage that automatically logs out on exit for shared computers.
   - *App/PWA Users*: Persistent local storage featuring a rolling 7-day authentication window for uninterrupted daily study sessions.
 
@@ -49,7 +51,7 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 
 ### 🔒 AI Academic Guardrails (Strict)
 - **Off-Topic Refusal**: The PastQ AI Tutor is strictly restricted to academic, educational, and course-related topics.
-- **Zero Leakage Policy**: The AI is explicitly forbidden from including **any** answer, score, result, fact, or detail for an off-topic query inside its refusal (e.g. it will NOT say "I can't answer sports questions, but Man United beat Chelsea 2-1"). Non-academic queries receive a polite refusal and an invitation to ask an academic question — nothing more.
+- **Zero Leakage Policy**: The AI is explicitly forbidden from including **any** answer, score, result, fact, or detail for an off-topic query inside its refusal. Non-academic queries receive a polite refusal and an invitation to ask an academic question — nothing more.
 - **Broad Scope**: Covers sports scores, celebrity gossip, pop culture, movies, music, gaming, general leisure trivia, and all other non-academic topics.
 - **Single Control Point**: Enforced at the very top of `buildSystemInstruction()` in `server/src/routes/ai.ts`, which is shared by all three AI provider tiers (HuggingFace, Puter, Gemini).
 
@@ -142,10 +144,93 @@ The previous hard-coded limit of **5 pages** caused questions on pages 6–10 to
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Framer Motion.
 - **Backend**: Node.js, Express, TypeScript.
 - **Database**: Supabase (PostgreSQL) + Auth.
+- **Cache & Rate Limiting**: Upstash Redis (REST client) + `@upstash/ratelimit`.
 - **File Storage**: Cloudflare R2 (S3-Compatible) for ultra-fast PDF delivery.
 - **AI Models**: Hugging Face Serverless APIs + Puter.js SDK + Google Gemini API.
 - **OCR Engine**: Google Cloud Vision + Tesseract.js.
 - **Payments**: Paystack Integration.
+- **Hosting**: Vercel (Frontend) + Render (Backend).
+
+---
+
+## 🌐 Custom Domain Setup — `pastqhub.com`
+
+This section documents how to connect the custom domain **pastqhub.com** to the Vercel-hosted frontend.
+
+### Step 1 — Add the Domain in Vercel
+
+1. Go to your [Vercel Dashboard](https://vercel.com/dashboard) and open the **PastQ** project.
+2. Click **Settings** → **Domains**.
+3. Type `pastqhub.com` and click **Add**.
+4. Also add `www.pastqhub.com` and configure it to **redirect to** `pastqhub.com` (or vice-versa — pick one as canonical).
+
+Vercel will display the DNS records you need to add next.
+
+---
+
+### Step 2 — Configure DNS at Your Registrar
+
+Log in to wherever you purchased `pastqhub.com` (e.g., Namecheap, GoDaddy, Cloudflare, Google Domains) and add the following DNS records:
+
+#### Option A — Apex domain (`pastqhub.com`) via A Records
+| Type | Host / Name | Value | TTL |
+|------|-------------|-------|-----|
+| `A` | `@` | `76.76.21.21` | Auto |
+| `CNAME` | `www` | `cname.vercel-dns.com.` | Auto |
+
+#### Option B — Using Cloudflare as DNS (Recommended for performance)
+If your domain is on Cloudflare, use these records and **disable the orange proxy** (grey cloud / DNS-only) for the apex `A` record — Vercel handles SSL itself:
+| Type | Name | Content | Proxy |
+|------|------|---------|-------|
+| `A` | `@` | `76.76.21.21` | DNS Only ☁️ |
+| `CNAME` | `www` | `cname.vercel-dns.com` | DNS Only ☁️ |
+
+> **Note**: DNS propagation can take anywhere from a few minutes to 48 hours. You can check propagation status at [dnschecker.org](https://dnschecker.org).
+
+---
+
+### Step 3 — SSL Certificate (Automatic)
+
+Vercel automatically provisions and renews a **free TLS/SSL certificate** via Let's Encrypt once it detects the correct DNS records. No action needed on your part — just wait for the green checkmark in the Vercel Domains panel.
+
+---
+
+### Step 4 — Update Environment Variables
+
+Once the domain is live, update these values in your **Vercel project environment variables** (Settings → Environment Variables):
+
+```env
+# Frontend (.env / Vercel env)
+VITE_API_URL=https://your-render-backend.onrender.com/api
+
+# Backend (Render env)
+FRONTEND_URL=https://www.pastqhub.com
+```
+
+And in **Supabase** → Authentication → URL Configuration:
+- **Site URL**: `https://www.pastqhub.com`
+- **Redirect URLs**: Add `https://www.pastqhub.com/auth/callback`
+
+---
+
+### Step 5 — Update `robots.txt` & Sitemap
+
+A `sitemap.xml` is already included in `/public/sitemap.xml` with all public routes. Make sure your `robots.txt` references it. Create `/public/robots.txt` if it doesn't exist:
+
+```
+User-agent: *
+Allow: /
+
+Sitemap: https://www.pastqhub.com/sitemap.xml
+```
+
+After deploying, verify Google can reach your sitemap at:
+`https://www.pastqhub.com/sitemap.xml`
+
+Then submit it via [Google Search Console](https://search.google.com/search-console):
+1. Add `pastqhub.com` as a property.
+2. Verify ownership (use the **HTML tag** method — Vercel makes this easy).
+3. Go to **Sitemaps** and submit: `https://www.pastqhub.com/sitemap.xml`.
 
 ---
 
@@ -189,6 +274,10 @@ CLOUDFLARE_R2_PUBLIC_URL=https://your_public_url.r2.dev
 
 # Payments
 PAYSTACK_SECRET_KEY=your_secret_key
+
+# Redis (Upstash Serverless)
+UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url
+UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
 ```
 
 ---
@@ -214,6 +303,9 @@ PAYSTACK_SECRET_KEY=your_secret_key
 
 ```
 ├── public/             # Static frontend assets
+│   ├── sitemap.xml     # XML Sitemap for SEO (pastqhub.com)
+│   ├── robots.txt      # Crawler directives
+│   └── manifest.json   # PWA Manifest
 ├── server/             # Express Backend
 │   ├── dist/           # Production-ready JavaScript (compiled)
 │   ├── src/
@@ -241,6 +333,26 @@ PAYSTACK_SECRET_KEY=your_secret_key
 ├── render.yaml         # Render Blueprint for Server deployment
 └── vercel.json         # Vercel Configuration for SPA Frontend deployment
 ```
+
+---
+
+## 🗺️ Sitemap
+
+The XML sitemap is located at [`/public/sitemap.xml`](./public/sitemap.xml) and will be publicly accessible at:
+
+```
+https://www.pastqhub.com/sitemap.xml
+```
+
+| URL | Priority | Change Frequency |
+|-----|----------|-----------------|
+| `pastqhub.com/` | 1.0 | Weekly |
+| `pastqhub.com/pricing` | 0.9 | Monthly |
+| `pastqhub.com/register` | 0.7 | Yearly |
+| `pastqhub.com/login` | 0.6 | Yearly |
+| `pastqhub.com/forgot-password` | 0.3 | Yearly |
+
+> Protected routes (`/papers`, `/profile`, `/ask-ai`, etc.) and admin routes (`/hq-portal/*`) are intentionally excluded from the sitemap as they require authentication.
 
 ---
 

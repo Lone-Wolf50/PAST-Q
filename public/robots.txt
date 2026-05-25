@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+
+# Block authenticated/private routes from crawlers
+Disallow: /papers
+Disallow: /papers/
+Disallow: /profile
+Disallow: /ask-ai
+Disallow: /upgrade
+Disallow: /subscription
+Disallow: /notifications
+Disallow: /delete-account
+Disallow: /hq-portal/
+Disallow: /auth/
+
+Sitemap: https://www.pastqhub.com/sitemap.xml
