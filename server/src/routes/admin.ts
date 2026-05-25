@@ -9,6 +9,7 @@ import { uploadToR2, deleteFromR2, keyFromUrl } from '../lib/r2';
 import { invalidateCachedSession } from '../lib/redis';
 import { getAIHealth } from '../lib/ai-health';
 import { generatePaperInsights, getProcessingState, isProcessing } from '../lib/ai-insights';
+import { deleteUserComplete } from '../lib/user-deletion';
 
 const router = Router();
 const upload = multer({
@@ -489,11 +490,20 @@ router.patch('/users/:id/ai-status', async (req: AuthRequest, res: Response) => 
 
 router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
+  const userId = Array.isArray(id) ? id[0] : id;
   try {
-    await supabase.from('upsa_users').delete().eq('id', id);
-    invalidateCachedSession(id as string).catch(() => {});
+    // Fetch user's email first for auth cleanup
+    const { data: user } = await supabase
+      .from('upsa_users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    await deleteUserComplete(userId, user?.email as string | undefined);
+    invalidateCachedSession(userId).catch(() => {});
     res.status(200).json({ message: 'User deleted.' });
-  } catch {
+  } catch (err: any) {
+    console.error('[DELETE /users/:id] Deletion error:', err);
     res.status(500).json({ error: 'Failed to delete user.' });
   }
 });

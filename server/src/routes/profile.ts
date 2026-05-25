@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { supabase } from '../lib/supabase';
 import { protect, AuthRequest } from '../middleware/auth';
 import { invalidateCachedSession } from '../lib/redis';
+import { deleteUserComplete } from '../lib/user-deletion';
 
 const router = Router();
 
@@ -267,8 +268,8 @@ router.delete('/me', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // 3. Perform hard delete
-    await supabase.from('upsa_users').delete().eq('id', userId);
+    // 3. Perform hard delete with comprehensive cleanup
+    await deleteUserComplete(userId, user?.email);
     invalidateCachedSession(userId).catch(() => {});
 
     if (user) {
@@ -280,7 +281,8 @@ router.delete('/me', async (req: AuthRequest, res: Response) => {
     }
 
     res.status(200).json({ message: 'Account deleted successfully.' });
-  } catch (err) {
+  } catch (err: any) {
+    console.error('[DELETE /profile/me] Deletion error:', err);
     res.status(500).json({ error: 'Failed to delete account.' });
   }
 });
