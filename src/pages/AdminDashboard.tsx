@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { Link } from 'react-router-dom';
-import { Users, FileText, TrendingUp, UserMinus, UserX, Menu, Bell, Search, RotateCw, Trash2, XCircle } from 'lucide-react';
+import { Users, FileText, TrendingUp, UserMinus, Menu, Bell, Search, RotateCw, Trash2 } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend, AreaChart, Area } from 'recharts';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
