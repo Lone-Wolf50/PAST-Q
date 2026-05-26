@@ -9,9 +9,9 @@ const PLANS = [
     price: '0',
     description: 'Perfect to get started and try out the platform.',
     features: [
-      { text: 'View 5 papers / 10 hrs', included: true },
+      { text: 'Limited paper viewing', included: true },
       { text: '5 AI queries / 10 hrs', included: true },
-      { text: '7 PDF downloads / cycle', included: true },
+      { text: 'Limited PDF downloads', included: true },
       { text: 'No AI history tracking', included: false },
       { text: 'No AI File Upload', included: false },
       { text: 'Standard AI Tutor', included: true }

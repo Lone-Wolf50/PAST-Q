@@ -290,7 +290,7 @@ const AdminUsersPage = () => {
     }
 
     const pdfCount = user.pdf_downloads_count || 0;
-    const limit = plan === 'basic' ? 20 : 7;
+    const limit = plan === 'basic' ? 20 : 3;
     const pct = Math.min((pdfCount / limit) * 100, 100);
     const limitReached = user.pdf_limit_reached;
 
@@ -351,7 +351,7 @@ const AdminUsersPage = () => {
     }
 
     const isAiNearing = (plan === 'free' && user.queries_10h >= 4) || (plan === 'basic' && (user.queries_30d >= 8 || user.files_30d >= 4));
-    const isPdfNearing = (plan === 'free' && user.pdf_downloads_count >= 5) || (plan === 'basic' && user.pdf_downloads_count >= 16);
+    const isPdfNearing = (plan === 'free' && user.pdf_downloads_count >= 2) || (plan === 'basic' && user.pdf_downloads_count >= 16);
 
     if (isAiNearing || isPdfNearing) {
       return (

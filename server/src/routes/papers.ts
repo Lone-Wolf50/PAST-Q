@@ -135,7 +135,7 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
 
     const { plan, pdf_downloads_count, pdf_downloads_blocked_until } = userData;
     const isUnlimited = ['plus', 'pro'].includes(plan.toLowerCase());
-    const limit = plan.toLowerCase() === 'basic' ? 20 : 7;
+    const limit = plan.toLowerCase() === 'basic' ? 20 : 3;
     
     // 2. Check if blocked
     if (!isUnlimited && pdf_downloads_blocked_until) {

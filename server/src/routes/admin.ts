@@ -503,8 +503,8 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
         let pdfUsageMsg = '';
 
         if (uPlan === 'free') {
-          pdfLimitMsg = '7 downloads / week';
-          pdfUsageMsg = `${pdfCount} / 7`;
+          pdfLimitMsg = '3 downloads / week';
+          pdfUsageMsg = `${pdfCount} / 3`;
         } else if (uPlan === 'basic') {
           pdfLimitMsg = '20 downloads / week';
           pdfUsageMsg = `${pdfCount} / 20`;
