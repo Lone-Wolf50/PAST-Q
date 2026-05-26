@@ -8,13 +8,13 @@ export default defineConfig({
   plugins: [
     react(), 
     tailwindcss(),
-    visualizer({
+    process.env.ANALYZE === 'true' && visualizer({
       filename: 'dist/stats.html',
-      open: false,
+      open: true,
       gzipSize: true,
       brotliSize: true
     })
-  ],
+  ].filter(Boolean),
   build: {
     rollupOptions: {
       output: {
