@@ -379,8 +379,31 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
         created_at: d.deleted_at
       }));
       totalCount = count || 0;
+    } else if (panel === 'failed') {
+      let query = supabase
+        .from('upsa_users')
+        .select('*', { count: 'exact' })
+        .eq('role', 'student')
+        .eq('is_verified', false)
+        .order('created_at', { ascending: false });
+
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+      }
+
+      const { data, count, error } = await query.range(from, to);
+      if (error) throw error;
+
+      users = (data || []).map((d: any) => ({
+        id: d.id,
+        full_name: d.full_name || 'No Name',
+        email: d.email,
+        reason: 'Pending OTP',
+        created_at: d.created_at || new Date().toISOString()
+      }));
+      totalCount = count || 0;
     } else {
-      // panel is 'active', 'failed', or 'limits'
+      // panel is 'active' or 'limits'
       let query = supabase
         .from('upsa_users')
         .select(`
@@ -398,14 +421,9 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
           upsa_ai_queries(count)
         `, { count: 'exact' })
         .eq('role', 'student')
+        .eq('is_verified', true)
         .order('full_name', { ascending: true });
 
-      if (panel === 'failed') {
-        query = query.eq('is_verified', false);
-      } else {
-        // active or limits
-        query = query.eq('is_verified', true);
-      }
 
       if (search) {
         query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
@@ -773,7 +791,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     const transactions = results[5].data || [];
     const unverifiedCount = results[6].count || 0;
     const failedRegistrationAttempts = results[7].count || 0;
-    const totalFailed = unverifiedCount + failedRegistrationAttempts;
+    const totalFailed = unverifiedCount;
 
     const planBreakdown = { basic: 0, plus: 0, pro: 0 };
     planRows.forEach((u: any) => {
@@ -850,6 +868,8 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     const { data: usersForGrowth } = await supabase
       .from('upsa_users')
       .select('created_at, plan')
+      .eq('role', 'student')
+      .eq('is_verified', true)
       .gte('created_at', gteDate.toISOString())
       .order('created_at');
 

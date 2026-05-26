@@ -156,6 +156,12 @@ const AdminUsersPage = () => {
             token: localStorage.getItem('admin_token')!
           });
           setAlert({ show: true, title: 'Success', message: 'Deletion log dismissed.', variant: 'success' });
+        } else if (activeTab === 'failed') {
+          await apiFetch(`/hq-management/users/${id}`, {
+            method: 'DELETE',
+            token: localStorage.getItem('admin_token')!
+          });
+          setAlert({ show: true, title: 'Success', message: 'Failed user account deleted.', variant: 'success' });
         } else {
           await apiFetch(`/hq-management/users/${id}`, {
             method: 'DELETE',
@@ -608,10 +614,15 @@ const AdminUsersPage = () => {
                       </div>
                     </div>
                     <div className="flex justify-between items-center py-2 border-t border-theme-border/50">
-                      <span className="text-[10px] text-theme-muted font-bold">
-                        REGISTERED: {new Date(user.created_at).toLocaleDateString()}
-                      </span>
-                      <button onClick={() => handleDeleteClick(user.id)} className="p-2 rounded-lg bg-theme-surface border border-theme-border text-theme-muted hover:text-red-400 transition-colors" title="Delete Account Permanently">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-amber-400 font-semibold uppercase">
+                          {user.reason || 'Pending OTP'}
+                        </span>
+                        <span className="text-[9px] text-theme-muted font-medium">
+                          ATTEMPTED: {new Date(user.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <button onClick={() => handleDeleteClick(user.id)} className="p-2 rounded-lg bg-theme-surface border border-theme-border text-theme-muted hover:text-red-400 transition-colors" title="Dismiss Log">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -880,7 +891,7 @@ const AdminUsersPage = () => {
                           </td>
                           <td className="px-6 py-4">
                             <span className="px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold uppercase">
-                              Unverified (Pending OTP)
+                              {user.reason || 'Pending OTP'}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-xs text-theme-muted">

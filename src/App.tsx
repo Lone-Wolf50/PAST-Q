@@ -1,35 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import LandingPage from './pages/LandingPage';
-import PapersPage from './pages/PapersPage';
-import PaperViewerPage from './pages/PaperViewerPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import VerifyEmailPage from './pages/VerifyEmailPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import PricingPage from './pages/PricingPage';
-import ProfilePage from './pages/ProfilePage';
-import AskAIPage from './pages/AskAIPage';
-import UpgradePage from './pages/UpgradePage';
-import DeleteAccountPage from './pages/DeleteAccountPage';
-import AdminDashboard from './pages/AdminDashboard';
-import AdminSubjectsPage from './pages/AdminSubjectsPage';
-import AdminPapersPage from './pages/AdminPapersPage';
-import AdminUsersPage from './pages/AdminUsersPage';
-import AdminPaymentsPage from './pages/AdminPaymentsPage';
-import AdminLoginPage from './pages/AdminLoginPage';
-import NotFoundPage from './pages/NotFoundPage';
-import AuthCallback from './pages/AuthCallback';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import InstallPrompt from './components/InstallPrompt';
-import AdminNotificationsPage from './pages/AdminNotificationsPage';
-import StudentSubscriptionPage from './pages/StudentSubscriptionPage';
-import StudentNotificationsPage from './pages/StudentNotificationsPage';
 import { AlertModal } from './components/ui/AlertModal';
 import { GlobalBanner } from './components/GlobalBanner';
+
+// Lazy load pages for premium performance and dynamic code splitting
+const LandingPage = React.lazy(() => import('./pages/LandingPage'));
+const PapersPage = React.lazy(() => import('./pages/PapersPage'));
+const PaperViewerPage = React.lazy(() => import('./pages/PaperViewerPage'));
+const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const RegisterPage = React.lazy(() => import('./pages/RegisterPage'));
+const VerifyEmailPage = React.lazy(() => import('./pages/VerifyEmailPage'));
+const ForgotPasswordPage = React.lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
+const PricingPage = React.lazy(() => import('./pages/PricingPage'));
+const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
+const AskAIPage = React.lazy(() => import('./pages/AskAIPage'));
+const UpgradePage = React.lazy(() => import('./pages/UpgradePage'));
+const DeleteAccountPage = React.lazy(() => import('./pages/DeleteAccountPage'));
+const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
+const AdminSubjectsPage = React.lazy(() => import('./pages/AdminSubjectsPage'));
+const AdminPapersPage = React.lazy(() => import('./pages/AdminPapersPage'));
+const AdminUsersPage = React.lazy(() => import('./pages/AdminUsersPage'));
+const AdminPaymentsPage = React.lazy(() => import('./pages/AdminPaymentsPage'));
+const AdminLoginPage = React.lazy(() => import('./pages/AdminLoginPage'));
+const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'));
+const AuthCallback = React.lazy(() => import('./pages/AuthCallback'));
+const AdminNotificationsPage = React.lazy(() => import('./pages/AdminNotificationsPage'));
+const StudentSubscriptionPage = React.lazy(() => import('./pages/StudentSubscriptionPage'));
+const StudentNotificationsPage = React.lazy(() => import('./pages/StudentNotificationsPage'));
+
+const PageLoader = () => (
+  <div className="w-full flex-grow flex items-center justify-center min-h-[60vh]">
+    <div className="relative w-12 h-12">
+      <svg className="absolute inset-0 w-12 h-12 animate-spin text-indigo-500" viewBox="0 0 64 64" fill="none">
+        <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="120 40" className="opacity-10" />
+        <circle cx="32" cy="32" r="28" stroke="indigo" strokeWidth="4" strokeLinecap="round" strokeDasharray="40 120" />
+      </svg>
+    </div>
+  </div>
+);
+
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
@@ -100,48 +114,52 @@ function AppRoutes() {
         <Route path="*" element={<Navbar />} />
       </Routes>
       <main className={`flex-grow flex flex-col ${isLoggedIn ? 'pb-24 md:pb-0' : ''}`}>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
+        <React.Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
 
-          {/* Guest-only Auth Routes */}
-          <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
-          <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
-          <Route path="/reset-password" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
-          <Route path="/pricing" element={<PricingPage />} />
+            {/* Guest-only Auth Routes */}
+            <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+            <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+            <Route path="/reset-password" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
+            <Route path="/pricing" element={<PricingPage />} />
 
-          {/* Admin Login - Public, Standalone */}
-          <Route path="/hq-portal/login" element={<AdminLoginPage />} />
+            {/* Admin Login - Public, Standalone */}
+            <Route path="/hq-portal/login" element={<AdminLoginPage />} />
 
-          {/* Protected Routes */}
-          <Route path="/papers" element={<ProtectedRoute><PapersPage /></ProtectedRoute>} />
-          <Route path="/papers/:id" element={<ProtectedRoute><PaperViewerPage /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/subscription" element={<ProtectedRoute><StudentSubscriptionPage /></ProtectedRoute>} />
-          <Route path="/notifications" element={<ProtectedRoute><StudentNotificationsPage /></ProtectedRoute>} />
-          <Route path="/ask-ai" element={<ProtectedRoute><AskAIPage /></ProtectedRoute>} />
-          <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
-          <Route path="/delete-account" element={<ProtectedRoute><DeleteAccountPage /></ProtectedRoute>} />
+            {/* Protected Routes */}
+            <Route path="/papers" element={<ProtectedRoute><PapersPage /></ProtectedRoute>} />
+            <Route path="/papers/:id" element={<ProtectedRoute><PaperViewerPage /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="/subscription" element={<ProtectedRoute><StudentSubscriptionPage /></ProtectedRoute>} />
+            <Route path="/notifications" element={<ProtectedRoute><StudentNotificationsPage /></ProtectedRoute>} />
+            <Route path="/ask-ai" element={<ProtectedRoute><AskAIPage /></ProtectedRoute>} />
+            <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
+            <Route path="/delete-account" element={<ProtectedRoute><DeleteAccountPage /></ProtectedRoute>} />
 
-          {/* Admin Routes (Standalone Layout) */}
-          <Route path="/hq-portal/*" element={
-            <ProtectedAdminRoute>
-              <Routes>
-                <Route path="/" element={<AdminDashboard />} />
-                <Route path="/subjects" element={<AdminSubjectsPage />} />
-                <Route path="/papers" element={<AdminPapersPage />} />
-                <Route path="/users" element={<AdminUsersPage />} />
-                <Route path="/payments" element={<AdminPaymentsPage />} />
-                <Route path="/notifications" element={<AdminNotificationsPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </ProtectedAdminRoute>
-          } />
+            {/* Admin Routes (Standalone Layout) */}
+            <Route path="/hq-portal/*" element={
+              <ProtectedAdminRoute>
+                <React.Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/" element={<AdminDashboard />} />
+                    <Route path="/subjects" element={<AdminSubjectsPage />} />
+                    <Route path="/papers" element={<AdminPapersPage />} />
+                    <Route path="/users" element={<AdminUsersPage />} />
+                    <Route path="/payments" element={<AdminPaymentsPage />} />
+                    <Route path="/notifications" element={<AdminNotificationsPage />} />
+                    <Route path="*" element={<NotFoundPage />} />
+                  </Routes>
+                </React.Suspense>
+              </ProtectedAdminRoute>
+            } />
 
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </React.Suspense>
       </main>
 
       <Routes>

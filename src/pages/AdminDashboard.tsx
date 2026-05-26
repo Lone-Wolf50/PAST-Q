@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { Link } from 'react-router-dom';
-import { Users, FileText, TrendingUp, UserMinus, Menu, Bell, Search, RotateCw, Trash2 } from 'lucide-react';
+import { Users, FileText, TrendingUp, UserMinus, UserX, Menu, Bell, Search, RotateCw, Trash2, AlertTriangle } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend, AreaChart, Area } from 'recharts';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
@@ -16,6 +16,16 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState<any>(null);
   const [recentSignups, setRecentSignups] = useState<any[]>([]);
   const [deletions, setDeletions] = useState<any[]>([]);
+  const [failedAccounts, setFailedAccounts] = useState<any[]>([]);
+  const [failedSearch, setFailedSearch] = useState('');
+  const [dismissedFailedAccounts, setDismissedFailedAccounts] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('pastq_dismissed_failed');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [dismissedDeletions, setDismissedDeletions] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('pastq_dismissed_deletions');
@@ -38,18 +48,20 @@ const AdminDashboard = () => {
       const token = localStorage.getItem('admin_token');
       if (!token) return;
 
-      const [statsData, usersData, deletionsData, notifData, aiConfigData] = await Promise.all([
+      const [statsData, usersData, deletionsData, notifData, aiConfigData, failedData] = await Promise.all([
         apiFetch(`/hq-management/stats?range=${timeRange}`, { token }),
         apiFetch('/hq-management/users', { token }),
         apiFetch('/hq-management/deletions', { token }),
         apiFetch('/hq-management/notifications', { token }),
         apiFetch('/hq-management/ai-config', { token }),
+        apiFetch('/hq-management/failed-accounts', { token }),
       ]);
 
       setStats(statsData);
       setRecentSignups((usersData.users || []).slice(0, 5));
       setDeletions(deletionsData.deletions || []);
       setNotifications(notifData.notifications || []);
+      setFailedAccounts(failedData.failedAccounts || []);
       if (aiConfigData) {
         setGlobalAiBlock(aiConfigData.globalAiBlock || false);
         setGlobalBannerActive(aiConfigData.globalBannerActive || false);
@@ -75,6 +87,21 @@ const AdminDashboard = () => {
       } catch { /* silently fail — already dismissed locally */ }
     }
   };
+
+  const handleDismissFailed = async (id: string | undefined, email: string) => {
+    const identifier = id || email;
+    if (!identifier) return;
+    const updated = [...dismissedFailedAccounts, identifier];
+    setDismissedFailedAccounts(updated);
+    localStorage.setItem('pastq_dismissed_failed', JSON.stringify(updated));
+    if (id) {
+      try {
+        const token = localStorage.getItem('admin_token');
+        await apiFetch(`/hq-management/failed-accounts/${id}`, { method: 'DELETE', token: token ?? undefined });
+      } catch { /* silently fail */ }
+    }
+  };
+
 
 
 
@@ -124,6 +151,7 @@ const AdminDashboard = () => {
     { label: 'Active Subscriptions', value: stats?.activePlans || 0, change: '', icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
     { label: 'Total Papers', value: stats?.totalPapers || 0, change: '', icon: FileText, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
     { label: 'Deleted Accounts', value: stats?.totalDeleted || 0, change: '', icon: UserMinus, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+    { label: 'Failed Users', value: stats?.totalFailed || 0, change: '', icon: UserX, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
   ];
 
   const pieData = [
@@ -250,7 +278,7 @@ const AdminDashboard = () => {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
             {STATS_CARDS.map((card, i) => {
               const Icon = card.icon;
               return (
@@ -644,6 +672,65 @@ const AdminDashboard = () => {
             </div>
           </div>
 
+          {/* Failed Join Attempts */}
+          <div className="grid grid-cols-1 gap-6 mt-6">
+            <div className="glass-card p-4 md:p-6 border-theme-border">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="p-1.5 rounded-lg bg-amber-500/10">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-theme-primary">Failed Join Attempts</h2>
+              </div>
+              <div className="relative mb-4 w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-theme-muted" />
+                <input 
+                  type="text" 
+                  placeholder="Search failed attempts..." 
+                  value={failedSearch}
+                  onChange={(e) => setFailedSearch(e.target.value)}
+                  className="w-full bg-theme-surface border border-theme-border rounded-lg py-1.5 pl-8 pr-3 text-xs text-theme-primary focus:outline-none focus:border-amber-500/50"
+                />
+              </div>
+              <div className="flex flex-col gap-3">
+                {(() => {
+                  const items = failedAccounts
+                    .filter(f => !dismissedFailedAccounts.includes(f.id?.toString() || f.email))
+                    .filter(f => {
+                      if (!failedSearch) return true;
+                      const search = failedSearch.toLowerCase();
+                      return (f.full_name?.toLowerCase().includes(search) || f.email?.toLowerCase().includes(search) || f.reason?.toLowerCase().includes(search));
+                    });
+                  if (items.length === 0) {
+                    return (
+                      <p className="text-sm text-theme-muted text-center py-4">
+                        {failedSearch ? `No matches for "${failedSearch}"` : 'No failed join attempts.'}
+                      </p>
+                    );
+                  }
+                  return items.slice(0, 5).map((f, i) => (
+                    <div key={f.id || f.email || i} className="flex items-center justify-between p-3 rounded-xl bg-amber-500/5 border border-amber-500/10 group transition-all hover:bg-amber-500/10">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+                          <AlertTriangle className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-theme-primary truncate">{f.full_name || 'No Name'}</p>
+                          <p className="text-xs text-theme-muted truncate">{f.email} · <span className="text-amber-400 font-medium">{f.reason}</span> · {new Date(f.failed_at || f.created_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDismissFailed(f.id?.toString(), f.email)}
+                        className="p-1.5 rounded-lg text-theme-muted hover:text-amber-400 hover:bg-amber-500/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                        title="Dismiss"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+          </div>
         </main>
       </div>
     </div>
