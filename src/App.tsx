@@ -7,31 +7,107 @@ import InstallPrompt from './components/InstallPrompt';
 import { AlertModal } from './components/ui/AlertModal';
 import { GlobalBanner } from './components/GlobalBanner';
 
-// Lazy load pages for premium performance and dynamic code splitting
-const LandingPage = React.lazy(() => import('./pages/LandingPage'));
-const PapersPage = React.lazy(() => import('./pages/PapersPage'));
-const PaperViewerPage = React.lazy(() => import('./pages/PaperViewerPage'));
-const LoginPage = React.lazy(() => import('./pages/LoginPage'));
-const RegisterPage = React.lazy(() => import('./pages/RegisterPage'));
-const VerifyEmailPage = React.lazy(() => import('./pages/VerifyEmailPage'));
-const ForgotPasswordPage = React.lazy(() => import('./pages/ForgotPasswordPage'));
-const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
-const PricingPage = React.lazy(() => import('./pages/PricingPage'));
-const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
-const AskAIPage = React.lazy(() => import('./pages/AskAIPage'));
-const UpgradePage = React.lazy(() => import('./pages/UpgradePage'));
-const DeleteAccountPage = React.lazy(() => import('./pages/DeleteAccountPage'));
-const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
-const AdminSubjectsPage = React.lazy(() => import('./pages/AdminSubjectsPage'));
-const AdminPapersPage = React.lazy(() => import('./pages/AdminPapersPage'));
-const AdminUsersPage = React.lazy(() => import('./pages/AdminUsersPage'));
-const AdminPaymentsPage = React.lazy(() => import('./pages/AdminPaymentsPage'));
-const AdminLoginPage = React.lazy(() => import('./pages/AdminLoginPage'));
-const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'));
-const AuthCallback = React.lazy(() => import('./pages/AuthCallback'));
-const AdminNotificationsPage = React.lazy(() => import('./pages/AdminNotificationsPage'));
-const StudentSubscriptionPage = React.lazy(() => import('./pages/StudentSubscriptionPage'));
-const StudentNotificationsPage = React.lazy(() => import('./pages/StudentNotificationsPage'));
+
+// ─── Chunk Load Error Recovery ────────────────────────────────────────────────
+// When a new build is deployed, old cached HTML references OLD chunk filenames.
+// React.lazy() dynamic imports then get a 404/parse error ("Importing a module
+// script failed"). This helper catches that, reloads once, and prevents loops.
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+): React.LazyExoticComponent<T> {
+  return React.lazy(() =>
+    factory().catch((err: unknown) => {
+      const RELOAD_KEY = 'pq_chunk_reload';
+      if (!sessionStorage.getItem(RELOAD_KEY)) {
+        sessionStorage.setItem(RELOAD_KEY, '1');
+        window.location.reload();
+        // Never resolves — reload takes over
+        return new Promise<{ default: T }>(() => {});
+      }
+      // Already reloaded once; bubble up so ErrorBoundary catches it
+      throw err;
+    })
+  );
+}
+
+// ─── Error Boundary for persistent chunk failures ─────────────────────────────
+class ChunkErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { crashed: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { crashed: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { crashed: true };
+  }
+
+  componentDidCatch(error: Error) {
+    const isChunkError =
+      error.message?.includes('Importing a module') ||
+      error.message?.includes('dynamically imported') ||
+      error.name === 'TypeError';
+
+    const RELOAD_KEY = 'pq_chunk_reload';
+    if (isChunkError && !sessionStorage.getItem(RELOAD_KEY)) {
+      sessionStorage.setItem(RELOAD_KEY, '1');
+      window.location.reload();
+    }
+  }
+
+  render() {
+    if (this.state.crashed) {
+      return (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', minHeight: '60vh', gap: '1rem', padding: '2rem'
+        }}>
+          <p style={{ color: '#9ca3af', fontSize: '0.875rem', textAlign: 'center' }}>
+            A new version of PastQ is available. Please reload to continue.
+          </p>
+          <button
+            onClick={() => { sessionStorage.removeItem('pq_chunk_reload'); window.location.reload(); }}
+            style={{
+              padding: '0.625rem 1.5rem', borderRadius: '0.75rem', background: '#6366f1',
+              color: 'white', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '0.875rem'
+            }}
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Lazy Pages (with auto-retry on stale chunk errors) ───────────────────────
+const LandingPage = lazyWithRetry(() => import('./pages/LandingPage'));
+const PapersPage = lazyWithRetry(() => import('./pages/PapersPage'));
+const PaperViewerPage = lazyWithRetry(() => import('./pages/PaperViewerPage'));
+const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'));
+const RegisterPage = lazyWithRetry(() => import('./pages/RegisterPage'));
+const VerifyEmailPage = lazyWithRetry(() => import('./pages/VerifyEmailPage'));
+const ForgotPasswordPage = lazyWithRetry(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazyWithRetry(() => import('./pages/ResetPasswordPage'));
+const PricingPage = lazyWithRetry(() => import('./pages/PricingPage'));
+const ProfilePage = lazyWithRetry(() => import('./pages/ProfilePage'));
+const AskAIPage = lazyWithRetry(() => import('./pages/AskAIPage'));
+const UpgradePage = lazyWithRetry(() => import('./pages/UpgradePage'));
+const DeleteAccountPage = lazyWithRetry(() => import('./pages/DeleteAccountPage'));
+const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'));
+const AdminSubjectsPage = lazyWithRetry(() => import('./pages/AdminSubjectsPage'));
+const AdminPapersPage = lazyWithRetry(() => import('./pages/AdminPapersPage'));
+const AdminUsersPage = lazyWithRetry(() => import('./pages/AdminUsersPage'));
+const AdminPaymentsPage = lazyWithRetry(() => import('./pages/AdminPaymentsPage'));
+const AdminLoginPage = lazyWithRetry(() => import('./pages/AdminLoginPage'));
+const NotFoundPage = lazyWithRetry(() => import('./pages/NotFoundPage'));
+const AuthCallback = lazyWithRetry(() => import('./pages/AuthCallback'));
+const AdminNotificationsPage = lazyWithRetry(() => import('./pages/AdminNotificationsPage'));
+const StudentSubscriptionPage = lazyWithRetry(() => import('./pages/StudentSubscriptionPage'));
+const StudentNotificationsPage = lazyWithRetry(() => import('./pages/StudentNotificationsPage'));
 
 const PageLoader = () => (
   <div className="w-full flex-grow flex items-center justify-center min-h-[60vh]">
@@ -114,6 +190,7 @@ function AppRoutes() {
         <Route path="*" element={<Navbar />} />
       </Routes>
       <main className={`flex-grow flex flex-col ${isLoggedIn ? 'pb-24 md:pb-0' : ''}`}>
+        <ChunkErrorBoundary>
         <React.Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
@@ -143,6 +220,7 @@ function AppRoutes() {
             {/* Admin Routes (Standalone Layout) */}
             <Route path="/hq-portal/*" element={
               <ProtectedAdminRoute>
+                <ChunkErrorBoundary>
                 <React.Suspense fallback={<PageLoader />}>
                   <Routes>
                     <Route path="/" element={<AdminDashboard />} />
@@ -154,12 +232,14 @@ function AppRoutes() {
                     <Route path="*" element={<NotFoundPage />} />
                   </Routes>
                 </React.Suspense>
+                </ChunkErrorBoundary>
               </ProtectedAdminRoute>
             } />
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </React.Suspense>
+        </ChunkErrorBoundary>
       </main>
 
       <Routes>
