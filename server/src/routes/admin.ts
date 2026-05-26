@@ -324,123 +324,206 @@ router.delete('/papers/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // ── Users Management ──────────────────────────────────────────────────────────
-router.get('/users', async (_req: AuthRequest, res: Response) => {
+router.get('/users', async (req: AuthRequest, res: Response) => {
   try {
-    const { data: users, error } = await supabase
-      .from('upsa_users')
-      .select(`
-        id, 
-        full_name, 
-        email, 
-        plan, 
-        role, 
-        status, 
-        is_verified, 
-        ai_enabled, 
-        created_at,
-        pdf_downloads_count,
-        pdf_downloads_blocked_until,
-        upsa_ai_queries(count)
-      `)
-      .order('full_name', { ascending: true });
-    if (error) throw error;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const search = (req.query.search as string) || '';
+    const plan = (req.query.plan as string) || '';
+    const status = (req.query.status as string) || '';
+    const panel = (req.query.panel as string) || 'active';
 
-    const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString();
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
-    const { data: recentQueries, error: queriesError } = await supabase
-      .from('upsa_ai_queries')
-      .select('user_id, created_at, has_file')
-      .gte('created_at', thirtyDaysAgo);
+    // Parallel counts fetch for active, failed, and deleted stats badges
+    const [activeCountRes, failedCountRes, deletedCountRes] = await Promise.all([
+      supabase.from('upsa_users').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', true),
+      supabase.from('upsa_users').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', false),
+      supabase.from('upsa_deleted_accounts').select('id', { count: 'exact', head: true })
+    ]);
 
-    const recentQueriesByUser = new Map<string, { queries10h: number; queries30d: number; files30d: number }>();
-    if (recentQueries) {
-      for (const q of recentQueries) {
-        const userId = q.user_id;
-        const createdAt = q.created_at;
-        const hasFile = q.has_file;
+    const counts = {
+      active: activeCountRes.count || 0,
+      failed: failedCountRes.count || 0,
+      deleted: deletedCountRes.count || 0
+    };
 
-        if (!recentQueriesByUser.has(userId)) {
-          recentQueriesByUser.set(userId, { queries10h: 0, queries30d: 0, files30d: 0 });
-        }
-        const stats = recentQueriesByUser.get(userId)!;
-        stats.queries30d++;
-        if (hasFile) {
-          stats.files30d++;
-        }
-        if (new Date(createdAt) >= new Date(tenHoursAgo)) {
-          stats.queries10h++;
+    let users: any[] = [];
+    let totalCount = 0;
+
+    if (panel === 'deleted') {
+      let query = supabase
+        .from('upsa_deleted_accounts')
+        .select('*', { count: 'exact' })
+        .order('deleted_at', { ascending: false });
+
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+      }
+      if (plan) {
+        query = query.eq('plan', plan);
+      }
+
+      const { data, count, error } = await query.range(from, to);
+      if (error) throw error;
+
+      users = (data || []).map((d: any) => ({
+        ...d,
+        id: d.id || d.email, // ensure unique ID
+        full_name: d.full_name || 'Deleted Account',
+        email: d.email,
+        plan: d.plan || 'free',
+        status: 'deleted',
+        is_verified: true,
+        created_at: d.deleted_at
+      }));
+      totalCount = count || 0;
+    } else {
+      // panel is 'active', 'failed', or 'limits'
+      let query = supabase
+        .from('upsa_users')
+        .select(`
+          id, 
+          full_name, 
+          email, 
+          plan, 
+          role, 
+          status, 
+          is_verified, 
+          ai_enabled, 
+          created_at,
+          pdf_downloads_count,
+          pdf_downloads_blocked_until,
+          upsa_ai_queries(count)
+        `, { count: 'exact' })
+        .eq('role', 'student')
+        .order('full_name', { ascending: true });
+
+      if (panel === 'failed') {
+        query = query.eq('is_verified', false);
+      } else {
+        // active or limits
+        query = query.eq('is_verified', true);
+      }
+
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+      }
+      if (plan) {
+        query = query.eq('plan', plan);
+      }
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      const { data: dbUsers, count, error } = await query.range(from, to);
+      if (error) throw error;
+
+      totalCount = count || 0;
+
+      const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString();
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: recentQueries } = await supabase
+        .from('upsa_ai_queries')
+        .select('user_id, created_at, has_file')
+        .gte('created_at', thirtyDaysAgo);
+
+      const recentQueriesByUser = new Map<string, { queries10h: number; queries30d: number; files30d: number }>();
+      if (recentQueries) {
+        for (const q of recentQueries) {
+          const userId = q.user_id;
+          const createdAt = q.created_at;
+          const hasFile = q.has_file;
+
+          if (!recentQueriesByUser.has(userId)) {
+            recentQueriesByUser.set(userId, { queries10h: 0, queries30d: 0, files30d: 0 });
+          }
+          const stats = recentQueriesByUser.get(userId)!;
+          stats.queries30d++;
+          if (hasFile) {
+            stats.files30d++;
+          }
+          if (new Date(createdAt) >= new Date(tenHoursAgo)) {
+            stats.queries10h++;
+          }
         }
       }
+
+      users = (dbUsers || []).map((u: any) => {
+        const stats = recentQueriesByUser.get(u.id) || { queries10h: 0, queries30d: 0, files30d: 0 };
+        const totalQueries = u.upsa_ai_queries?.[0]?.count ?? 0;
+
+        const uPlan = (u.plan || 'Free').toLowerCase();
+        let limitMsg = '';
+        let usageMsg = '';
+        let limitReached = false;
+
+        if (uPlan === 'free') {
+          limitMsg = '5 queries / 10h';
+          usageMsg = `${stats.queries10h} / 5 queries`;
+          limitReached = stats.queries10h >= 5;
+        } else if (uPlan === 'basic') {
+          limitMsg = '10 queries & 5 files / month';
+          usageMsg = `${stats.queries30d}/10 q, ${stats.files30d}/5 files`;
+          limitReached = stats.queries30d >= 10 || stats.files30d >= 5;
+        } else if (uPlan === 'plus' || uPlan === 'pro') {
+          limitMsg = 'Unlimited';
+          usageMsg = 'Unlimited';
+          limitReached = false;
+        } else {
+          limitMsg = 'N/A';
+          usageMsg = 'N/A';
+        }
+
+        const pdfCount = u.pdf_downloads_count || 0;
+        const pdfBlockedUntil = u.pdf_downloads_blocked_until;
+        const pdfLimitReached = !!(pdfBlockedUntil && new Date(pdfBlockedUntil) > new Date());
+
+        let pdfLimitMsg = '';
+        let pdfUsageMsg = '';
+
+        if (uPlan === 'free') {
+          pdfLimitMsg = '7 downloads / week';
+          pdfUsageMsg = `${pdfCount} / 7`;
+        } else if (uPlan === 'basic') {
+          pdfLimitMsg = '20 downloads / week';
+          pdfUsageMsg = `${pdfCount} / 20`;
+        } else if (uPlan === 'plus' || uPlan === 'pro') {
+          pdfLimitMsg = 'Unlimited';
+          pdfUsageMsg = 'Unlimited';
+        } else {
+          pdfLimitMsg = 'N/A';
+          pdfUsageMsg = 'N/A';
+        }
+
+        return {
+          ...u,
+          upsa_ai_queries: undefined,
+          total_ai_queries: totalQueries,
+          ai_limit: limitMsg,
+          ai_usage: usageMsg,
+          ai_limit_reached: limitReached,
+          queries_10h: stats.queries10h,
+          queries_30d: stats.queries30d,
+          files_30d: stats.files30d,
+          pdf_limit: pdfLimitMsg,
+          pdf_usage: pdfUsageMsg,
+          pdf_limit_reached: pdfLimitReached,
+          pdf_downloads_count: pdfCount,
+          pdf_downloads_blocked_until: pdfBlockedUntil
+        };
+      });
     }
 
-    const usersWithStats = (users || []).map((u: any) => {
-      const stats = recentQueriesByUser.get(u.id) || { queries10h: 0, queries30d: 0, files30d: 0 };
-      const totalQueries = u.upsa_ai_queries?.[0]?.count ?? 0;
-
-      const plan = (u.plan || 'Free').toLowerCase();
-      let limitMsg = '';
-      let usageMsg = '';
-      let limitReached = false;
-
-      if (plan === 'free') {
-        limitMsg = '5 queries / 10h';
-        usageMsg = `${stats.queries10h} / 5 queries`;
-        limitReached = stats.queries10h >= 5;
-      } else if (plan === 'basic') {
-        limitMsg = '10 queries & 5 files / month';
-        usageMsg = `${stats.queries30d}/10 q, ${stats.files30d}/5 files`;
-        limitReached = stats.queries30d >= 10 || stats.files30d >= 5;
-      } else if (plan === 'plus' || plan === 'pro') {
-        limitMsg = 'Unlimited';
-        usageMsg = 'Unlimited';
-        limitReached = false;
-      } else {
-        limitMsg = 'N/A';
-        usageMsg = 'N/A';
-      }
-
-      // Calculate PDF Downloads limits
-      const pdfCount = u.pdf_downloads_count || 0;
-      const pdfBlockedUntil = u.pdf_downloads_blocked_until;
-      const pdfLimitReached = !!(pdfBlockedUntil && new Date(pdfBlockedUntil) > new Date());
-
-      let pdfLimitMsg = '';
-      let pdfUsageMsg = '';
-
-      if (plan === 'free') {
-        pdfLimitMsg = '7 downloads / week';
-        pdfUsageMsg = `${pdfCount} / 7`;
-      } else if (plan === 'basic') {
-        pdfLimitMsg = '20 downloads / week';
-        pdfUsageMsg = `${pdfCount} / 20`;
-      } else if (plan === 'plus' || plan === 'pro') {
-        pdfLimitMsg = 'Unlimited';
-        pdfUsageMsg = 'Unlimited';
-      } else {
-        pdfLimitMsg = 'N/A';
-        pdfUsageMsg = 'N/A';
-      }
-
-      return {
-        ...u,
-        upsa_ai_queries: undefined,
-        total_ai_queries: totalQueries,
-        ai_limit: limitMsg,
-        ai_usage: usageMsg,
-        ai_limit_reached: limitReached,
-        queries_10h: stats.queries10h,
-        queries_30d: stats.queries30d,
-        files_30d: stats.files30d,
-        pdf_limit: pdfLimitMsg,
-        pdf_usage: pdfUsageMsg,
-        pdf_limit_reached: pdfLimitReached,
-        pdf_downloads_count: pdfCount,
-        pdf_downloads_blocked_until: pdfBlockedUntil
-      };
+    res.status(200).json({
+      users,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
+      counts
     });
-
-    res.status(200).json({ users: usersWithStats });
   } catch (err: any) {
     console.error('[GET /users]', err?.message || err);
     res.status(500).json({ error: 'Failed to fetch users.' });
@@ -492,15 +575,51 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const userId = Array.isArray(id) ? id[0] : id;
   try {
-    // Fetch user's email first for auth cleanup
+    // Fetch full user info before deletion for archiving and notifications
     const { data: user } = await supabase
       .from('upsa_users')
-      .select('email')
+      .select('email, full_name, plan, is_verified')
       .eq('id', userId)
       .single();
 
+    // Archive verified (active) users to deleted_accounts for records
+    if (user?.is_verified) {
+      try {
+        await supabase.from('upsa_deleted_accounts').insert({
+          email: user.email,
+          full_name: user.full_name,
+          plan: user.plan || 'free',
+          deleted_at: new Date().toISOString()
+        });
+      } catch (e: any) {
+        console.error('[DELETE /users/:id] Archive error:', e);
+      }
+    }
+
     await deleteUserComplete(userId, user?.email as string | undefined);
-    invalidateCachedSession(userId).catch(() => {});
+    try {
+      await invalidateCachedSession(userId);
+    } catch {}
+
+    // Send admin notification based on user type
+    if (user) {
+      try {
+        if (user.is_verified) {
+          await supabase.from('upsa_admin_notifications').insert({
+            title: '🗑️ User Deleted by Admin',
+            message: `Admin permanently deleted active student ${user.email} (${user.full_name || 'No Name'}) from the system. Their account has been archived in the Deleted panel.`,
+            type: 'alert'
+          });
+        } else {
+          await supabase.from('upsa_admin_notifications').insert({
+            title: '🧹 Failed Registration Removed',
+            message: `Admin removed unverified/failed user ${user.email} (${user.full_name || 'No Name'}) from the system.`,
+            type: 'info'
+          });
+        }
+      } catch {}
+    }
+
     res.status(200).json({ message: 'User deleted.' });
   } catch (err: any) {
     console.error('[DELETE /users/:id] Deletion error:', err);
@@ -636,12 +755,13 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     else gteDate.setMonth(gteDate.getMonth() - 1); // Default Monthly (30 days)
 
     const results = await Promise.all([
-      supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-      supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').neq('plan', 'free'),
+      supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', true),
+      supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', true).neq('plan', 'free'),
       supabase.from('upsa_papers').select('*', { count: 'exact', head: true }),
       supabase.from('upsa_deleted_accounts').select('*', { count: 'exact', head: true }),
-      supabase.from('upsa_users').select('plan').eq('role', 'student').neq('plan', 'free'),
+      supabase.from('upsa_users').select('plan').eq('role', 'student').eq('is_verified', true).neq('plan', 'free'),
       supabase.from('upsa_transactions').select('amount, status, created_at').gte('created_at', gteDate.toISOString()),
+      supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', false),
       supabase.from('upsa_failed_accounts').select('*', { count: 'exact', head: true }),
     ]);
 
@@ -651,7 +771,9 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     const totalDeleted = results[3].count || 0;
     const planRows = results[4].data || [];
     const transactions = results[5].data || [];
-    const totalFailed = results[6].count || 0;
+    const unverifiedCount = results[6].count || 0;
+    const failedRegistrationAttempts = results[7].count || 0;
+    const totalFailed = unverifiedCount + failedRegistrationAttempts;
 
     const planBreakdown = { basic: 0, plus: 0, pro: 0 };
     planRows.forEach((u: any) => {

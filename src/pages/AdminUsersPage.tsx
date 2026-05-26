@@ -9,14 +9,18 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
 
 const AdminUsersPage = () => {
-
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedPlan, setSelectedPlan] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
-  const [activeTab, setActiveTab] = useState<'directory' | 'limits'>('directory');
+  const [activeTab, setActiveTab] = useState<'active' | 'failed' | 'deleted' | 'limits'>('active');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [counts, setCounts] = useState({ active: 0, failed: 0, deleted: 0 });
 
   // UI States
   const [alert, setAlert] = useState<{ show: boolean, title: string, message: string, variant: 'success' | 'error' | 'info' }>({
@@ -26,14 +30,44 @@ const AdminUsersPage = () => {
     show: false, id: null, action: null
   });
 
+  // Debounce search input
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  // Reset to page 1 when tab, plan, status filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, selectedPlan, selectedStatus]);
+
   const fetchUsers = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem('admin_token');
       if (!token) return;
-      const res = await apiFetch('/hq-management/users', { token });
-      setUsers(res.users || []);
-    } catch (err: any) {
+      
+      const queryParams = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: '10',
+        search: debouncedSearch,
+        plan: selectedPlan,
+        status: selectedStatus,
+        panel: activeTab
+      });
 
+      const res = await apiFetch(`/hq-management/users?${queryParams}`, { token });
+      setUsers(res.users || []);
+      setTotalPages(res.totalPages || 1);
+      setTotalCount(res.totalCount || 0);
+      if (res.counts) {
+        setCounts(res.counts);
+      }
+    } catch (err: any) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -41,10 +75,9 @@ const AdminUsersPage = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [currentPage, debouncedSearch, selectedPlan, selectedStatus, activeTab]);
 
   const updateUserStatus = async (id: string, status: string) => {
-    // Optimistic UI update
     const previousUsers = [...users];
     setUsers(users.map(u => u.id === id ? { ...u, status } : u));
     
@@ -54,9 +87,7 @@ const AdminUsersPage = () => {
         body: { status },
         token: localStorage.getItem('admin_token')!
       });
-      // Optionally show a toast here instead of a blocking alert
     } catch (err: any) {
-
       setUsers(previousUsers); // Rollback on error
       setAlert({
         show: true,
@@ -78,7 +109,6 @@ const AdminUsersPage = () => {
         token: localStorage.getItem('admin_token')!
       });
     } catch (err: any) {
-
       setUsers(previousUsers); // Rollback
       setAlert({
         show: true,
@@ -100,7 +130,6 @@ const AdminUsersPage = () => {
         token: localStorage.getItem('admin_token')!
       });
     } catch (err: any) {
-
       setUsers(previousUsers);
       setAlert({
         show: true,
@@ -121,16 +150,23 @@ const AdminUsersPage = () => {
 
     try {
       if (action === 'delete') {
-        await apiFetch(`/hq-management/users/${id}`, {
-          method: 'DELETE',
-          token: localStorage.getItem('admin_token')!
-        });
-        setAlert({ show: true, title: 'Success', message: 'User successfully deleted.', variant: 'success' });
+        if (activeTab === 'deleted') {
+          await apiFetch(`/hq-management/deletions/${id}`, {
+            method: 'DELETE',
+            token: localStorage.getItem('admin_token')!
+          });
+          setAlert({ show: true, title: 'Success', message: 'Deletion log dismissed.', variant: 'success' });
+        } else {
+          await apiFetch(`/hq-management/users/${id}`, {
+            method: 'DELETE',
+            token: localStorage.getItem('admin_token')!
+          });
+          setAlert({ show: true, title: 'Success', message: 'User successfully deleted.', variant: 'success' });
+        }
         fetchUsers();
       }
       setConfirm({ show: false, id: null, action: null });
     } catch (err: any) {
-
       setAlert({
         show: true,
         title: 'Action Failed',
@@ -147,8 +183,8 @@ const AdminUsersPage = () => {
       return (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full flex items-center gap-1 border border-indigo-500/20 shadow-sm shadow-indigo-500/10">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+            <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full flex items-center gap-1 border border-blue-500/20 shadow-sm shadow-blue-500/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
               Unlimited
             </span>
           </div>
@@ -165,7 +201,6 @@ const AdminUsersPage = () => {
 
       return (
         <div className="flex flex-col gap-2 min-w-[140px] max-w-[200px]">
-          {/* Queries Gauge */}
           <div className="flex flex-col gap-0.5">
             <div className="flex justify-between text-[9px] font-bold text-theme-secondary">
               <span>Queries</span>
@@ -177,14 +212,13 @@ const AdminUsersPage = () => {
                   "h-full rounded-full transition-all duration-500",
                   qCount >= 10 ? "bg-red-500" : 
                   qCount >= 8 ? "bg-amber-500" : 
-                  "bg-indigo-500"
+                  "bg-blue-500"
                 )}
                 style={{ width: `${qPct}%` }}
               />
             </div>
           </div>
 
-          {/* Files Gauge */}
           <div className="flex flex-col gap-0.5">
             <div className="flex justify-between text-[9px] font-bold text-theme-secondary">
               <span>Files</span>
@@ -207,7 +241,6 @@ const AdminUsersPage = () => {
       );
     }
 
-    // Free Plan
     const qCount = user.queries_10h || 0;
     const qPct = Math.min((qCount / 5) * 100, 100);
 
@@ -223,7 +256,7 @@ const AdminUsersPage = () => {
               "h-full rounded-full transition-all duration-500",
               qCount >= 5 ? "bg-red-500" : 
               qCount >= 4 ? "bg-amber-500" : 
-              "bg-indigo-500"
+              "bg-blue-500"
             )}
             style={{ width: `${qPct}%` }}
           />
@@ -290,7 +323,7 @@ const AdminUsersPage = () => {
     const plan = (user.plan || 'Free').toLowerCase();
     if (plan === 'plus' || plan === 'pro') {
       return (
-        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 whitespace-nowrap">
+        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">
           Unlimited Access
         </span>
       );
@@ -329,14 +362,7 @@ const AdminUsersPage = () => {
     );
   };
 
-  const filteredUsers = users.filter(user => {
-    const matchSearch = !searchTerm || 
-      user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchPlan = !selectedPlan || user.plan?.toLowerCase() === selectedPlan.toLowerCase();
-    const matchStatus = !selectedStatus || user.status?.toLowerCase() === selectedStatus.toLowerCase();
-    return matchSearch && matchPlan && matchStatus;
-  });
+  const displayUsers = users;
 
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
@@ -369,30 +395,61 @@ const AdminUsersPage = () => {
           </div>
 
           {/* Premium Glassmorphic Tab Switcher */}
-          <div className="flex border-b border-theme-border mb-8 gap-6">
+          <div className="flex flex-wrap border-b border-theme-border mb-8 gap-6">
             <button
-              onClick={() => setActiveTab('directory')}
+              onClick={() => setActiveTab('active')}
               className={clsx(
-                "pb-3.5 text-sm font-bold transition-all relative outline-none",
-                activeTab === 'directory' 
-                  ? "text-indigo-400 border-b-2 border-indigo-500 font-extrabold" 
+                "pb-3.5 text-sm font-bold transition-all relative outline-none flex items-center gap-2",
+                activeTab === 'active' 
+                  ? "text-blue-400 border-b-2 border-blue-500 font-extrabold" 
                   : "text-theme-muted hover:text-theme-secondary"
               )}
             >
-              User Directory
+              Active Students
+              <span className="bg-blue-500/10 border border-blue-500/20 text-[10px] font-bold text-blue-400 px-2 py-0.5 rounded-full">
+                {counts.active}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('failed')}
+              className={clsx(
+                "pb-3.5 text-sm font-bold transition-all relative outline-none flex items-center gap-2",
+                activeTab === 'failed' 
+                  ? "text-amber-400 border-b-2 border-amber-500 font-extrabold" 
+                  : "text-theme-muted hover:text-theme-secondary"
+              )}
+            >
+              Failed Users
+              <span className="bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold text-amber-400 px-2 py-0.5 rounded-full">
+                {counts.failed}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('deleted')}
+              className={clsx(
+                "pb-3.5 text-sm font-bold transition-all relative outline-none flex items-center gap-2",
+                activeTab === 'deleted' 
+                  ? "text-rose-400 border-b-2 border-rose-500 font-extrabold" 
+                  : "text-theme-muted hover:text-theme-secondary"
+              )}
+            >
+              Deleted Accounts
+              <span className="bg-rose-500/10 border border-rose-500/20 text-[10px] font-bold text-rose-400 px-2 py-0.5 rounded-full">
+                {counts.deleted}
+              </span>
             </button>
             <button
               onClick={() => setActiveTab('limits')}
               className={clsx(
                 "pb-3.5 text-sm font-bold transition-all relative flex items-center gap-2 outline-none",
                 activeTab === 'limits' 
-                  ? "text-indigo-400 border-b-2 border-indigo-500 font-extrabold" 
+                  ? "text-blue-400 border-b-2 border-blue-500 font-extrabold" 
                   : "text-theme-muted hover:text-theme-secondary"
               )}
             >
-              AI & Downloads Usage Panel
-              <span className="bg-indigo-500/10 border border-indigo-500/20 text-[9px] font-bold text-indigo-400 px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
-                Monitor Quotas
+              AI & PDF Quotas
+              <span className="bg-blue-500/10 border border-blue-500/20 text-[9px] font-bold text-blue-400 px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                Monitor
               </span>
             </button>
           </div>
@@ -403,10 +460,10 @@ const AdminUsersPage = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
               <input 
                 type="text" 
-                placeholder="Search name or email..." 
+                placeholder={activeTab === 'deleted' ? "Search deleted accounts..." : "Search name or email..."} 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-theme-surface-2 border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary focus:outline-none focus:border-indigo-500/50"
+                className="w-full bg-theme-surface-2 border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary focus:outline-none focus:border-blue-500/50"
               />
             </div>
             
@@ -423,125 +480,183 @@ const AdminUsersPage = () => {
                 <option value="plus">Plus</option>
                 <option value="pro">Pro</option>
               </select>
-              <select 
-                value={selectedStatus} 
-                onChange={(e) => setSelectedStatus(e.target.value)} 
-                className="theme-select text-sm py-2 px-3"
-              >
-                <option value="">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-                <option value="deactivated">Deactivated</option>
-              </select>
+              {activeTab !== 'deleted' && activeTab !== 'failed' && (
+                <select 
+                  value={selectedStatus} 
+                  onChange={(e) => setSelectedStatus(e.target.value)} 
+                  className="theme-select text-sm py-2 px-3"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="deactivated">Deactivated</option>
+                </select>
+              )}
             </div>
           </div>
+
           {/* Mobile Cards View */}
           <div className="grid grid-cols-1 gap-4 lg:hidden">
             {loading ? (
               <div className="glass-card p-12 text-center text-theme-muted">Loading user database...</div>
-            ) : filteredUsers.length === 0 ? (
+            ) : displayUsers.length === 0 ? (
               <div className="glass-card p-12 text-center text-theme-muted">No users found.</div>
-            ) : activeTab === 'directory' ? (
-              /* DIRECTORY MOBILE CARDS */
-              <div key="directory-mobile" className="flex flex-col gap-4 animate-fade-in w-full">
-                {filteredUsers.map((user) => (
-                <div key={user.id} className="glass-card p-5 border-theme-border flex flex-col gap-4 relative overflow-hidden">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 shadow-inner">
-                      <UserIcon className="w-6 h-6 text-indigo-400" />
+            ) : activeTab === 'active' ? (
+              /* ACTIVE MOBILE CARDS */
+              <div key="active-mobile" className="flex flex-col gap-4 animate-fade-in w-full">
+                {displayUsers.map((user) => (
+                  <div key={user.id} className="glass-card p-5 border-theme-border flex flex-col gap-4 relative overflow-hidden">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20 shadow-inner">
+                        <UserIcon className="w-6 h-6 text-blue-400" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-theme-primary">{user.full_name}</span>
+                        <span className="text-[10px] text-theme-muted font-mono tracking-tighter line-clamp-1">{user.email}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-theme-primary">{user.full_name}</span>
-                      <span className="text-[10px] text-theme-muted font-mono tracking-tighter line-clamp-1">{user.email}</span>
+
+                    <div className="grid grid-cols-2 gap-4 py-4 border-y border-theme-border/50">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">Subscription</span>
+                        <select
+                          value={user.plan}
+                          onChange={(e) => updateUserPlan(user.id, e.target.value)}
+                          className={clsx(
+                            "px-2 py-1 rounded-lg text-[10px] font-bold uppercase border cursor-pointer outline-none transition-colors w-full",
+                            user.plan === 'pro' ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                            user.plan === 'plus' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                            user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                            "bg-theme-surface text-theme-muted border-theme-border"
+                          )}
+                        >
+                          <option value="free" className="text-theme-primary bg-theme-base">FREE</option>
+                          <option value="basic" className="text-theme-primary bg-theme-base">BASIC</option>
+                          <option value="plus" className="text-theme-primary bg-theme-base">PLUS</option>
+                          <option value="pro" className="text-theme-primary bg-theme-base">PRO</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 items-end">
+                        <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">AI Tutor</span>
+                        <button
+                          onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
+                          className={clsx(
+                            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
+                            (user.ai_enabled ?? true) ? "bg-blue-600" : "bg-gray-700"
+                          )}
+                        >
+                          <span
+                            className={clsx(
+                              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+                              (user.ai_enabled ?? true) ? "translate-x-4.5" : "translate-x-1"
+                            )}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          {user.status === 'active' ? (
+                            <span className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold">
+                              <CheckCircle2 className="w-3 h-3" /> ACTIVE
+                            </span>
+                          ) : user.status === 'suspended' ? (
+                            <span className="flex items-center gap-1 text-amber-400 text-[10px] font-bold">
+                              <Ban className="w-3 h-3" /> SUSPENDED
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-red-400 text-[10px] font-bold">
+                              <UserX className="w-3 h-3" /> INACTIVE
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-theme-muted font-bold">
+                          JOINED {new Date(user.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {user.status === 'active' ? (
+                          <button onClick={() => updateUserStatus(user.id, 'suspended')} className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20"><Ban className="w-4 h-4" /></button>
+                        ) : (
+                          <button onClick={() => updateUserStatus(user.id, 'active')} className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /></button>
+                        )}
+                        {user.status !== 'deactivated' && (
+                          <button onClick={() => updateUserStatus(user.id, 'deactivated')} className="p-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20"><UserX className="w-4 h-4" /></button>
+                        )}
+                        <button onClick={() => handleDeleteClick(user.id)} className="p-2 rounded-lg bg-theme-surface border border-theme-border text-theme-muted hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4 py-4 border-y border-theme-border/50">
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">Subscription</span>
-                      <select
-                        value={user.plan}
-                        onChange={(e) => updateUserPlan(user.id, e.target.value)}
-                        className={clsx(
-                          "px-2 py-1 rounded-lg text-[10px] font-bold uppercase border cursor-pointer outline-none transition-colors w-full",
-                          user.plan === 'pro' ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
-                          user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
-                          user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
-                          "bg-theme-surface text-theme-muted border-theme-border"
-                        )}
-                      >
-                        <option value="free" className="text-theme-primary bg-theme-base">FREE</option>
-                        <option value="basic" className="text-theme-primary bg-theme-base">BASIC</option>
-                        <option value="plus" className="text-theme-primary bg-theme-base">PLUS</option>
-                        <option value="pro" className="text-theme-primary bg-theme-base">PRO</option>
-                      </select>
+                ))}
+              </div>
+            ) : activeTab === 'failed' ? (
+              /* FAILED MOBILE CARDS */
+              <div key="failed-mobile" className="flex flex-col gap-4 animate-fade-in w-full">
+                {displayUsers.map((user) => (
+                  <div key={user.id} className="glass-card p-5 border-theme-border flex flex-col gap-3 relative overflow-hidden">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shadow-inner">
+                        <UserIcon className="w-6 h-6 text-amber-400" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-theme-primary">{user.full_name}</span>
+                        <span className="text-[10px] text-theme-muted font-mono tracking-tighter line-clamp-1">{user.email}</span>
+                      </div>
                     </div>
-
-                    <div className="flex flex-col gap-1.5 items-end">
-                      <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">AI Tutor</span>
-                      <button
-                        onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
-                        className={clsx(
-                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
-                          (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
-                        )}
-                      >
-                        <span
-                          className={clsx(
-                            "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
-                            (user.ai_enabled ?? true) ? "translate-x-4.5" : "translate-x-1"
-                          )}
-                        />
+                    <div className="flex justify-between items-center py-2 border-t border-theme-border/50">
+                      <span className="text-[10px] text-theme-muted font-bold">
+                        REGISTERED: {new Date(user.created_at).toLocaleDateString()}
+                      </span>
+                      <button onClick={() => handleDeleteClick(user.id)} className="p-2 rounded-lg bg-theme-surface border border-theme-border text-theme-muted hover:text-red-400 transition-colors" title="Delete Account Permanently">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-1.5">
-                        {user.status === 'active' ? (
-                          <span className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold">
-                            <CheckCircle2 className="w-3 h-3" /> ACTIVE
-                          </span>
-                        ) : user.status === 'suspended' ? (
-                          <span className="flex items-center gap-1 text-amber-400 text-[10px] font-bold">
-                            <Ban className="w-3 h-3" /> SUSPENDED
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-red-400 text-[10px] font-bold">
-                            <UserX className="w-3 h-3" /> INACTIVE
-                          </span>
-                        )}
+                ))}
+              </div>
+            ) : activeTab === 'deleted' ? (
+              /* DELETED MOBILE CARDS */
+              <div key="deleted-mobile" className="flex flex-col gap-4 animate-fade-in w-full">
+                {displayUsers.map((user) => (
+                  <div key={user.id} className="glass-card p-5 border-theme-border flex flex-col gap-3 relative overflow-hidden">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20 shadow-inner">
+                        <UserX className="w-6 h-6 text-rose-400" />
                       </div>
-                      <span className="text-[9px] text-theme-muted font-bold">
-                        JOINED {new Date(user.created_at).toLocaleDateString()}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-theme-primary">{user.full_name}</span>
+                        <span className="text-[10px] text-theme-muted font-mono tracking-tighter line-clamp-1">{user.email}</span>
+                      </div>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      {user.status === 'active' ? (
-                        <button onClick={() => updateUserStatus(user.id, 'suspended')} className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20"><Ban className="w-4 h-4" /></button>
-                      ) : (
-                        <button onClick={() => updateUserStatus(user.id, 'active')} className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /></button>
-                      )}
-                      {user.status !== 'deactivated' && (
-                        <button onClick={() => updateUserStatus(user.id, 'deactivated')} className="p-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20"><UserX className="w-4 h-4" /></button>
-                      )}
-                      <button onClick={() => handleDeleteClick(user.id)} className="p-2 rounded-lg bg-theme-surface border border-theme-border text-theme-muted hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    <div className="flex justify-between items-center py-2 border-t border-theme-border/50">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-theme-muted font-bold">
+                          TIER: {user.plan?.toUpperCase()}
+                        </span>
+                        <span className="text-[9px] text-rose-400 font-bold">
+                          DELETED: {new Date(user.deleted_at || user.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <button onClick={() => handleDeleteClick(user.id)} className="p-2 rounded-lg bg-theme-surface border border-theme-border text-theme-muted hover:text-rose-400 transition-colors" title="Dismiss Log">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
               </div>
             ) : (
               /* AI & PDF LIMITS MOBILE CARDS */
               <div key="limits-mobile" className="flex flex-col gap-4 animate-fade-in w-full">
-                {filteredUsers.map((user) => (
+                {displayUsers.map((user) => (
                   <div key={user.id} className="glass-card p-5 border-theme-border flex flex-col gap-4 relative overflow-hidden">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
-                          <UserIcon className="w-5 h-5 text-indigo-400" />
+                        <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                          <UserIcon className="w-5 h-5 text-blue-400" />
                         </div>
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-theme-primary">{user.full_name}</span>
@@ -556,7 +671,7 @@ const AdminUsersPage = () => {
                         <span className="text-[9px] font-bold text-theme-muted uppercase tracking-[0.1em]">AI Limit badge</span>
                         <span className={clsx(
                           "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase self-start border whitespace-nowrap",
-                          user.plan === 'pro' || user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
+                          user.plan === 'pro' || user.plan === 'plus' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                           user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-theme-surface text-theme-muted border-theme-border"
                         )}>
                           {user.ai_limit || '5 queries / 10h'}
@@ -569,7 +684,7 @@ const AdminUsersPage = () => {
                           onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
                           className={clsx(
                             "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
-                            (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
+                            (user.ai_enabled ?? true) ? "bg-blue-600" : "bg-gray-700"
                           )}
                         >
                           <span
@@ -601,9 +716,9 @@ const AdminUsersPage = () => {
           {/* Desktop Table (Hidden on mobile) */}
           <div className="hidden lg:block glass-card border-theme-border overflow-hidden">
             <div className="overflow-x-auto">
-              {activeTab === 'directory' ? (
-                /* DIRECTORY TABLE */
-                <table key="directory-table" className="w-full text-left border-collapse min-w-[900px] animate-fade-in">
+              {activeTab === 'active' ? (
+                /* ACTIVE STUDENTS TABLE */
+                <table key="active-table" className="w-full text-left border-collapse min-w-[900px] animate-fade-in">
                   <thead>
                     <tr className="border-b border-theme-border text-[11px] text-theme-muted uppercase tracking-widest bg-theme-surface/30 font-bold whitespace-nowrap">
                       <th className="px-6 py-4">User Details</th>
@@ -617,15 +732,15 @@ const AdminUsersPage = () => {
                   <tbody className="divide-y divide-theme-border">
                     {loading ? (
                       <tr><td colSpan={6} className="py-20 text-center text-theme-muted">Loading user database...</td></tr>
-                    ) : filteredUsers.length === 0 ? (
+                    ) : displayUsers.length === 0 ? (
                       <tr><td colSpan={6} className="py-20 text-center text-theme-muted">No users found.</td></tr>
                     ) : (
-                      filteredUsers.map((user) => (
+                      displayUsers.map((user) => (
                         <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
-                                <UserIcon className="w-5 h-5 text-indigo-400" />
+                              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                                <UserIcon className="w-5 h-5 text-blue-400" />
                               </div>
                               <div className="flex flex-col">
                                 <span className="text-sm font-semibold text-theme-primary">{user.full_name}</span>
@@ -640,7 +755,7 @@ const AdminUsersPage = () => {
                               className={clsx(
                                 "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border cursor-pointer outline-none transition-colors",
                                 user.plan === 'pro' ? "bg-orange-500/10 text-orange-400 border-orange-500/20 hover:border-orange-500/40" :
-                                user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:border-indigo-500/40" :
+                                user.plan === 'plus' ? "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:border-blue-500/40" :
                                 user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:border-emerald-500/40" :
                                 "bg-theme-surface text-theme-muted border-theme-border hover:border-theme-primary/20"
                               )}
@@ -674,7 +789,7 @@ const AdminUsersPage = () => {
                                 onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
                                 className={clsx(
                                   "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
-                                  (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
+                                  (user.ai_enabled ?? true) ? "bg-blue-600" : "bg-gray-700"
                                 )}
                               >
                                 <span
@@ -733,6 +848,112 @@ const AdminUsersPage = () => {
                     )}
                   </tbody>
                 </table>
+              ) : activeTab === 'failed' ? (
+                /* FAILED USERS TABLE */
+                <table key="failed-table" className="w-full text-left border-collapse min-w-[900px] animate-fade-in">
+                  <thead>
+                    <tr className="border-b border-theme-border text-[11px] text-theme-muted uppercase tracking-widest bg-theme-surface/30 font-bold whitespace-nowrap">
+                      <th className="px-6 py-4">User Details</th>
+                      <th className="px-6 py-4">Registration Status</th>
+                      <th className="px-6 py-4">Registered Date</th>
+                      <th className="px-6 py-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border">
+                    {loading ? (
+                      <tr><td colSpan={4} className="py-20 text-center text-theme-muted">Loading failed users...</td></tr>
+                    ) : displayUsers.length === 0 ? (
+                      <tr><td colSpan={4} className="py-20 text-center text-theme-muted">No unverified failed users found.</td></tr>
+                    ) : (
+                      displayUsers.map((user) => (
+                        <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                                <UserIcon className="w-5 h-5 text-amber-400" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold text-theme-primary">{user.full_name}</span>
+                                <span className="text-[11px] text-theme-muted font-mono">{user.email}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold uppercase">
+                              Unverified (Pending OTP)
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-theme-muted">
+                            {new Date(user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <button 
+                                onClick={() => handleDeleteClick(user.id)} 
+                                title="Delete Permanently" 
+                                className="p-2 rounded-lg bg-theme-surface hover:bg-red-500/20 text-theme-muted hover:text-red-400 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ) : activeTab === 'deleted' ? (
+                /* DELETED ACCOUNTS TABLE */
+                <table key="deleted-table" className="w-full text-left border-collapse min-w-[900px] animate-fade-in">
+                  <thead>
+                    <tr className="border-b border-theme-border text-[11px] text-theme-muted uppercase tracking-widest bg-theme-surface/30 font-bold whitespace-nowrap">
+                      <th className="px-6 py-4">User Details</th>
+                      <th className="px-6 py-4">Archived Plan</th>
+                      <th className="px-6 py-4">Deletion Date</th>
+                      <th className="px-6 py-4 text-right">Dismiss</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border">
+                    {loading ? (
+                      <tr><td colSpan={4} className="py-20 text-center text-theme-muted">Loading deleted database...</td></tr>
+                    ) : displayUsers.length === 0 ? (
+                      <tr><td colSpan={4} className="py-20 text-center text-theme-muted">No deleted accounts on record.</td></tr>
+                    ) : (
+                      displayUsers.map((user) => (
+                        <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
+                                <UserX className="w-5 h-5 text-rose-400" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold text-theme-primary">{user.full_name}</span>
+                                <span className="text-[11px] text-theme-muted font-mono">{user.email}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-theme-secondary uppercase">
+                            {user.plan || 'Free'}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-rose-400/80 font-bold">
+                            {new Date(user.deleted_at || user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <button 
+                                onClick={() => handleDeleteClick(user.id)} 
+                                title="Dismiss deletion log record" 
+                                className="p-2 rounded-lg bg-theme-surface hover:bg-rose-500/20 text-theme-muted hover:text-rose-400 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               ) : (
                 /* AI & DOWNLOADS LIMITS PANEL */
                 <table key="limits-table" className="w-full text-left border-collapse min-w-[900px] animate-fade-in">
@@ -749,15 +970,15 @@ const AdminUsersPage = () => {
                   <tbody className="divide-y divide-theme-border">
                     {loading ? (
                       <tr><td colSpan={6} className="py-20 text-center text-theme-muted">Loading limit analytics...</td></tr>
-                    ) : filteredUsers.length === 0 ? (
+                    ) : displayUsers.length === 0 ? (
                       <tr><td colSpan={6} className="py-20 text-center text-theme-muted">No users found.</td></tr>
                     ) : (
-                      filteredUsers.map((user) => (
+                      displayUsers.map((user) => (
                         <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
-                                <UserIcon className="w-5 h-5 text-indigo-400" />
+                              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                                <UserIcon className="w-5 h-5 text-blue-400" />
                               </div>
                               <div className="flex flex-col">
                                 <span className="text-sm font-semibold text-theme-primary">{user.full_name}</span>
@@ -774,7 +995,7 @@ const AdminUsersPage = () => {
                                 onClick={() => toggleAiAccess(user.id, !(user.ai_enabled ?? true))}
                                 className={clsx(
                                   "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
-                                  (user.ai_enabled ?? true) ? "bg-indigo-600" : "bg-gray-700"
+                                  (user.ai_enabled ?? true) ? "bg-blue-600" : "bg-gray-700"
                                 )}
                               >
                                 <span
@@ -787,14 +1008,14 @@ const AdminUsersPage = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-xs font-semibold text-theme-primary">
-                          <span className={clsx(
-                            "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border whitespace-nowrap",
-                            user.plan === 'pro' || user.plan === 'plus' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
-                            user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-theme-surface text-theme-muted border-theme-border"
-                          )}>
-                            {user.ai_limit || '5 queries / 10h'}
-                          </span>
-                        </td>
+                            <span className={clsx(
+                              "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border whitespace-nowrap",
+                              user.plan === 'pro' || user.plan === 'plus' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                              user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-theme-surface text-theme-muted border-theme-border"
+                            )}>
+                              {user.ai_limit || '5 queries / 10h'}
+                            </span>
+                          </td>
                           <td className="px-6 py-4 text-xs">
                             {renderAiGauge(user)}
                           </td>
@@ -809,6 +1030,58 @@ const AdminUsersPage = () => {
               )}
             </div>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 bg-transparent/20 backdrop-blur-xl border border-theme-border rounded-2xl p-4 shadow-xl">
+              <span className="text-xs text-theme-muted font-medium">
+                Showing <span className="font-extrabold text-theme-primary">{Math.min((currentPage - 1) * 10 + 1, totalCount)}</span> to{' '}
+                <span className="font-extrabold text-theme-primary">{Math.min(currentPage * 10, totalCount)}</span> of{' '}
+                <span className="font-extrabold text-theme-primary">{totalCount}</span> entries
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1 || loading}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-theme-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                  const isNear = Math.abs(p - currentPage) <= 1;
+                  const isEdge = p === 1 || p === totalPages;
+                  if (!isNear && !isEdge) {
+                    if (p === 2 || p === totalPages - 1) {
+                      return <span key={p} className="px-1 text-theme-muted font-black">...</span>;
+                    }
+                    return null;
+                  }
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      disabled={loading}
+                      className={clsx(
+                        "w-9 h-9 rounded-xl text-xs font-black border transition-all duration-200",
+                        currentPage === p
+                          ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20"
+                          : "bg-theme-surface hover:bg-theme-surface-2 border-theme-border text-theme-secondary hover:text-theme-primary"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages || loading}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-theme-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
@@ -817,11 +1090,13 @@ const AdminUsersPage = () => {
         isOpen={confirm.show}
         onClose={() => setConfirm({ show: false, id: null, action: null })}
         onConfirm={handleConfirmAction}
-        title={confirm.action === 'delete' ? "Delete User" : "Confirm Action"}
+        title={confirm.action === 'delete' ? (activeTab === 'deleted' ? "Dismiss Deletion Log" : "Delete User") : "Confirm Action"}
         message={confirm.action === 'delete' 
-          ? "Are you sure you want to PERMANENTLY delete this user? This action cannot be undone and all their data will be wiped." 
+          ? (activeTab === 'deleted' 
+              ? "Are you sure you want to dismiss this deleted account log entry?" 
+              : "Are you sure you want to PERMANENTLY delete this user? This action cannot be undone and all their data will be wiped.")
           : "Are you sure you want to proceed with this action?"}
-        confirmText={confirm.action === 'delete' ? "Delete Forever" : "Confirm"}
+        confirmText={confirm.action === 'delete' ? (activeTab === 'deleted' ? "Dismiss Log" : "Delete Forever") : "Confirm"}
         variant={confirm.action === 'delete' ? "danger" : "warning"}
       />
 

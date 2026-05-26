@@ -24,17 +24,7 @@ const AdminDashboard = () => {
       return [];
     }
   });
-  const [failedAccounts, setFailedAccounts] = useState<any[]>([]);
-  const [dismissedFailed, setDismissedFailed] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('pastq_dismissed_failed');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
   const [deletionsSearch, setDeletionsSearch] = useState('');
-  const [failedSearch, setFailedSearch] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
   const [timeRange, setTimeRange] = useState('30d');
   const [globalAiBlock, setGlobalAiBlock] = useState(false);
@@ -48,20 +38,18 @@ const AdminDashboard = () => {
       const token = localStorage.getItem('admin_token');
       if (!token) return;
 
-      const [statsData, usersData, deletionsData, notifData, aiConfigData, failedData] = await Promise.all([
+      const [statsData, usersData, deletionsData, notifData, aiConfigData] = await Promise.all([
         apiFetch(`/hq-management/stats?range=${timeRange}`, { token }),
         apiFetch('/hq-management/users', { token }),
         apiFetch('/hq-management/deletions', { token }),
         apiFetch('/hq-management/notifications', { token }),
         apiFetch('/hq-management/ai-config', { token }),
-        apiFetch('/hq-management/failed-accounts', { token }),
       ]);
 
       setStats(statsData);
       setRecentSignups((usersData.users || []).slice(0, 5));
       setDeletions(deletionsData.deletions || []);
       setNotifications(notifData.notifications || []);
-      setFailedAccounts(failedData.failedAccounts || []);
       if (aiConfigData) {
         setGlobalAiBlock(aiConfigData.globalAiBlock || false);
         setGlobalBannerActive(aiConfigData.globalBannerActive || false);
@@ -88,15 +76,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleDismissFailed = async (id: string) => {
-    const updated = [...dismissedFailed, id];
-    setDismissedFailed(updated);
-    localStorage.setItem('pastq_dismissed_failed', JSON.stringify(updated));
-    try {
-      const token = localStorage.getItem('admin_token');
-      await apiFetch(`/hq-management/failed-accounts/${id}`, { method: 'DELETE', token: token ?? undefined });
-    } catch { /* silently fail — already dismissed locally */ }
-  };
+
 
   useEffect(() => {
     fetchDashboardData();
@@ -144,7 +124,6 @@ const AdminDashboard = () => {
     { label: 'Active Subscriptions', value: stats?.activePlans || 0, change: '', icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
     { label: 'Total Papers', value: stats?.totalPapers || 0, change: '', icon: FileText, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
     { label: 'Deleted Accounts', value: stats?.totalDeleted || 0, change: '', icon: UserMinus, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
-    { label: 'Failed Join Attempts', value: stats?.totalFailed || 0, change: '', icon: UserX, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
   ];
 
   const pieData = [
@@ -356,9 +335,9 @@ const AdminDashboard = () => {
                       tick={{ fill: '#9ca3af' }}
                     />
                     <Tooltip 
-                      cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }}
+                      cursor={{ fill: 'rgba(0, 102, 255, 0.05)' }}
                       contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', fontSize: '11px', fontWeight: 'bold', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
-                      itemStyle={{ color: '#818cf8' }}
+                      itemStyle={{ color: '#38bdf8' }}
                       labelFormatter={(val) => new Date(val).toLocaleDateString(undefined, { dateStyle: 'long' })}
                     />
                     <Bar 
@@ -665,101 +644,6 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Failed Join Attempts Panel */}
-          <div className="glass-card p-4 md:p-6 border-orange-500/20 bg-orange-500/5 mt-6">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-orange-500/10 border border-orange-500/20">
-                  <UserX className="w-5 h-5 text-orange-400" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-theme-primary">Failed Join Attempts</h2>
-                  <p className="text-xs text-theme-muted">Registration attempts that did not complete successfully</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-                  <input 
-                    type="text" 
-                    placeholder="Search failed attempts..." 
-                    value={failedSearch}
-                    onChange={(e) => setFailedSearch(e.target.value)}
-                    className="w-full bg-theme-surface border border-theme-border rounded-xl py-1.5 pl-9 pr-4 text-xs text-theme-primary focus:outline-none focus:border-orange-500/50"
-                  />
-                </div>
-                <span className="px-3 py-1 rounded-full bg-orange-500/15 border border-orange-500/20 text-orange-400 text-xs font-black shrink-0">
-                  {failedAccounts.filter(f => !dismissedFailed.includes(f.id)).length} attempts
-                </span>
-              </div>
-            </div>
-
-            {(() => {
-              const items = failedAccounts
-                .filter(f => !dismissedFailed.includes(f.id))
-                .filter(f => {
-                  if (!failedSearch) return true;
-                  const search = failedSearch.toLowerCase();
-                  return (f.email?.toLowerCase().includes(search) || f.full_name?.toLowerCase().includes(search) || f.reason?.toLowerCase().includes(search));
-                });
-              if (items.length === 0) {
-                return (
-                  <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
-                    <div className="w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
-                      <UserX className="w-7 h-7 text-orange-400" />
-                    </div>
-                    <p className="text-sm text-theme-muted">
-                      {failedSearch ? `No attempts match "${failedSearch}"` : 'No failed registration attempts on record.'}
-                    </p>
-                  </div>
-                );
-              }
-              return (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-theme-border text-[10px] text-theme-muted uppercase tracking-wider">
-                        <th className="pb-3 font-bold">Email</th>
-                        <th className="pb-3 font-bold hidden sm:table-cell">Name</th>
-                        <th className="pb-3 font-bold">Reason</th>
-                        <th className="pb-3 font-bold hidden md:table-cell">Time</th>
-                        <th className="pb-3 font-bold text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.slice(0, 10).map((f) => (
-                        <tr key={f.id} className="border-b border-theme-border last:border-0 hover:bg-orange-500/5 transition-colors group">
-                          <td className="py-3 pr-4">
-                            <span className="text-sm text-theme-primary font-medium">{f.email}</span>
-                          </td>
-                          <td className="py-3 pr-4 hidden sm:table-cell">
-                            <span className="text-sm text-theme-muted">{f.full_name || '—'}</span>
-                          </td>
-                          <td className="py-3 pr-4 max-w-xs">
-                            <span className="text-xs text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-1 rounded-lg line-clamp-1 inline-block max-w-[200px] truncate">
-                              {f.reason || 'Unknown'}
-                            </span>
-                          </td>
-                          <td className="py-3 pr-4 hidden md:table-cell">
-                            <span className="text-xs text-theme-muted">{new Date(f.failed_at).toLocaleString()}</span>
-                          </td>
-                          <td className="py-3 text-right">
-                            <button
-                              onClick={() => handleDismissFailed(f.id)}
-                              className="p-1.5 rounded-lg text-theme-muted hover:text-orange-400 hover:bg-orange-500/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
-                              title="Dismiss log"
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
         </main>
       </div>
     </div>

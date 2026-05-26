@@ -20,47 +20,47 @@
 @property --glow-a {
   syntax: '<color>';
   inherits: true;
-  initial-value: rgba(99, 102, 241, 0.20);
+  initial-value: rgba(0, 102, 255, 0.16);
 }
 
 @property --glow-b {
   syntax: '<color>';
   inherits: true;
-  initial-value: rgba(139, 92, 246, 0.15);
+  initial-value: rgba(56, 189, 248, 0.10);
 }
 
 /* ── CSS Variables for Dark/Light Theme ───────────────────────────────────── */
 :root {
   color-scheme: dark;
-  --bg-base: #090514;
-  --bg-surface: rgba(255, 255, 255, 0.03);
-  --bg-surface-2: rgba(255, 255, 255, 0.06);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(255, 255, 255, 0.15);
+  --bg-base: #000000;
+  --bg-surface: rgba(255, 255, 255, 0.02);
+  --bg-surface-2: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(0, 102, 255, 0.25);
   --text-primary: #ffffff;
-  --text-secondary: #a1a1aa;
-  --text-muted: #6b7280;
-  --glow-a: rgba(99, 102, 241, 0.20);
-  --glow-b: rgba(139, 92, 246, 0.15);
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --glow-a: rgba(0, 102, 255, 0.16);
+  --glow-b: rgba(56, 189, 248, 0.10);
 
   /* Premium Glassmorphic Design Variables */
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-bg-hover: rgba(255, 255, 255, 0.06);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-hover: rgba(255, 255, 255, 0.15);
-  --glass-inner-shadow: rgba(255, 255, 255, 0.05);
+  --glass-bg: rgba(255, 255, 255, 0.02);
+  --glass-bg-hover: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-border-hover: rgba(0, 102, 255, 0.25);
+  --glass-inner-shadow: rgba(255, 255, 255, 0.03);
   
-  --glass-user-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.15) 100%);
-  --glass-user-border: rgba(99, 102, 241, 0.3);
+  --glass-user-bg: linear-gradient(135deg, rgba(0, 102, 255, 0.18) 0%, rgba(56, 189, 248, 0.10) 100%);
+  --glass-user-border: rgba(0, 102, 255, 0.25);
   --glass-user-text: #ffffff;
   
-  --glass-ai-bg: rgba(255, 255, 255, 0.02);
-  --glass-ai-border: rgba(255, 255, 255, 0.05);
-  --glass-ai-text: #e4e4e7;
+  --glass-ai-bg: rgba(255, 255, 255, 0.015);
+  --glass-ai-border: rgba(255, 255, 255, 0.04);
+  --glass-ai-text: #e2e8f0;
   
-  --glass-sidebar-bg: rgba(13, 11, 24, 0.4);
-  --glass-header-bg: rgba(13, 11, 24, 0.35);
-  --glass-footer-bg: rgba(13, 11, 24, 0.3);
+  --glass-sidebar-bg: rgba(0, 0, 0, 0.7);
+  --glass-header-bg: rgba(0, 0, 0, 0.55);
+  --glass-footer-bg: rgba(0, 0, 0, 0.4);
 }
 
 :root.light {
@@ -206,7 +206,7 @@
   }
 
   .gradient-text {
-    @apply text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400;
+    @apply text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-400;
   }
 
   /* Theme-aware Colored Pills for Tabs */
@@ -385,7 +385,7 @@
   :root .ai-prose .ai-h1,
   :root .ai-prose .ai-h2,
   :root .ai-prose .ai-h3 {
-    color: #4f46e5; /* indigo-600 */
+    color: #0066ff; /* sapphire-600 */
   }
   :root.light .ai-prose .ai-h1,
   :root.light .ai-prose .ai-h2,
@@ -422,7 +422,7 @@
   /* Style bullet dots & numbers color modernly */
   .ai-prose .ai-ul > .ai-li::marker,
   .ai-prose .ai-ol > .ai-li::marker {
-    color: #6366f1;
+    color: #0066ff;
     font-weight: 700;
   }
 
@@ -436,7 +436,7 @@
     list-style: circle;
   }
   .ai-prose .ai-li .ai-ul > .ai-li::marker {
-    color: #818cf8;
+    color: #38bdf8;
   }
 
   /* Strong / bold */
@@ -453,12 +453,12 @@
 
   /* Blockquote */
   .ai-prose .ai-blockquote {
-    border-left: 3px solid #6366f1;
+    border-left: 3px solid #0066ff;
     margin: 0.85em 0;
     padding: 0.5em 0 0.5em 1em;
     color: var(--text-secondary);
     font-style: italic;
-    background: rgba(99, 102, 241, 0.05);
+    background: rgba(0, 102, 255, 0.05);
     border-radius: 0 0.5rem 0.5rem 0;
   }
 
@@ -471,23 +471,23 @@
 
   /* Links */
   .ai-prose .ai-link {
-    color: #6366f1;
+    color: #0066ff;
     text-decoration: underline;
     text-underline-offset: 2px;
     word-break: break-all;
     transition: color 0.15s;
   }
   .ai-prose .ai-link:hover {
-    color: #818cf8;
+    color: #38bdf8;
   }
 
   /* Inline code */
   .ai-prose .ai-inline-code {
     font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
     font-size: 0.82em;
-    background: rgba(99, 102, 241, 0.12);
-    color: #818cf8;
-    border: 1px solid rgba(99, 102, 241, 0.2);
+    background: rgba(0, 102, 255, 0.12);
+    color: #38bdf8;
+    border: 1px solid rgba(0, 102, 255, 0.2);
     border-radius: 0.3em;
     padding: 0.1em 0.4em;
     white-space: nowrap;

@@ -262,11 +262,21 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
     }
 
     if (user.otp !== otp) {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '❌ Wrong OTP Entered',
+        message: `Failed verification: User ${email} entered an invalid OTP code: ${otp}.`,
+        type: 'warning',
+      });
       res.status(400).json({ error: 'Invalid OTP code.' });
       return;
     }
 
     if (new Date(user.otp_expires_at) < new Date()) {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '⚠️ Expired OTP Entered',
+        message: `Failed verification: User ${email} entered an expired OTP code.`,
+        type: 'warning',
+      });
       res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
       return;
     }
@@ -292,6 +302,13 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
 
     // Evict user session cache on verification
     invalidateCachedSession(user.id).catch(() => {});
+
+    // Notify Admin of Successful Verification
+    await supabase.from('upsa_admin_notifications').insert({
+      title: '🎓 Student Signed In/Verified',
+      message: `User ${email} (${fullUser.full_name || 'No Name'}) has successfully verified their email and signed in.`,
+      type: 'info',
+    });
 
     const token = jwt.sign(
       { id: fullUser.id, email: fullUser.email, plan: fullUser.plan, role: fullUser.role || 'student', session_version: newSessionVersion },
@@ -349,22 +366,42 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     }
 
     if (user.status === 'suspended') {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '⚠️ Suspended Login Attempt',
+        message: `Suspended user ${email} attempted to log in.`,
+        type: 'warning',
+      });
       res.status(403).json({ error: 'Your account is suspended. Please contact support.' });
       return;
     }
 
     if (user.status === 'deactivated') {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '⚠️ Deactivated Login Attempt',
+        message: `Deactivated user ${email} attempted to log in.`,
+        type: 'warning',
+      });
       res.status(403).json({ error: 'This account has been deactivated.' });
       return;
     }
 
     if (!user.is_verified) {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '⚠️ Unverified Login Attempt',
+        message: `Unverified user ${email} attempted to log in without verifying their email first.`,
+        type: 'warning',
+      });
       res.status(403).json({ error: 'Please verify your email before logging in.' });
       return;
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '❌ Failed Login Attempt',
+        message: `User ${email} failed to log in due to an incorrect password.`,
+        type: 'warning',
+      });
       res.status(401).json({ error: 'Invalid email or password.' });
       return;
     }
@@ -653,6 +690,13 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
 
       dbUser = newUser;
       console.log(`🆕 New Google user registered: ${email}`);
+
+      // Notify Admin of Successful Google Signup
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '🎓 Student Signed In/Verified',
+        message: `User ${email} (${full_name || 'No Name'}) has successfully registered and signed in via Google OAuth.`,
+        type: 'info',
+      });
     }
 
     // 4. Sign our own PastQ JWT with the new session_version
