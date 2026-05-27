@@ -248,20 +248,20 @@ const AdminUsersPage = () => {
     }
 
     const qCount = user.queries_10h || 0;
-    const qPct = Math.min((qCount / 5) * 100, 100);
+    const qPct = Math.min((qCount / 3) * 100, 100);
 
     return (
       <div className="flex flex-col gap-1 min-w-[140px] max-w-[200px]">
         <div className="flex justify-between text-[9px] font-bold text-theme-secondary">
           <span>Queries (10h)</span>
-          <span className={clsx(qCount >= 5 ? "text-red-400" : "text-theme-primary")}>{qCount}/5</span>
+          <span className={clsx(qCount >= 3 ? "text-red-400" : "text-theme-primary")}>{qCount}/3</span>
         </div>
         <div className="w-full bg-theme-surface rounded-full h-1 overflow-hidden border border-theme-border/20">
           <div 
             className={clsx(
               "h-full rounded-full transition-all duration-500",
-              qCount >= 5 ? "bg-red-500" : 
-              qCount >= 4 ? "bg-amber-500" : 
+              qCount >= 3 ? "bg-red-500" : 
+              qCount >= 2 ? "bg-amber-500" : 
               "bg-blue-500"
             )}
             style={{ width: `${qPct}%` }}
@@ -290,7 +290,7 @@ const AdminUsersPage = () => {
     }
 
     const pdfCount = user.pdf_downloads_count || 0;
-    const limit = plan === 'basic' ? 20 : 3;
+    const limit = plan === 'basic' ? 20 : 4;
     const pct = Math.min((pdfCount / limit) * 100, 100);
     const limitReached = user.pdf_limit_reached;
 
@@ -350,8 +350,8 @@ const AdminUsersPage = () => {
       );
     }
 
-    const isAiNearing = (plan === 'free' && user.queries_10h >= 4) || (plan === 'basic' && (user.queries_30d >= 8 || user.files_30d >= 4));
-    const isPdfNearing = (plan === 'free' && user.pdf_downloads_count >= 2) || (plan === 'basic' && user.pdf_downloads_count >= 16);
+    const isAiNearing = (plan === 'free' && user.queries_10h >= 2) || (plan === 'basic' && (user.queries_30d >= 8 || user.files_30d >= 4));
+    const isPdfNearing = (plan === 'free' && user.pdf_downloads_count >= 3) || (plan === 'basic' && user.pdf_downloads_count >= 16);
 
     if (isAiNearing || isPdfNearing) {
       return (
@@ -685,7 +685,7 @@ const AdminUsersPage = () => {
                           user.plan === 'pro' || user.plan === 'plus' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                           user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-theme-surface text-theme-muted border-theme-border"
                         )}>
-                          {user.ai_limit || '5 queries / 10h'}
+                          {user.ai_limit || '3 queries / 10h'}
                         </span>
                       </div>
 
@@ -1024,7 +1024,7 @@ const AdminUsersPage = () => {
                               user.plan === 'pro' || user.plan === 'plus' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                               user.plan === 'basic' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-theme-surface text-theme-muted border-theme-border"
                             )}>
-                              {user.ai_limit || '5 queries / 10h'}
+                              {user.ai_limit || '3 queries / 10h'}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-xs">

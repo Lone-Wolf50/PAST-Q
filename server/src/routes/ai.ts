@@ -119,7 +119,7 @@ function cleanHistoryContent(content: string): string {
 
 // Plan-based query limits (counted by history length = number of user turns)
 const PLAN_LIMITS: Record<string, number> = {
-  Free: 5,
+  Free: 3,
   Basic: 10,
   Plus: Infinity,
   Pro: Infinity,
@@ -489,9 +489,9 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         .eq('user_id', req.user?.id)
         .gte('created_at', tenHoursAgo);
 
-      if ((count || 0) >= 5) {
+      if ((count || 0) >= 3) {
 
-        return res.json({ reply: "You've reached your **5 query limit** for the last 10 hours on the Free plan. Upgrade to **Basic, Plus, or Pro** to keep studying!" });
+        return res.json({ reply: "You've reached your **3 query limit** for the last 10 hours on the Free plan. Upgrade to **Basic, Plus, or Pro** to keep studying!" });
 
       }
     }

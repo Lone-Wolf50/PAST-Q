@@ -418,6 +418,8 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
           created_at,
           pdf_downloads_count,
           pdf_downloads_blocked_until,
+          pdf_views_count,
+          pdf_views_blocked_until,
           upsa_ai_queries(count)
         `, { count: 'exact' })
         .eq('role', 'student')
@@ -479,9 +481,9 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
         let limitReached = false;
 
         if (uPlan === 'free') {
-          limitMsg = '5 queries / 10h';
-          usageMsg = `${stats.queries10h} / 5 queries`;
-          limitReached = stats.queries10h >= 5;
+          limitMsg = '3 queries / 10h';
+          usageMsg = `${stats.queries10h} / 3 queries`;
+          limitReached = stats.queries10h >= 3;
         } else if (uPlan === 'basic') {
           limitMsg = '10 queries & 5 files / month';
           usageMsg = `${stats.queries30d}/10 q, ${stats.files30d}/5 files`;
@@ -499,21 +501,35 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
         const pdfBlockedUntil = u.pdf_downloads_blocked_until;
         const pdfLimitReached = !!(pdfBlockedUntil && new Date(pdfBlockedUntil) > new Date());
 
+        const pdfViewCount = u.pdf_views_count || 0;
+        const pdfViewBlockedUntil = u.pdf_views_blocked_until;
+        const pdfViewLimitReached = !!(pdfViewBlockedUntil && new Date(pdfViewBlockedUntil) > new Date());
+
         let pdfLimitMsg = '';
         let pdfUsageMsg = '';
+        let pdfViewLimitMsg = '';
+        let pdfViewUsageMsg = '';
 
         if (uPlan === 'free') {
-          pdfLimitMsg = '3 downloads / week';
-          pdfUsageMsg = `${pdfCount} / 3`;
+          pdfLimitMsg = '4 downloads / 3 days';
+          pdfUsageMsg = `${pdfCount} / 4`;
+          pdfViewLimitMsg = '4 views / 3 days';
+          pdfViewUsageMsg = `${pdfViewCount} / 4`;
         } else if (uPlan === 'basic') {
           pdfLimitMsg = '20 downloads / week';
           pdfUsageMsg = `${pdfCount} / 20`;
+          pdfViewLimitMsg = '20 views / week';
+          pdfViewUsageMsg = `${pdfViewCount} / 20`;
         } else if (uPlan === 'plus' || uPlan === 'pro') {
           pdfLimitMsg = 'Unlimited';
           pdfUsageMsg = 'Unlimited';
+          pdfViewLimitMsg = 'Unlimited';
+          pdfViewUsageMsg = 'Unlimited';
         } else {
           pdfLimitMsg = 'N/A';
           pdfUsageMsg = 'N/A';
+          pdfViewLimitMsg = 'N/A';
+          pdfViewUsageMsg = 'N/A';
         }
 
         return {
@@ -530,7 +546,12 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
           pdf_usage: pdfUsageMsg,
           pdf_limit_reached: pdfLimitReached,
           pdf_downloads_count: pdfCount,
-          pdf_downloads_blocked_until: pdfBlockedUntil
+          pdf_downloads_blocked_until: pdfBlockedUntil,
+          pdf_view_limit: pdfViewLimitMsg,
+          pdf_view_usage: pdfViewUsageMsg,
+          pdf_view_limit_reached: pdfViewLimitReached,
+          pdf_views_count: pdfViewCount,
+          pdf_views_blocked_until: pdfViewBlockedUntil
         };
       });
     }

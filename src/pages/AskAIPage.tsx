@@ -37,7 +37,7 @@ interface Conversation {
 // ─── Plan Config ─────────────────────────────────────────────────────────────
 
 const PLAN_LIMITS: Record<Plan, number> = {
-  Free: 5,
+  Free: 3,
   Basic: 10,
   Plus: Infinity,
   Pro: Infinity,
@@ -408,7 +408,7 @@ const AskAIPage = () => {
 
   const canSend =
     !isMaintenance && (
-      (plan === 'Free' && usageCount < 5) ||
+      (plan === 'Free' && usageCount < 3) ||
       (plan === 'Basic' && usageCount < 10) ||
       plan === 'Plus' ||
       plan === 'Pro'

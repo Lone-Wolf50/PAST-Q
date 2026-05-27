@@ -185,7 +185,8 @@ const PapersPage = () => {
 
   const handleDownload = async (paperId: string, action: 'view' | 'download') => {
     try {
-      const res = await apiFetch(`/papers/${paperId}/download`, {
+      const endpoint = action === 'view' ? `/papers/${paperId}/view` : `/papers/${paperId}/download`;
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         token: token!
       });
@@ -193,8 +194,8 @@ const PapersPage = () => {
       if (res.error) {
         setAlert({
           show: true,
-          title: 'Download Error',
-          message: res.message || 'Unable to download. Please try again later.',
+          title: action === 'view' ? 'View Error' : 'Download Error',
+          message: res.message || 'Unable to access the document. Please try again later.',
           variant: 'error'
         });
         return;

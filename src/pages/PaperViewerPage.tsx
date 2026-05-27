@@ -50,7 +50,7 @@ const PaperViewerPage = () => {
         
         // Auto-fetch view URL
         try {
-          const dl = await apiFetch(`/papers/${id}/download`, { method: 'POST', token: token! });
+          const dl = await apiFetch(`/papers/${id}/view`, { method: 'POST', token: token! });
           setViewUrl(dl.file_url);
         } catch (dlErr: any) {
 

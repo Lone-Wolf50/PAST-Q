@@ -135,7 +135,7 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
 
     const { plan, pdf_downloads_count, pdf_downloads_blocked_until } = userData;
     const isUnlimited = ['plus', 'pro'].includes(plan.toLowerCase());
-    const limit = plan.toLowerCase() === 'basic' ? 20 : 3;
+    const limit = plan.toLowerCase() === 'basic' ? 20 : 4;
     
     // 2. Check if blocked
     if (!isUnlimited && pdf_downloads_blocked_until) {
@@ -175,9 +175,9 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
       }
 
       if (newCount >= limit) {
-        // Hit limit, block for 6 days
+        // Hit limit, block for 3 days
         const blockDate = new Date();
-        blockDate.setDate(blockDate.getDate() + 6);
+        blockDate.setDate(blockDate.getDate() + 3);
         newBlockedUntil = blockDate.toISOString();
         newCount = 0; // reset for next cycle
       }
@@ -195,6 +195,89 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
   } catch (err) {
 
     res.status(500).json({ error: 'Failed to process download request.' });
+  }
+});
+
+// ── REQUEST VIEW URL (Enforces Limits) ──────────────────────────────────────
+router.post('/:id/view', protect, async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const user = req.user!;
+  
+  try {
+    // 1. Get user stats
+    const { data: userData, error: userError } = await supabase
+      .from('upsa_users')
+      .select('plan, pdf_views_count, pdf_views_blocked_until')
+      .eq('id', user.id)
+      .single();
+      
+    if (userError || !userData) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    const { plan, pdf_views_count, pdf_views_blocked_until } = userData;
+    const isUnlimited = ['plus', 'pro'].includes(plan.toLowerCase());
+    const limit = plan.toLowerCase() === 'basic' ? 20 : 4;
+    
+    // 2. Check if blocked
+    if (!isUnlimited && pdf_views_blocked_until) {
+      const blockedUntil = new Date(pdf_views_blocked_until);
+      if (blockedUntil > new Date()) {
+        const daysLeft = Math.ceil((blockedUntil.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+        res.status(429).json({ 
+          error: 'limit_reached', 
+          message: `You have reached your view limit. Please wait ${daysLeft} days or upgrade your plan.` 
+        });
+        return;
+      } else {
+        // Block expired, reset count implicitly by continuing and updating it later
+      }
+    }
+
+    // 3. Fetch file URL
+    const { data: paper, error: paperError } = await supabase
+      .from('upsa_papers')
+      .select('file_url')
+      .eq('id', id)
+      .single();
+
+    if (paperError || !paper) {
+      res.status(404).json({ error: 'Paper not found.' });
+      return;
+    }
+
+    // 4. Update usage (if not unlimited)
+    if (!isUnlimited) {
+      let newCount = (pdf_views_count || 0) + 1;
+      let newBlockedUntil = null;
+      
+      // If block expired, treat this as view 1
+      if (pdf_views_blocked_until && new Date(pdf_views_blocked_until) <= new Date()) {
+        newCount = 1;
+      }
+
+      if (newCount >= limit) {
+        // Hit limit, block for 3 days
+        const blockDate = new Date();
+        blockDate.setDate(blockDate.getDate() + 3);
+        newBlockedUntil = blockDate.toISOString();
+        newCount = 0; // reset for next cycle
+      }
+
+      await supabase
+        .from('upsa_users')
+        .update({
+          pdf_views_count: newCount,
+          pdf_views_blocked_until: newBlockedUntil
+        })
+        .eq('id', user.id);
+    }
+
+    res.status(200).json({ file_url: paper.file_url });
+  } catch (err) {
+
+    res.status(500).json({ error: 'Failed to process view request.' });
   }
 });
 

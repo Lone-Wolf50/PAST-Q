@@ -14,6 +14,8 @@ interface AuthUser {
   avatar_url?: string;
   plan_expires?: string;
   ai_usage_count?: number;
+  pdf_downloads_count?: number;
+  pdf_views_count?: number;
 }
 
 interface AuthContextType {

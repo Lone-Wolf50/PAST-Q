@@ -32,7 +32,9 @@ const ProfilePage = () => {
             avatar_url: res.user.avatar_url,
             plan: res.user.plan,
             plan_expires: res.user.plan_expires,
-            ai_usage_count: res.user.ai_usage_count
+            ai_usage_count: res.user.ai_usage_count,
+            pdf_downloads_count: res.user.pdf_downloads_count,
+            pdf_views_count: res.user.pdf_views_count
           });
           // Load streak from DB if available
           if (res.user.streak_count !== undefined) {
@@ -246,7 +248,7 @@ const ProfilePage = () => {
                       {user?.ai_usage_count || 0}
                     </span>
                     <span className="text-sm font-medium text-theme-muted">
-                      {user?.plan?.toLowerCase() === 'free' ? '/ 5 queries' : 
+                      {user?.plan?.toLowerCase() === 'free' ? '/ 3 queries' : 
                        user?.plan?.toLowerCase() === 'basic' ? '/ 20 queries' : '/ unlimited'}
                     </span>
                   </div>
@@ -262,6 +264,45 @@ const ProfilePage = () => {
                   </div>
                 </div>
               </div>
+
+              {/* PDF Usage — free/basic only */}
+              {!['plus', 'pro'].includes(user?.plan?.toLowerCase() || '') && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                  <div className="bg-theme-surface border border-theme-border rounded-2xl p-5 shadow-sm">
+                    <p className="text-xs font-bold text-theme-muted uppercase tracking-wider mb-1">PDF Views Used</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black text-indigo-400 tracking-tight">
+                        {(user as any)?.pdf_views_count || 0}
+                      </span>
+                      <span className="text-sm font-medium text-theme-muted">/ 4 views</span>
+                    </div>
+                    <div className="mt-3 w-full h-2 bg-theme-surface-2 rounded-full overflow-hidden border border-theme-border/50">
+                      <div
+                        className="h-full bg-indigo-500 transition-all duration-700"
+                        style={{ width: `${Math.min((((user as any)?.pdf_views_count || 0) / 4) * 100, 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-theme-muted mt-1">Resets every 3 days</p>
+                  </div>
+
+                  <div className="bg-theme-surface border border-theme-border rounded-2xl p-5 shadow-sm">
+                    <p className="text-xs font-bold text-theme-muted uppercase tracking-wider mb-1">PDF Downloads Used</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black text-purple-400 tracking-tight">
+                        {(user as any)?.pdf_downloads_count || 0}
+                      </span>
+                      <span className="text-sm font-medium text-theme-muted">/ 4 downloads</span>
+                    </div>
+                    <div className="mt-3 w-full h-2 bg-theme-surface-2 rounded-full overflow-hidden border border-theme-border/50">
+                      <div
+                        className="h-full bg-purple-500 transition-all duration-700"
+                        style={{ width: `${Math.min((((user as any)?.pdf_downloads_count || 0) / 4) * 100, 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-theme-muted mt-1">Resets every 3 days</p>
+                  </div>
+                </div>
+              )}
 
               {/* Status Bar */}
               <div className="mb-8">
@@ -280,7 +321,7 @@ const ProfilePage = () => {
                   <div className="w-full h-3 bg-theme-surface-2 rounded-full overflow-hidden border border-theme-border/50">
                     <div 
                       className="h-full bg-indigo-500 transition-all duration-1000" 
-                      style={{ width: `${Math.min(((user?.ai_usage_count || 0) / 5) * 100, 100)}%` }} 
+                      style={{ width: `${Math.min(((user?.ai_usage_count || 0) / 3) * 100, 100)}%` }} 
                     />
                   </div>
                 )}
@@ -295,7 +336,7 @@ const ProfilePage = () => {
                       ? ['Unlimited Queries', 'PDF Analysis', 'Priority Speed', 'Advanced Reasoning']
                       : user?.plan?.toLowerCase() === 'basic' 
                       ? ['20 Queries', 'File Analysis', 'Standard Speed']
-                      : ['5 Queries', 'Standard Speed']
+                      : ['3 AI Queries / 10h', '4 Views / 3 days', '4 Downloads / 3 days', 'Standard Speed']
                     ).map(perk => (
                       <div key={perk} className="px-3 py-1.5 rounded-xl bg-theme-surface border border-theme-border text-[10px] font-bold text-theme-secondary shadow-sm">
                           ✓ {perk}
