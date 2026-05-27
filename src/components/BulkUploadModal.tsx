@@ -219,6 +219,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   const [allDone, setAllDone] = useState(false);
   const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, row: BulkRow | null, duplicateInSystem: any | null }>({ show: false, row: null, duplicateInSystem: null });
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
   const [deleteConfirmRow, setDeleteConfirmRow] = useState<BulkRow | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -429,9 +430,22 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                 <p className="text-xs text-theme-muted">Upload up to {MAX_FILES} papers at once</p>
               </div>
             </div>
-            <button onClick={handleClose} className="p-2 text-theme-muted hover:text-theme-primary transition-colors">
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              {rows.length > 0 && !allDone && (
+                <button
+                  onClick={() => setShowClearAllConfirm(true)}
+                  disabled={isUploading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all text-xs font-bold disabled:opacity-40"
+                  title="Clear all papers from the batch"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Clear All
+                </button>
+              )}
+              <button onClick={handleClose} className="p-2 text-theme-muted hover:text-theme-primary transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
 
           <div className="p-6 flex flex-col gap-6">
@@ -855,6 +869,54 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
         cancelText="Cancel"
         variant="danger"
       />
+
+      {/* ── Clear All Confirmation Modal ── */}
+      {showClearAllConfirm && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[70] flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-sm border-theme-border relative flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-theme-primary">Clear All Papers?</h3>
+                <p className="text-[10px] uppercase tracking-wider text-red-400 font-bold">This cannot be undone</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-theme-secondary mb-6 leading-relaxed">
+              Are you sure you want to remove all <span className="font-bold text-theme-primary">{rows.length} paper{rows.length !== 1 ? 's' : ''}</span> from your bulk upload queue? This will also clear the saved draft.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={async () => {
+                  try {
+                    await clearBulkUploadDraft();
+                  } catch (err) {
+                    console.error('Failed to clear bulk upload draft', err);
+                  }
+                  setRows([]);
+                  setDoneCount(0);
+                  setAllDone(false);
+                  setShowClearAllConfirm(false);
+                }}
+                className="w-full py-3.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] flex justify-center items-center gap-2 text-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Yes, Clear All
+              </button>
+              <button
+                onClick={() => setShowClearAllConfirm(false)}
+                className="w-full py-2.5 rounded-xl text-theme-muted hover:text-theme-primary font-semibold transition-all text-sm flex justify-center items-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                No, Keep Editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

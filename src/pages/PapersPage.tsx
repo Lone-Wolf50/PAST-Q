@@ -251,11 +251,11 @@ const PapersPage = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-3xl md:text-4xl font-bold text-theme-primary">Browse Papers</h1>
+            <h1 className="text-2xl md:text-4xl font-bold text-theme-primary">Browse Papers</h1>
             {/* Streak Badge */}
             {streak > 0 && (
               <div className={clsx(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black border transition-all',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black border transition-all shrink-0 ml-auto',
                 streak >= 7
                   ? 'bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 border-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse font-extrabold'
                   : streak >= 3
@@ -263,7 +263,10 @@ const PapersPage = () => {
                     : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
               )}>
                 <Flame className={clsx("w-3.5 h-3.5", streak >= 7 && "animate-[bounce_1.2s_infinite] text-yellow-200 drop-shadow-[0_0_4px_rgba(255,255,255,0.8)]")} />
-                {streak} Day{streak !== 1 ? 's' : ''} Streak
+                {/* Mobile: compact e.g. "16D Streak" */}
+                <span className="md:hidden">{streak}D Streak</span>
+                {/* Desktop: full e.g. "16 Days Streak" */}
+                <span className="hidden md:inline">{streak} Day{streak !== 1 ? 's' : ''} Streak</span>
               </div>
             )}
           </div>
