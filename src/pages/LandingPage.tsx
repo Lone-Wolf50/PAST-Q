@@ -72,14 +72,14 @@ const LandingPage = () => {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 w-full overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             {[
               { label: `All Departments`, color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
-              { label: `1,500+ Papers`, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
               { label: '20 Years', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+              { label: `1,500+ Papers`, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
             ].map((stat) => (
-              <div key={stat.label} className={clsx("flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold border", stat.color)}>
-                <div className="w-2 h-2 rounded-full bg-current opacity-80" />
+              <div key={stat.label} className={clsx("flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold border whitespace-nowrap shrink-0", stat.color)}>
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-current opacity-80 shrink-0" />
                 {stat.label}
               </div>
             ))}
