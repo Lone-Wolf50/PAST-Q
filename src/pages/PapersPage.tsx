@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, BookOpen, Download, Eye, Star, Flame, FileCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useLocation, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { AlertModal } from '../components/ui/AlertModal';
@@ -19,6 +19,9 @@ interface Paper {
 const PapersPage = () => {
   const { token, user } = useAuth();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const subjectFromUrl = urlParams.get('subject');
+    if (subjectFromUrl) return subjectFromUrl;
     return sessionStorage.getItem('papers_selected_subject') || null;
   });
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(() => {
@@ -105,15 +108,7 @@ const PapersPage = () => {
     variant: 'info'
   });
 
-  const location = useLocation();
-  const queryParams = new URLSearchParams(location.search);
-  const subjectParam = queryParams.get('subject');
 
-  useEffect(() => {
-    if (subjectParam) {
-      setSelectedSubject(subjectParam);
-    }
-  }, [subjectParam]);
 
   useEffect(() => {
     const fetchData = async () => {
