@@ -414,6 +414,9 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   const totalSize = rows.reduce((s, r) => s + r.file.size, 0);
   const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
 
+  // Sorted view for display — alphabetical by title, original `rows` state is untouched
+  const sortedRows = [...rows].sort((a, b) => a.title.localeCompare(b.title));
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -517,7 +520,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-theme-border">
-                        {rows.map((row, idx) => {
+                        {sortedRows.map((row, idx) => {
                           const titleMatch = isTitleMatch(row, papers);
                           const exactDup = isExactDuplicate(row, papers);
                           const batchDup = isBatchDuplicate(row, rows);
