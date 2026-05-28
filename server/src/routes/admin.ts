@@ -128,7 +128,8 @@ router.get('/papers', async (_req: AuthRequest, res: Response) => {
     const { data, error } = await supabase
       .from('upsa_papers')
       .select('*, upsa_subjects(name, code), upsa_paper_insights(id)')
-      .order('year', { ascending: false });
+      .order('year', { ascending: false })
+      .order('title', { ascending: true });
     if (error) throw error;
 
     // Include per-paper processing state from in-memory tracker

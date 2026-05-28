@@ -44,6 +44,7 @@ router.get('/', protect, async (req: AuthRequest, res: Response) => {
       // Note: we fetch file_url but we'll omit it from the response to enforce download limits
       .select('id, title, year, semester, has_answers, answer_url, upsa_subjects!inner(name, code)', { count: 'exact' })
       .order('year', { ascending: false })
+      .order('title', { ascending: true })
       .range(from, from + limitNum - 1);
 
     if (subject_id) query = query.eq('subject_id', subject_id);
