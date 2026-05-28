@@ -14,14 +14,10 @@ export interface HFConfig {
  * If not set, returns null.
  */
 export async function getHFConfig(): Promise<HFConfig | null> {
-  const tableName = process.env.HF_TABLE_NAME;
-  const keyColumn = process.env.HF_KEY_COLUMN;
-  const modelColumn = process.env.HF_MODEL_COLUMN;
-
-  if (!tableName || !keyColumn || !modelColumn) {
-    console.warn('[HuggingFace] Configuration env variables (HF_TABLE_NAME, HF_KEY_COLUMN, HF_MODEL_COLUMN) are not fully defined. Please add them to your environment.');
-    return null;
-  }
+  // Fall back to known defaults so production works without needing these env vars
+  const tableName  = process.env.HF_TABLE_NAME   || 'upsa_hf_config';
+  const keyColumn  = process.env.HF_KEY_COLUMN    || 'hf_api_key';
+  const modelColumn = process.env.HF_MODEL_COLUMN || 'model_names';
 
   try {
     const { data, error } = await supabase
