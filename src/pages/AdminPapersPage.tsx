@@ -865,7 +865,8 @@ const AdminPapersPage = () => {
                           name="title"
                           required
                           value={draftTitle}
-                          onChange={(e) => setDraftTitle(e.target.value.toUpperCase())}
+                          onChange={(e) => setDraftTitle(e.target.value)}
+                          onBlur={(e) => setDraftTitle(e.target.value.toUpperCase())}
                           className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none transition-colors uppercase"
                           placeholder="e.g. 2023 PRINCIPLES OF MANAGEMENT"
                         />

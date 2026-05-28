@@ -129,7 +129,8 @@ const CreateSubjectPopup = ({ onCreated, onClose }: CreateSubjectPopupProps) => 
               <label className="text-[10px] font-bold uppercase tracking-widest text-theme-muted">Subject Name</label>
               <input
                 value={name}
-                onChange={(e) => setName(e.target.value.toUpperCase())}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={(e) => setName(e.target.value.toUpperCase())}
                 placeholder="e.g. Principles of Management"
                 className="bg-theme-surface border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-primary focus:border-indigo-500/50 outline-none transition-colors uppercase"
               />
@@ -138,7 +139,8 @@ const CreateSubjectPopup = ({ onCreated, onClose }: CreateSubjectPopupProps) => 
               <label className="text-[10px] font-bold uppercase tracking-widest text-theme-muted">Course Code</label>
               <input
                 value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                onChange={(e) => setCode(e.target.value)}
+                onBlur={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="e.g. MGMT101"
                 className="bg-theme-surface border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-primary focus:border-indigo-500/50 outline-none transition-colors uppercase"
               />
@@ -541,7 +543,8 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                                 <div className="flex flex-col gap-1">
                                   <input
                                     value={row.title}
-                                    onChange={(e) => updateRow(row.id, { title: e.target.value.toUpperCase() })}
+                                    onChange={(e) => updateRow(row.id, { title: e.target.value })}
+                                    onBlur={(e) => updateRow(row.id, { title: e.target.value.toUpperCase() })}
                                     disabled={row.status === 'uploading' || row.status === 'done'}
                                     className={clsx(
                                       'w-full min-w-[180px] bg-theme-surface border rounded-lg px-3 py-2 text-xs text-theme-primary focus:border-indigo-500/50 outline-none transition-colors disabled:opacity-50 uppercase',

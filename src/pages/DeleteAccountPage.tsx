@@ -123,7 +123,8 @@ const DeleteAccountPage = () => {
                 <input 
                   type="text" 
                   value={confirmationWord}
-                  onChange={(e) => setConfirmationWord(e.target.value.toUpperCase())}
+                  onChange={(e) => setConfirmationWord(e.target.value)}
+                  onBlur={(e) => setConfirmationWord(e.target.value.toUpperCase())}
                   placeholder={`Enter ${targetWord}`} 
                   className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-4 text-theme-primary placeholder-gray-500 focus:outline-none focus:border-red-500/50 focus:bg-theme-surface-2 transition-colors uppercase"
                   required

@@ -470,7 +470,8 @@ const AdminSubjectsPage = () => {
                   type="text"
                   required
                   value={draftName}
-                  onChange={(e) => setDraftName(e.target.value.toUpperCase())}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onBlur={(e) => setDraftName(e.target.value.toUpperCase())}
                   className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:outline-none focus:border-indigo-500/50 uppercase"
                   placeholder="e.g. MICROECONOMICS"
                 />
@@ -482,7 +483,8 @@ const AdminSubjectsPage = () => {
                   type="text"
                   required
                   value={draftCode}
-                  onChange={(e) => setDraftCode(e.target.value.toUpperCase())}
+                  onChange={(e) => setDraftCode(e.target.value)}
+                  onBlur={(e) => setDraftCode(e.target.value.toUpperCase())}
                   className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary uppercase font-mono focus:outline-none focus:border-indigo-500/50"
                   placeholder="e.g. ECON201"
                 />
