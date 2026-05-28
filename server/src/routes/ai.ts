@@ -9,6 +9,7 @@ import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from '../l
 import fs from 'fs';
 import path from 'path';
 import { performOcrPipeline } from '../lib/ocr';
+import { logFallbackEvent, getErrorMeaning, FallbackAttempt } from '../lib/fallback-logger';
 
 const pdf = require('pdf-parse');
 
@@ -704,6 +705,8 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         `Student question: ${message}`;
     }
 
+    const chatAttempts: FallbackAttempt[] = [];
+
     // ── STEP 1: HuggingFace (primary) ─────────────────────────────────────────
     let usedHFFallback = false;
     let hfReplyText: string | null = null;
@@ -721,19 +724,48 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
             hfReplyText = await askHuggingFace(modelId, hfConfig.apiKey, systemInstruction, historyForProviders, providerUserMessage);
             usedHFFallback = true;
             hfUsedModel = modelId;
+            chatAttempts.push({
+              model_or_service: `HuggingFace (${modelId})`,
+              status: 'success'
+            });
             console.log(`[AI /chat] HuggingFace succeeded with model: ${modelId}`);
             break;
           } catch (hfErr: any) {
             console.error(`[AI /chat] HF model ${modelId} failed:`, hfErr.message);
             lastError = hfErr;
+            const errInfo = getErrorMeaning(hfErr.status || hfErr.code, hfErr.message);
+            chatAttempts.push({
+              model_or_service: `HuggingFace (${modelId})`,
+              status: 'failed',
+              error_code: errInfo.code,
+              error_message: hfErr.message,
+              error_meaning: errInfo.meaning
+            });
           }
         }
       } else {
-        console.warn('[AI /chat] HuggingFace config or API Key is missing in Supabase.');
+        const errMsg = 'HuggingFace config or API Key is missing in Supabase.';
+        console.warn('[AI /chat] ' + errMsg);
+        const errInfo = getErrorMeaning('ENOENT', errMsg);
+        chatAttempts.push({
+          model_or_service: 'HuggingFace (Primary)',
+          status: 'failed',
+          error_code: errInfo.code,
+          error_message: errMsg,
+          error_meaning: errInfo.meaning
+        });
       }
     } catch (err: any) {
       console.error('[AI /chat] HuggingFace initialization failed:', err.message);
       lastError = err;
+      const errInfo = getErrorMeaning(err.status || err.code, err.message);
+      chatAttempts.push({
+        model_or_service: 'HuggingFace (Primary)',
+        status: 'failed',
+        error_code: errInfo.code,
+        error_message: err.message,
+        error_meaning: errInfo.meaning
+      });
     }
 
     // ── STEP 2: Puter (first fallback) ────────────────────────────────────────
@@ -746,13 +778,34 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         try {
           puterReplyText = await askPuter(systemInstruction, historyForProviders, providerUserMessage);
           usedPuterFallback = true;
+          chatAttempts.push({
+            model_or_service: 'Puter GPT-4o Sandbox',
+            status: 'success'
+          });
           console.log('[AI /chat] Puter fallback succeeded!');
         } catch (puterErr: any) {
           console.error('[AI /chat] Puter fallback failed:', puterErr.message);
           lastError = puterErr;
+          const errInfo = getErrorMeaning(puterErr.status || puterErr.code, puterErr.message);
+          chatAttempts.push({
+            model_or_service: 'Puter GPT-4o Sandbox',
+            status: 'failed',
+            error_code: errInfo.code,
+            error_message: puterErr.message,
+            error_meaning: errInfo.meaning
+          });
         }
       } else {
-        console.warn('[AI /chat] Puter fallback is not available (missing token).');
+        const errMsg = 'Puter fallback is not available (missing token).';
+        console.warn('[AI /chat] ' + errMsg);
+        const errInfo = getErrorMeaning('ENOENT', errMsg);
+        chatAttempts.push({
+          model_or_service: 'Puter GPT-4o Sandbox',
+          status: 'failed',
+          error_code: errInfo.code,
+          error_message: errMsg,
+          error_meaning: errInfo.meaning
+        });
       }
     }
 
@@ -834,24 +887,61 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
                 contents,
                 config: { systemInstruction },
               });
+              chatAttempts.push({
+                model_or_service: `Gemini (${model})`,
+                status: 'success'
+              });
               console.log(`[AI /chat] Gemini succeeded with model: ${model}`);
               break;
             } catch (err: any) {
               console.error(`[AI /chat] Gemini model ${model} failed:`, err.message);
               lastError = err;
+              const errInfo = getErrorMeaning(err.status || err.code, err.message);
+              chatAttempts.push({
+                model_or_service: `Gemini (${model})`,
+                status: 'failed',
+                error_code: errInfo.code,
+                error_message: err.message,
+                error_meaning: errInfo.meaning
+              });
             }
           }
           t_ai += performance.now() - aiStart;
         } else {
-          lastError = new Error('GEMINI_API_KEY not configured');
+          const errMsg = 'GEMINI_API_KEY not configured';
+          lastError = new Error(errMsg);
+          const errInfo = getErrorMeaning('ENOENT', errMsg);
+          chatAttempts.push({
+            model_or_service: 'Gemini (Last Resort)',
+            status: 'failed',
+            error_code: errInfo.code,
+            error_message: errMsg,
+            error_meaning: errInfo.meaning
+          });
         }
       } catch (geminiOuterErr: any) {
         console.error('[AI /chat] Gemini (last resort) failed:', geminiOuterErr);
         lastError = geminiOuterErr;
+        const errInfo = getErrorMeaning(geminiOuterErr.status || geminiOuterErr.code, geminiOuterErr.message);
+        chatAttempts.push({
+          model_or_service: 'Gemini (Last Resort)',
+          status: 'failed',
+          error_code: errInfo.code,
+          error_message: geminiOuterErr.message,
+          error_meaning: errInfo.meaning
+        });
       }
     }
 
     if (!usedHFFallback && !usedPuterFallback && !response) {
+      await logFallbackEvent({
+        request_type: 'AI Chat',
+        title: `Student Chat Session - ${paperMeta.subject || 'General'}`,
+        success: false,
+        selected_model_or_service: null,
+        attempts: chatAttempts
+      });
+
       setAIHealth({ status: 'limited', backOnlineAt: new Date(Date.now() + 86400000).toISOString(), lastError: lastError?.message || 'All AI Engines Failed' });
       return res.status(429).json({
         error: 'all_engines_failed',
@@ -880,7 +970,17 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       }
       modelUsed = response?.model || 'gemini-2.0-flash';
     }
+
+    await logFallbackEvent({
+      request_type: 'AI Chat',
+      title: `Student Chat Session - ${paperMeta.subject || 'General'}`,
+      success: true,
+      selected_model_or_service: modelUsed,
+      attempts: chatAttempts
+    });
+
     replyText = cleanHistoryContent(replyText);
+
 
     supabase.from('upsa_ai_queries').insert({
       user_id: req.user?.id,

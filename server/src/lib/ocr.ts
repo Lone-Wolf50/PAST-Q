@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import vision from '@google-cloud/vision';
 import Tesseract from 'tesseract.js';
+import { logFallbackEvent, getErrorMeaning, FallbackAttempt } from './fallback-logger';
 
 /**
  * Converts PDF pages to images and runs Google Cloud Vision API OCR or Tesseract.js local OCR.
@@ -52,6 +53,8 @@ export async function performOcrPipeline(pdfBuffer: Buffer, numPages: number): P
     throw new Error('No images generated from PDF');
   }
 
+  const attempts: FallbackAttempt[] = [];
+
   // Step 1: Google Cloud Vision API OCR
   const keyPath = path.join(__dirname, '../../past-q-vision-4522486be562.json');
   if (fs.existsSync(keyPath)) {
@@ -69,6 +72,11 @@ export async function performOcrPipeline(pdfBuffer: Buffer, numPages: number): P
       const batchResult: any = await client.batchAnnotateImages({ requests });
       const result = batchResult[0];
 
+      const firstError = result.responses?.find((r: any) => r.error)?.error;
+      if (firstError) {
+        throw new Error(firstError.message || 'Vision API execution error');
+      }
+
       let ocrText = '';
       if (result.responses) {
         for (let i = 0; i < result.responses.length; i++) {
@@ -82,21 +90,67 @@ export async function performOcrPipeline(pdfBuffer: Buffer, numPages: number): P
       const trimmedText = ocrText.trim();
       if (trimmedText.length > 50) {
         console.log(`[OCR Pipeline] Google Cloud Vision OCR succeeded! Character length: ${trimmedText.length}`);
+        attempts.push({
+          model_or_service: 'Google Cloud Vision',
+          status: 'success'
+        });
+        await logFallbackEvent({
+          request_type: 'OCR Pipeline',
+          title: `OCR Extraction (${images.length} pages)`,
+          success: true,
+          selected_model_or_service: 'Google Cloud Vision',
+          attempts
+        });
         return trimmedText;
       } else {
-        console.warn('[OCR Pipeline] Google Cloud Vision OCR returned insufficient text, falling back to Tesseract...');
+        throw new Error('OCR_INSUFFICIENT_TEXT: Google Cloud Vision returned insufficient text');
       }
     } catch (visionErr: any) {
+      const errInfo = getErrorMeaning(visionErr.status || visionErr.code, visionErr.message);
+      attempts.push({
+        model_or_service: 'Google Cloud Vision',
+        status: 'failed',
+        error_code: errInfo.code,
+        error_message: visionErr.message,
+        error_meaning: errInfo.meaning
+      });
       console.error('[OCR Pipeline] Google Cloud Vision OCR failed:', visionErr.message);
     }
   } else {
+    const errMsg = 'Google Cloud Vision credentials file not found.';
+    const errInfo = getErrorMeaning('ENOENT', errMsg);
+    attempts.push({
+      model_or_service: 'Google Cloud Vision',
+      status: 'failed',
+      error_code: errInfo.code,
+      error_message: errMsg,
+      error_meaning: errInfo.meaning
+    });
     console.warn('[OCR Pipeline] Google Cloud Vision credentials file not found. Skipping to Tesseract.js...');
   }
 
   // Step 2: Tesseract.js OCR
   if (process.env.NODE_ENV === 'production' || process.env.DISABLE_LOCAL_OCR === 'true') {
+    const errMsg = 'Local Tesseract OCR fallback is disabled in production to guarantee server performance. Please configure a valid Google Cloud Vision key.';
+    const errInfo = getErrorMeaning('LOCAL_OCR_DISABLED', errMsg);
+    attempts.push({
+      model_or_service: 'Tesseract.js (Local)',
+      status: 'failed',
+      error_code: errInfo.code,
+      error_message: errMsg,
+      error_meaning: errInfo.meaning
+    });
+    
+    await logFallbackEvent({
+      request_type: 'OCR Pipeline',
+      title: `OCR Extraction (${images.length} pages)`,
+      success: false,
+      selected_model_or_service: null,
+      attempts
+    });
+    
     console.warn('[OCR Pipeline] Tesseract.js local OCR is disabled in production to protect the Node event loop and prevent memory depletion.');
-    throw new Error('Local Tesseract OCR fallback is disabled in production to guarantee server performance. Please configure a valid Google Cloud Vision key.');
+    throw new Error(errMsg);
   }
 
   try {
@@ -113,11 +167,40 @@ export async function performOcrPipeline(pdfBuffer: Buffer, numPages: number): P
     const trimmedText = ocrText.trim();
     if (trimmedText.length > 50) {
       console.log(`[OCR Pipeline] Tesseract.js OCR succeeded! Character length: ${trimmedText.length}`);
+      attempts.push({
+        model_or_service: 'Tesseract.js (Local)',
+        status: 'success'
+      });
+      await logFallbackEvent({
+        request_type: 'OCR Pipeline',
+        title: `OCR Extraction (${images.length} pages)`,
+        success: true,
+        selected_model_or_service: 'Tesseract.js (Local)',
+        attempts
+      });
       return trimmedText;
     }
     throw new Error('Tesseract.js OCR returned insufficient text');
   } catch (tessErr: any) {
+    const errInfo = getErrorMeaning(tessErr.status || tessErr.code, tessErr.message);
+    attempts.push({
+      model_or_service: 'Tesseract.js (Local)',
+      status: 'failed',
+      error_code: errInfo.code,
+      error_message: tessErr.message,
+      error_meaning: errInfo.meaning
+    });
+    
+    await logFallbackEvent({
+      request_type: 'OCR Pipeline',
+      title: `OCR Extraction (${images.length} pages)`,
+      success: false,
+      selected_model_or_service: null,
+      attempts
+    });
+    
     console.error('[OCR Pipeline] Tesseract.js OCR failed:', tessErr.message);
     throw tessErr;
   }
+
 }

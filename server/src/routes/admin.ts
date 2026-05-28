@@ -736,7 +736,11 @@ router.get('/notifications', async (_req: AuthRequest, res: Response) => {
       .select('*')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    res.status(200).json({ notifications: data });
+
+    // Filter out fallback events from regular notifications list
+    const filtered = (data || []).filter((n: any) => !n.metadata?.is_fallback);
+
+    res.status(200).json({ notifications: filtered });
   } catch {
     res.status(500).json({ error: 'Failed to fetch notifications.' });
   }
@@ -744,11 +748,23 @@ router.get('/notifications', async (_req: AuthRequest, res: Response) => {
 
 router.patch('/notifications/read-all', async (_req: AuthRequest, res: Response) => {
   try {
-    const { error } = await supabase
+    const { data: unreadNotifications } = await supabase
       .from('upsa_admin_notifications')
-      .update({ is_read: true })
+      .select('id, metadata')
       .eq('is_read', false);
-    if (error) throw error;
+    
+    const regularIds = (unreadNotifications || [])
+      .filter((n: any) => !n.metadata?.is_fallback)
+      .map((n: any) => n.id);
+
+    if (regularIds.length > 0) {
+      const { error } = await supabase
+        .from('upsa_admin_notifications')
+        .update({ is_read: true })
+        .in('id', regularIds);
+      if (error) throw error;
+    }
+
     res.status(200).json({ message: 'All notifications marked as read.' });
   } catch {
     res.status(500).json({ error: 'Failed to mark notifications as read.' });
@@ -780,6 +796,62 @@ router.delete('/notifications/:id', async (req: AuthRequest, res: Response) => {
     res.status(200).json({ message: 'Notification deleted.' });
   } catch {
     res.status(500).json({ error: 'Failed to delete notification.' });
+  }
+});
+
+// ── Model Fallbacks Monitor ──────────────────────────────────────────────────
+router.get('/fallbacks', async (_req: AuthRequest, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('upsa_admin_notifications')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    // Filter to only get fallback log notifications
+    const fallbacks = (data || []).filter((n: any) => !!n.metadata?.is_fallback);
+
+    res.status(200).json({ fallbacks });
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch model fallbacks.' });
+  }
+});
+
+router.delete('/fallbacks/:id', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabase
+      .from('upsa_admin_notifications')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    res.status(200).json({ message: 'Fallback log dismissed.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to delete fallback log.' });
+  }
+});
+
+router.delete('/fallbacks', async (_req: AuthRequest, res: Response) => {
+  try {
+    const { data: allFallbacks } = await supabase
+      .from('upsa_admin_notifications')
+      .select('id, metadata');
+    
+    const fallbackIds = (allFallbacks || [])
+      .filter((n: any) => !!n.metadata?.is_fallback)
+      .map((n: any) => n.id);
+
+    if (fallbackIds.length > 0) {
+      const { error } = await supabase
+        .from('upsa_admin_notifications')
+        .delete()
+        .in('id', fallbackIds);
+      if (error) throw error;
+    }
+    
+    res.status(200).json({ message: 'All fallback logs cleared.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to clear fallback logs.' });
   }
 });
 

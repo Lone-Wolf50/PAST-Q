@@ -4,6 +4,8 @@ import { getAIHealth, setAIHealth } from './ai-health';
 import { askPuter, isPuterAvailable } from './puter';
 import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from './huggingface';
 import { performOcrPipeline } from './ocr';
+import { logFallbackEvent, getErrorMeaning, FallbackAttempt } from './fallback-logger';
+
 const pdf = require('pdf-parse');
 
 // ── In-memory processing tracker ────────────────────────────────────────────
@@ -119,6 +121,8 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       ? `[Extracted Paper Content]\n${extractedText.substring(0, 35000)}\n\n${prompt}`
       : `[PDF content unavailable for paper: "${paperTitle}"]\n\n${prompt}`;
 
+    const insightAttempts: FallbackAttempt[] = [];
+
     for (const modelName of modelsToTry) {
       try {
 
@@ -141,6 +145,10 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
 
         const res: any = await Promise.race([aiPromise, timeoutPromise]);
         result = res;
+        insightAttempts.push({
+          model_or_service: `Gemini (${modelName})`,
+          status: 'success'
+        });
 
         break; // Success!
       } catch (err: any) {
@@ -150,10 +158,16 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
         const code = parsed?.error?.code ?? err.status;
 
         if (code === 429) {
-          // Note: we no longer break here. We will try fallback models just in case.
           quotaExhausted = true;
         }
-        // Silently fall back to the next model for any error
+        const errInfo = getErrorMeaning(code, err.message);
+        insightAttempts.push({
+          model_or_service: `Gemini (${modelName})`,
+          status: 'failed',
+          error_code: errInfo.code,
+          error_message: err.message,
+          error_meaning: errInfo.meaning
+        });
         continue;
       }
     }
@@ -184,13 +198,36 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
 
           if (puterResponse) {
             responseText = puterResponse;
+            insightAttempts.push({
+              model_or_service: 'Puter GPT-4o Sandbox',
+              status: 'success'
+            });
 
             // Reset health — Puter is serving fine
             setAIHealth({ status: 'online', backOnlineAt: null, lastError: null });
+          } else {
+            throw new Error('Puter returned an empty response');
           }
         } catch (puterErr: any) {
-
+          const errInfo = getErrorMeaning(puterErr.status || puterErr.code, puterErr.message);
+          insightAttempts.push({
+            model_or_service: 'Puter GPT-4o Sandbox',
+            status: 'failed',
+            error_code: errInfo.code,
+            error_message: puterErr.message,
+            error_meaning: errInfo.meaning
+          });
         }
+      } else {
+        const errMsg = 'Puter is not available (missing PUTER_AUTH_TOKEN)';
+        const errInfo = getErrorMeaning('ENOENT', errMsg);
+        insightAttempts.push({
+          model_or_service: 'Puter GPT-4o Sandbox',
+          status: 'failed',
+          error_code: errInfo.code,
+          error_message: errMsg,
+          error_meaning: errInfo.meaning
+        });
       }
 
       // ── Hugging Face Fallback for Insights ──────────────────────────────
@@ -221,16 +258,48 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
 
                 if (hfResponse) {
                   responseText = hfResponse;
+                  insightAttempts.push({
+                    model_or_service: `HuggingFace (${modelId})`,
+                    status: 'success'
+                  });
                   setAIHealth({ status: 'online', backOnlineAt: null, lastError: null });
                   break;
+                } else {
+                  throw new Error('HuggingFace returned empty response');
                 }
               } catch (hfErr: any) {
                 console.warn(`[HF Insights] Model "${modelId}" failed:`, hfErr.message);
+                const errInfo = getErrorMeaning(hfErr.status || hfErr.code, hfErr.message);
+                insightAttempts.push({
+                  model_or_service: `HuggingFace (${modelId})`,
+                  status: 'failed',
+                  error_code: errInfo.code,
+                  error_message: hfErr.message,
+                  error_meaning: errInfo.meaning
+                });
               }
             }
+          } else {
+            const errMsg = 'HuggingFace config or API Key is missing';
+            const errInfo = getErrorMeaning('ENOENT', errMsg);
+            insightAttempts.push({
+              model_or_service: 'HuggingFace Fallback',
+              status: 'failed',
+              error_code: errInfo.code,
+              error_message: errMsg,
+              error_meaning: errInfo.meaning
+            });
           }
         } catch (err: any) {
           console.error('[HF Insights] Error in HF fallback:', err.message);
+          const errInfo = getErrorMeaning(err.status || err.code, err.message);
+          insightAttempts.push({
+            model_or_service: 'HuggingFace Fallback',
+            status: 'failed',
+            error_code: errInfo.code,
+            error_message: err.message,
+            error_meaning: errInfo.meaning
+          });
         }
       }
 
@@ -246,6 +315,15 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
           message: `Analysis for "${paperTitle}" blocked — Gemini, Puter, and Hugging Face are all currently unavailable. Cooldown: 10 minutes.`,
           is_read: false,
         });
+
+        await logFallbackEvent({
+          request_type: 'Insights Generator',
+          title: `Static Insights Generation - ${paperTitle}`,
+          success: false,
+          selected_model_or_service: null,
+          attempts: insightAttempts
+        });
+
         markProcessingDone(paperId);
         return;
       }
@@ -258,6 +336,27 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
         responseText = result?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
       }
     }
+
+    let finalModelUsed = 'Unknown';
+    if (result) {
+      finalModelUsed = result.model || 'Gemini';
+    } else if (responseText) {
+      if (insightAttempts.some(a => a.model_or_service.includes('Puter') && a.status === 'success')) {
+        finalModelUsed = 'Puter GPT-4o';
+      } else {
+        const hfSuccess = insightAttempts.find(a => a.model_or_service.includes('HuggingFace') && a.status === 'success');
+        finalModelUsed = hfSuccess ? hfSuccess.model_or_service : 'HuggingFace';
+      }
+    }
+
+    await logFallbackEvent({
+      request_type: 'Insights Generator',
+      title: `Static Insights Generation - ${paperTitle}`,
+      success: true,
+      selected_model_or_service: finalModelUsed,
+      attempts: insightAttempts
+    });
+
 
     if (!responseText) {
 

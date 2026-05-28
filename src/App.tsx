@@ -106,6 +106,7 @@ const AdminLoginPage = lazyWithRetry(() => import('./pages/AdminLoginPage'));
 const NotFoundPage = lazyWithRetry(() => import('./pages/NotFoundPage'));
 const AuthCallback = lazyWithRetry(() => import('./pages/AuthCallback'));
 const AdminNotificationsPage = lazyWithRetry(() => import('./pages/AdminNotificationsPage'));
+const AdminFallbacksPage = lazyWithRetry(() => import('./pages/AdminFallbacksPage'));
 const StudentSubscriptionPage = lazyWithRetry(() => import('./pages/StudentSubscriptionPage'));
 const StudentNotificationsPage = lazyWithRetry(() => import('./pages/StudentNotificationsPage'));
 
@@ -229,6 +230,7 @@ function AppRoutes() {
                     <Route path="/users" element={<AdminUsersPage />} />
                     <Route path="/payments" element={<AdminPaymentsPage />} />
                     <Route path="/notifications" element={<AdminNotificationsPage />} />
+                    <Route path="/fallbacks" element={<AdminFallbacksPage />} />
                     <Route path="*" element={<NotFoundPage />} />
                   </Routes>
                 </React.Suspense>
