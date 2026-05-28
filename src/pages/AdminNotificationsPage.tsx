@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Bell, Check, Trash2, Menu, Flag } from 'lucide-react';
+import { Bell, Check, Trash2, Menu, Flag, Loader2 } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
 
 const AdminNotificationsPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
   const fetchNotifications = async () => {
     try {
@@ -22,17 +24,23 @@ const AdminNotificationsPage = () => {
   }, []);
 
   const markAsRead = async (id: string) => {
+    setMarkingId(id);
     try {
       await apiFetch(`/hq-management/notifications/${id}`, { method: 'PATCH', token: localStorage.getItem('admin_token')! });
-      fetchNotifications();
-    } catch { /* console log removed */ }
+      await fetchNotifications();
+    } catch { /* console log removed */ } finally {
+      setMarkingId(null);
+    }
   };
 
   const markAllRead = async () => {
+    setMarkingAll(true);
     try {
       await apiFetch('/hq-management/notifications/read-all', { method: 'PATCH', token: localStorage.getItem('admin_token')! });
-      fetchNotifications();
-    } catch { /* console log removed */ }
+      await fetchNotifications();
+    } catch { /* console log removed */ } finally {
+      setMarkingAll(false);
+    }
   };
 
   const deleteNotification = async (id: string) => {
@@ -61,11 +69,14 @@ const AdminNotificationsPage = () => {
               <p className="text-theme-muted">View and manage system alerts and user activity.</p>
             </div>
             <button 
-              className="flex items-center gap-2 px-4 py-2 bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary rounded-xl transition-colors text-sm font-medium"
+              className="flex items-center gap-2 px-4 py-2 bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary rounded-xl transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={markAllRead}
+              disabled={markingAll}
             >
-              <Check className="w-4 h-4" />
-              Mark all read
+              {markingAll
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Check className="w-4 h-4" />}
+              {markingAll ? 'Marking...' : 'Mark all read'}
             </button>
           </div>
 
@@ -109,8 +120,15 @@ const AdminNotificationsPage = () => {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {!notif.is_read && (
-                            <button onClick={() => markAsRead(notif.id)} className="p-1.5 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-emerald-400 transition-colors" title="Mark as read">
-                              <Check className="w-4 h-4" />
+                            <button
+                              onClick={() => markAsRead(notif.id)}
+                              disabled={markingId === notif.id}
+                              className="p-1.5 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Mark as read"
+                            >
+                              {markingId === notif.id
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <Check className="w-4 h-4" />}
                             </button>
                           )}
                           <button onClick={() => deleteNotification(notif.id)} className="p-1.5 rounded-lg bg-theme-surface hover:bg-red-500/10 text-theme-muted hover:text-red-400 transition-colors" title="Delete">

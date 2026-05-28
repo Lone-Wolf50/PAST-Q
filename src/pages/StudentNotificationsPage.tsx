@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, BookOpen, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sparkles, BookOpen, AlertCircle, CheckCircle2, Loader2, BellOff, CreditCard } from 'lucide-react';
 const timeAgo = (date: Date) => {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
   let interval = seconds / 31536000;
@@ -62,6 +62,7 @@ const StudentNotificationsPage = () => {
       case 'ai': return Sparkles;
       case 'paper': return BookOpen;
       case 'success': return CheckCircle2;
+      case 'payment': return CreditCard;
       default: return AlertCircle;
     }
   };
@@ -111,8 +112,16 @@ const StudentNotificationsPage = () => {
             <p>Loading your updates...</p>
           </div>
         ) : notifications.length === 0 ? (
-          <div className="py-20 text-center text-theme-muted glass-card border-theme-border">
-            <p>No notifications yet.</p>
+          <div className="py-16 flex flex-col items-center justify-center text-center gap-4 glass-card border-theme-border">
+            <div className="p-4 rounded-2xl bg-indigo-500/10 text-indigo-400">
+              <BellOff className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-theme-primary mb-1">No notifications yet</h3>
+              <p className="text-sm text-theme-muted max-w-xs">
+                You'll see updates here when you upgrade your plan, use AI features, or access papers.
+              </p>
+            </div>
           </div>
         ) : (
           notifications.map((notif) => {
