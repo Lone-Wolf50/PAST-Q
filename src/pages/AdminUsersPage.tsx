@@ -580,7 +580,8 @@ const AdminUsersPage = () => {
                           )}
                         </div>
                         <span className="text-[9px] text-theme-muted font-bold">
-                          JOINED {new Date(user.created_at).toLocaleDateString()}
+                          JOINED {new Date(user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          <span className="ml-1 text-theme-muted/70">{new Date(user.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
                         </span>
                       </div>
 
@@ -812,8 +813,9 @@ const AdminUsersPage = () => {
                               </button>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-xs text-theme-muted">
-                            {new Date(user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          <td className="px-6 py-4">
+                            <p className="text-xs text-theme-muted">{new Date(user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}</p>
+                            <p className="text-[10px] text-theme-muted/60 mt-0.5">{new Date(user.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</p>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-2">
@@ -894,8 +896,9 @@ const AdminUsersPage = () => {
                               {user.reason || 'Pending OTP'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-xs text-theme-muted">
-                            {new Date(user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          <td className="px-6 py-4">
+                            <p className="text-xs text-theme-muted">{new Date(user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}</p>
+                            <p className="text-[10px] text-theme-muted/60 mt-0.5">{new Date(user.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</p>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-2">
@@ -946,8 +949,9 @@ const AdminUsersPage = () => {
                           <td className="px-6 py-4 text-xs font-bold text-theme-secondary uppercase">
                             {user.plan || 'Free'}
                           </td>
-                          <td className="px-6 py-4 text-xs text-rose-400/80 font-bold">
-                            {new Date(user.deleted_at || user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          <td className="px-6 py-4">
+                            <p className="text-xs text-rose-400/80 font-bold">{new Date(user.deleted_at || user.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}</p>
+                            <p className="text-[10px] text-rose-400/50 mt-0.5">{new Date(user.deleted_at || user.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</p>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-2">

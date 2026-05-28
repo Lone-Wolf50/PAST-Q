@@ -622,15 +622,15 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
       .eq('id', userId)
       .single();
 
-    // Archive verified (active) users to deleted_accounts for records
+    // Archive verified (active) users to deleted_accounts for records (upsert on email to prevent duplicates)
     if (user?.is_verified) {
       try {
-        await supabase.from('upsa_deleted_accounts').insert({
+        await supabase.from('upsa_deleted_accounts').upsert({
           email: user.email,
           full_name: user.full_name,
           plan: user.plan || 'free',
           deleted_at: new Date().toISOString()
-        });
+        }, { onConflict: 'email' });
       } catch (e: any) {
         console.error('[DELETE /users/:id] Archive error:', e);
       }

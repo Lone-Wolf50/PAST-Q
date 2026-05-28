@@ -251,20 +251,21 @@ router.delete('/me', async (req: AuthRequest, res: Response) => {
     // 1. Fetch user data before deletion
     const { data: user } = await supabase
       .from('upsa_users')
-      .select('email, full_name, plan')
+      .select('email, full_name, plan, is_verified')
       .eq('id', userId)
       .single();
 
-    // 2. Archive to upsa_deleted_accounts
-    if (user) {
-      const { error: archiveError } = await supabase.from('upsa_deleted_accounts').insert({
-        email: user.email,
-        full_name: user.full_name,
-        plan: user.plan,
-        deleted_at: new Date().toISOString()
-      });
-      if (archiveError) {
-
+    // 2. Archive verified (active) users to deleted_accounts for records (upsert on email to prevent duplicates)
+    if (user?.is_verified) {
+      try {
+        await supabase.from('upsa_deleted_accounts').upsert({
+          email: user.email,
+          full_name: user.full_name,
+          plan: user.plan || 'free',
+          deleted_at: new Date().toISOString()
+        }, { onConflict: 'email' });
+      } catch (e: any) {
+        console.error('[DELETE /profile/me] Archive error:', e);
       }
     }
 

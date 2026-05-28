@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { 
   Shuffle, Trash2, Menu, CheckCircle2, XCircle, Search, 
   RefreshCw, ShieldAlert, ArrowRight, Activity, Cpu, 
-  HelpCircle, ChevronDown, ChevronUp, AlertTriangle
+  HelpCircle, ChevronDown, ChevronUp, AlertTriangle,
+  Zap, TrendingDown, Clock
 } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
@@ -131,9 +132,59 @@ const AdminFallbacksPage = () => {
     ? Math.round((ocrSuccessCount / ocrLogs.length) * 100) 
     : 100;
 
-  const quotaIssues = logs.filter(l => 
+  const quotaIssues = logs.filter(l =>
     l.metadata?.attempts?.some(a => a.error_code?.includes('429') || a.error_message?.includes('429'))
   ).length;
+
+  // ── Model Intelligence: per-model usage breakdown ────────────────────────────
+  const modelStatsMap: Record<string, { successes: number; failures: number; lastUsed: string | null; wasFallback: boolean }> = {};
+  for (const log of logs) {
+    const attempts = log.metadata?.attempts || [];
+    for (const attempt of attempts) {
+      const key = attempt.model_or_service;
+      if (!modelStatsMap[key]) modelStatsMap[key] = { successes: 0, failures: 0, lastUsed: null, wasFallback: false };
+      if (attempt.status === 'success') {
+        modelStatsMap[key].successes++;
+        if (!modelStatsMap[key].lastUsed || log.created_at > modelStatsMap[key].lastUsed!) {
+          modelStatsMap[key].lastUsed = log.created_at;
+        }
+        // Mark as fallback if it wasn't the first attempt
+        const attemptIndex = attempts.indexOf(attempt);
+        if (attemptIndex > 0) modelStatsMap[key].wasFallback = true;
+      } else {
+        modelStatsMap[key].failures++;
+      }
+    }
+  }
+  const modelStats = Object.entries(modelStatsMap)
+    .map(([name, s]) => ({ name, ...s, total: s.successes + s.failures, rate: s.successes + s.failures > 0 ? Math.round((s.successes / (s.successes + s.failures)) * 100) : 0 }))
+    .sort((a, b) => b.successes - a.successes);
+
+  // Most recently active model (last success across all logs)
+  const activeModel = logs
+    .flatMap(l => (l.metadata?.attempts || []).filter(a => a.status === 'success').map(a => ({ model: a.model_or_service, at: l.created_at })))
+    .sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
+
+  // Recent fallback events (logs where a fallback was used = attempt index > 0 on success)
+  const recentFallbacks = logs
+    .filter(l => {
+      const attempts = l.metadata?.attempts || [];
+      const successIdx = attempts.findIndex(a => a.status === 'success');
+      return successIdx > 0;
+    })
+    .slice(0, 5)
+    .map(l => {
+      const attempts = l.metadata?.attempts || [];
+      const successIdx = attempts.findIndex(a => a.status === 'success');
+      return {
+        id: l.id,
+        title: l.title,
+        at: l.created_at,
+        primary: attempts[0]?.model_or_service,
+        fallbackTo: attempts[successIdx]?.model_or_service,
+        attemptCount: successIdx + 1,
+      };
+    });
 
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
@@ -258,6 +309,108 @@ const AdminFallbacksPage = () => {
               </div>
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-yellow-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
             </div>
+          </div>
+
+          {/* ── Model Intelligence Panel ─────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+
+              {/* Active Model */}
+              <div className="glass-card p-6 border-theme-border flex flex-col gap-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-theme-muted">Currently Active Model</span>
+                </div>
+                {activeModel ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                      <p className="text-sm font-bold text-theme-primary truncate">{activeModel.model}</p>
+                    </div>
+                    <p className="text-xs text-theme-muted">
+                      Last seen: {new Date(activeModel.at).toLocaleString()}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-theme-muted">No successful model recorded yet.</p>
+                )}
+
+                <div className="mt-auto pt-3 border-t border-theme-border/50">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-theme-muted">Recent Fallbacks</span>
+                  </div>
+                  {recentFallbacks.length === 0 ? (
+                    <p className="text-xs text-theme-muted mt-2">No fallback events recorded.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2 mt-2">
+                      {recentFallbacks.map(fb => (
+                        <div key={fb.id} className="flex items-start gap-2">
+                          <Clock className="w-3.5 h-3.5 text-theme-muted shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-theme-primary font-semibold truncate">{fb.title}</p>
+                            <p className="text-[10px] text-theme-muted">
+                              <span className="text-red-400">{fb.primary}</span>
+                              <ArrowRight className="w-2.5 h-2.5 inline mx-1" />
+                              <span className="text-emerald-400">{fb.fallbackTo}</span>
+                              &nbsp;·&nbsp;{new Date(fb.at).toLocaleTimeString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Model Breakdown */}
+              <div className="glass-card p-6 border-theme-border lg:col-span-2">
+                <div className="flex items-center gap-2 mb-4">
+                  <Cpu className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-theme-muted">Model / Service Breakdown</span>
+                  <span className="ml-auto text-[10px] text-theme-muted">{modelStats.length} provider{modelStats.length !== 1 ? 's' : ''} seen</span>
+                </div>
+
+                {modelStats.length === 0 ? (
+                  <p className="text-sm text-theme-muted">No model data yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {modelStats.map(m => (
+                      <div key={m.name} className="group">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {m.wasFallback && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/15 shrink-0">Fallback</span>
+                            )}
+                            <span className="text-xs font-semibold text-theme-primary truncate">{m.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0 ml-2">
+                            <span className="text-[11px] text-emerald-400 font-bold">{m.successes}✓</span>
+                            <span className="text-[11px] text-red-400 font-bold">{m.failures}✗</span>
+                            <span className={`text-xs font-black w-10 text-right ${
+                              m.rate >= 80 ? 'text-emerald-400' : m.rate >= 50 ? 'text-amber-400' : 'text-red-400'
+                            }`}>{m.rate}%</span>
+                          </div>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="h-1.5 rounded-full bg-theme-surface overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              m.rate >= 80 ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                              : m.rate >= 50 ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                              : 'bg-gradient-to-r from-red-500 to-rose-400'
+                            }`}
+                            style={{ width: `${m.rate}%` }}
+                          />
+                        </div>
+                        {m.lastUsed && (
+                          <p className="text-[10px] text-theme-muted mt-0.5">Last used: {new Date(m.lastUsed).toLocaleString()}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
           </div>
 
           {/* Filter Bar */}
