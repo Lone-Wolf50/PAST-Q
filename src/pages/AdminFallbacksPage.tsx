@@ -39,6 +39,7 @@ const AdminFallbacksPage = () => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RESOLVED' | 'FAILED'>('ALL');
   const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -79,8 +80,8 @@ const AdminFallbacksPage = () => {
   };
 
   const clearAllLogs = async () => {
-    if (!window.confirm('Are you sure you want to clear all model fallback logs? This action cannot be undone.')) return;
     setActionLoading('clear-all');
+    setConfirmClear(false);
     try {
       const token = localStorage.getItem('admin_token') ?? undefined;
       await apiFetch('/hq-management/fallbacks', { method: 'DELETE', token });
@@ -169,14 +170,34 @@ const AdminFallbacksPage = () => {
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
               </button>
               
-              <button 
-                onClick={clearAllLogs}
-                disabled={actionLoading === 'clear-all' || logs.length === 0}
-                className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 rounded-xl transition-all font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Trash2 className="w-4 h-4" />
-                Clear Logs
-              </button>
+              {confirmClear ? (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-150">
+                  <span className="text-xs text-red-400 font-semibold whitespace-nowrap">Clear all logs?</span>
+                  <button
+                    onClick={clearAllLogs}
+                    disabled={actionLoading === 'clear-all'}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all font-bold text-sm disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Yes, clear
+                  </button>
+                  <button
+                    onClick={() => setConfirmClear(false)}
+                    className="px-3 py-2 bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-muted hover:text-theme-primary rounded-xl transition-all font-semibold text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmClear(true)}
+                  disabled={actionLoading === 'clear-all' || logs.length === 0}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 rounded-xl transition-all font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {actionLoading === 'clear-all' ? 'Clearing...' : 'Clear Logs'}
+                </button>
+              )}
             </div>
           </div>
 
