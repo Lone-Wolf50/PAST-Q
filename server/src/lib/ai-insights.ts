@@ -51,7 +51,7 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       return;
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1' });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
 
     const prompt = `
       You are an expert academic tutor. Analyze this past paper PDF ("${paperTitle}") and provide the following insights for students:

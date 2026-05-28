@@ -816,7 +816,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       console.log('[AI /chat] Puter failed. Attempting Gemini as last resort...');
       try {
         const geminiKey = process.env.GEMINI_API_KEY;
-        const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey, apiVersion: 'v1' }) : null;
+        const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey, apiVersion: 'v1beta' }) : null;
 
         if (ai) {
           const contents: any[] = [];
@@ -1127,7 +1127,7 @@ router.get('/test-ocr/:paperId', protect, async (req: AuthRequest, res: any) => 
     let geminiResult = { succeeded: false, response: '', modelUsed: '', error: '' };
     try {
       const geminiKey = process.env.GEMINI_API_KEY;
-      const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey, apiVersion: 'v1' }) : null;
+      const ai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey, apiVersion: 'v1beta' }) : null;
       if (ai) {
         const contents = [
           {
