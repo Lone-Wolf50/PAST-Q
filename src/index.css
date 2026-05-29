@@ -97,6 +97,9 @@
 }
 
 /* Enable smooth transitions globally ONLY when changing themes */
+.theme-transitioning {
+  will-change: background-color;
+}
 .theme-transitioning,
 .theme-transitioning *,
 .theme-transitioning *::before,
@@ -106,9 +109,10 @@
               color 0.3s ease,
               fill 0.3s ease,
               stroke 0.3s ease,
-              box-shadow 0.3s ease,
-              backdrop-filter 0.3s ease,
-              -webkit-backdrop-filter 0.3s ease !important;
+              box-shadow 0.3s ease !important;
+  /* Intentionally exclude backdrop-filter — transitioning it forces
+     a full GPU layer recomposition on every element, which is the
+     primary cause of the dark-to-light lag. */
 }
 
 /* ── Base Styles ──────────────────────────────────────────────────────────── */
@@ -119,10 +123,22 @@
     min-height: 100svh;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
-    background-image: radial-gradient(circle at top right, var(--glow-a), transparent 40%),
-      radial-gradient(circle at bottom left, var(--glow-b), transparent 40%);
-    background-attachment: fixed;
+    /* Gradient lives on a pseudo-element so it composites independently
+       and doesn't trigger a full-page repaint on theme switch. */
+    position: relative;
     transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      radial-gradient(circle at top right, var(--glow-a), transparent 40%),
+      radial-gradient(circle at bottom left, var(--glow-b), transparent 40%);
+    transition: opacity 0.3s ease;
   }
 
   /* Fix mobile keyboard pushing content up in Ask AI */

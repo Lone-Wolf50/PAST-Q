@@ -29,6 +29,7 @@ const AdminUsersPage = () => {
   const [confirm, setConfirm] = useState<{ show: boolean, id: string | null, action: string | null, status?: string }>({
     show: false, id: null, action: null
   });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Debounce search input
   useEffect(() => {
@@ -148,6 +149,7 @@ const AdminUsersPage = () => {
     const { id, action } = confirm;
     if (!id || !action) return;
 
+    setIsDeleting(true);
     try {
       if (action === 'delete') {
         if (activeTab === 'deleted') {
@@ -155,23 +157,25 @@ const AdminUsersPage = () => {
             method: 'DELETE',
             token: localStorage.getItem('admin_token')!
           });
+          setConfirm({ show: false, id: null, action: null });
           setAlert({ show: true, title: 'Success', message: 'Deletion log dismissed.', variant: 'success' });
         } else if (activeTab === 'failed') {
           await apiFetch(`/hq-management/users/${id}`, {
             method: 'DELETE',
             token: localStorage.getItem('admin_token')!
           });
+          setConfirm({ show: false, id: null, action: null });
           setAlert({ show: true, title: 'Success', message: 'Failed user account deleted.', variant: 'success' });
         } else {
           await apiFetch(`/hq-management/users/${id}`, {
             method: 'DELETE',
             token: localStorage.getItem('admin_token')!
           });
+          setConfirm({ show: false, id: null, action: null });
           setAlert({ show: true, title: 'Success', message: 'User successfully deleted.', variant: 'success' });
         }
         fetchUsers();
       }
-      setConfirm({ show: false, id: null, action: null });
     } catch (err: any) {
       setAlert({
         show: true,
@@ -179,6 +183,8 @@ const AdminUsersPage = () => {
         message: err.message || 'The requested action could not be completed.',
         variant: 'error'
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1103,7 +1109,7 @@ const AdminUsersPage = () => {
       {/* ── Custom UI Modals ── */}
       <ConfirmModal 
         isOpen={confirm.show}
-        onClose={() => setConfirm({ show: false, id: null, action: null })}
+        onClose={() => { if (!isDeleting) setConfirm({ show: false, id: null, action: null }); }}
         onConfirm={handleConfirmAction}
         title={confirm.action === 'delete' ? (activeTab === 'deleted' ? "Dismiss Deletion Log" : "Delete User") : "Confirm Action"}
         message={confirm.action === 'delete' 
@@ -1113,6 +1119,7 @@ const AdminUsersPage = () => {
           : "Are you sure you want to proceed with this action?"}
         confirmText={confirm.action === 'delete' ? (activeTab === 'deleted' ? "Dismiss Log" : "Delete Forever") : "Confirm"}
         variant={confirm.action === 'delete' ? "danger" : "warning"}
+        isLoading={isDeleting}
       />
 
       <AlertModal 

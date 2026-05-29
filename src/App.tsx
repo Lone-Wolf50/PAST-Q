@@ -166,15 +166,31 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function AppRoutes() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, logout } = useAuth();
   const location = useLocation();
   const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
+  const [accountSuspendedOpen, setAccountSuspendedOpen] = useState(false);
+  const [accountDeactivatedOpen, setAccountDeactivatedOpen] = useState(false);
 
   useEffect(() => {
     const handleSessionExpired = () => setSessionExpiredOpen(true);
+    const handleAccountSuspended = () => {
+      logout();
+      setAccountSuspendedOpen(true);
+    };
+    const handleAccountDeactivated = () => {
+      logout();
+      setAccountDeactivatedOpen(true);
+    };
     window.addEventListener('session_expired', handleSessionExpired);
-    return () => window.removeEventListener('session_expired', handleSessionExpired);
-  }, []);
+    window.addEventListener('account_suspended', handleAccountSuspended);
+    window.addEventListener('account_deactivated', handleAccountDeactivated);
+    return () => {
+      window.removeEventListener('session_expired', handleSessionExpired);
+      window.removeEventListener('account_suspended', handleAccountSuspended);
+      window.removeEventListener('account_deactivated', handleAccountDeactivated);
+    };
+  }, [logout]);
 
   const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/auth/callback'];
   const isAdminPath = location.pathname.startsWith('/hq-portal');
@@ -253,6 +269,22 @@ function AppRoutes() {
         onClose={() => setSessionExpiredOpen(false)}
         title="Session Expired"
         message="You have been logged out because your account was accessed from another device."
+        variant="error"
+      />
+
+      <AlertModal
+        isOpen={accountSuspendedOpen}
+        onClose={() => setAccountSuspendedOpen(false)}
+        title="Account Suspended"
+        message="Your account has been suspended by an administrator. Please contact support if you believe this is a mistake."
+        variant="error"
+      />
+
+      <AlertModal
+        isOpen={accountDeactivatedOpen}
+        onClose={() => setAccountDeactivatedOpen(false)}
+        title="Account Deactivated"
+        message="Your account has been deactivated. Please contact support for more information."
         variant="error"
       />
     </div>

@@ -52,9 +52,16 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const root = document.documentElement;
 
-    // Enable smooth transitioning across elements if it is not the first render
+    // Use rAF so the browser has committed the current frame before we add
+    // the transitioning class. This gives the GPU a chance to promote layers
+    // before the property changes start, eliminating the first-frame stutter.
+    let rafId: number;
+    let timeout: ReturnType<typeof setTimeout>;
+
     if (!isFirstRender.current) {
-      root.classList.add('theme-transitioning');
+      rafId = requestAnimationFrame(() => {
+        root.classList.add('theme-transitioning');
+      });
     } else {
       isFirstRender.current = false;
     }
@@ -71,12 +78,13 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     const currentKey = currentIsAdmin ? 'pastq-admin-theme' : 'pastq-theme';
     localStorage.setItem(currentKey, theme);
 
-    // Remove the transitioning class after transition finishes (300ms)
-    const timeout = setTimeout(() => {
+    // Remove transitioning class after transition finishes (slightly > 300ms)
+    timeout = setTimeout(() => {
       root.classList.remove('theme-transitioning');
-    }, 320);
+    }, 350);
 
     return () => {
+      cancelAnimationFrame(rafId);
       clearTimeout(timeout);
     };
   }, [theme]);

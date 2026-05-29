@@ -7,18 +7,27 @@ interface ApiOptions {
   token?: string;
 }
 
-const checkSessionExpiry = (res: Response, wasAuthenticated: boolean) => {
-  // Only fire session_expired if the request was made with a token.
-  // This prevents login failures (401 from bad credentials) from being
-  // mistaken for session revocations, which would erroneously log the
-  // user "out" of a session they never had.
+const checkSessionExpiry = (res: Response, wasAuthenticated: boolean, errorBody?: any) => {
+  // Only fire session events if the request was made with a token.
   const isAdminRoute = window.location.pathname.startsWith('/hq-portal');
+
   if (res.status === 401 && wasAuthenticated) {
     if (isAdminRoute) {
       localStorage.removeItem('admin_token');
       window.location.href = '/hq-portal/login';
     } else {
       window.dispatchEvent(new CustomEvent('session_expired'));
+    }
+    return;
+  }
+
+  // Handle suspended / deactivated accounts for authenticated users
+  if (res.status === 403 && wasAuthenticated && !isAdminRoute) {
+    const errorMsg: string = errorBody?.error || '';
+    if (errorMsg.toLowerCase().includes('suspended')) {
+      window.dispatchEvent(new CustomEvent('account_suspended'));
+    } else if (errorMsg.toLowerCase().includes('deactivated')) {
+      window.dispatchEvent(new CustomEvent('account_deactivated'));
     }
   }
 };
@@ -43,7 +52,7 @@ export async function apiFetch(path: string, { method = 'GET', body, token }: Ap
   }
 
   if (!res.ok) {
-    checkSessionExpiry(res, !!token);
+    checkSessionExpiry(res, !!token, data);
     const err = new Error(data?.message || data?.error || 'Something went wrong.') as any;
     err.status = res.status;
     err.body = data; // preserve full structured body for callers
@@ -80,7 +89,7 @@ export async function apiFetchMultipart(
   }
 
   if (!res.ok) {
-    checkSessionExpiry(res, !!token);
+    checkSessionExpiry(res, !!token, data);
     throw new Error(data?.error || data?.message || 'Something went wrong.');
   }
   return data;

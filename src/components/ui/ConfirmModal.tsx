@@ -65,11 +65,17 @@ export const ConfirmModal = ({
             onClick={() => { onConfirm(); }}
             disabled={isLoading}
             className={clsx(
-              "flex-1 px-6 py-3 rounded-2xl font-bold text-white transition-all shadow-lg active:scale-95 disabled:opacity-50",
+              "flex-1 px-6 py-3 rounded-2xl font-bold text-white transition-all shadow-lg active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2",
               buttonStyles[variant]
             )}
           >
-            {isLoading ? 'Processing...' : confirmText}
+            {isLoading && (
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32 10" className="opacity-30" />
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="10 32" />
+              </svg>
+            )}
+            {isLoading ? 'Deleting...' : confirmText}
           </button>
         </div>
       </div>
