@@ -616,11 +616,16 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   const userId = Array.isArray(id) ? id[0] : id;
   try {
     // Fetch full user info before deletion for archiving and notifications
-    const { data: user } = await supabase
+    const { data: user, error: fetchError } = await supabase
       .from('upsa_users')
       .select('email, full_name, plan, is_verified')
       .eq('id', userId)
       .single();
+
+    if (fetchError) {
+      console.error('[DELETE /users/:id] Failed to fetch user before deletion:', fetchError.message);
+      // Continue even if fetch fails — maybe the user was partially created
+    }
 
     // Archive verified (active) users to deleted_accounts for records (upsert on email to prevent duplicates)
     if (user?.is_verified) {
@@ -632,7 +637,7 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
           deleted_at: new Date().toISOString()
         }, { onConflict: 'email' });
       } catch (e: any) {
-        console.error('[DELETE /users/:id] Archive error:', e);
+        console.error('[DELETE /users/:id] Archive error:', e?.message || e);
       }
     }
 
@@ -662,8 +667,9 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
 
     res.status(200).json({ message: 'User deleted.' });
   } catch (err: any) {
-    console.error('[DELETE /users/:id] Deletion error:', err);
-    res.status(500).json({ error: 'Failed to delete user.' });
+    const errorMsg = err?.message || String(err) || 'Unknown error during deletion';
+    console.error('[DELETE /users/:id] Deletion error:', errorMsg);
+    res.status(500).json({ error: `Failed to delete user: ${errorMsg}` });
   }
 });
 
