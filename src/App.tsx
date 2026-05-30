@@ -206,7 +206,7 @@ function AppRoutes() {
         <Route path="/auth/callback" element={null} />
         <Route path="*" element={<Navbar />} />
       </Routes>
-      <main className={`flex-grow flex flex-col ${isLoggedIn ? 'pb-24 md:pb-0' : ''}`}>
+      <main className={`flex-grow flex flex-col ${isLoggedIn && location.pathname !== '/ask-ai' ? 'pb-24 md:pb-0' : ''}`}>
         <ChunkErrorBoundary>
         <React.Suspense fallback={<PageLoader />}>
           <Routes>

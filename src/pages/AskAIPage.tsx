@@ -979,7 +979,7 @@ const AskAIPage = () => {
         </div>
 
         {/* Input */}
-        <footer className="p-4 md:p-6 bg-[var(--glass-footer-bg)] border-t border-theme-border/60 backdrop-blur-xl shrink-0">
+        <footer className="p-4 md:p-6 pb-28 md:pb-6 bg-[var(--glass-footer-bg)] border-t border-theme-border/60 backdrop-blur-xl shrink-0">
           <div className="max-w-4xl mx-auto w-full">
             {selectedFileName && (
               <div className="mb-3 flex items-center gap-2 bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border border-indigo-500/20 px-3 py-1.5 rounded-lg w-max text-xs font-semibold">
