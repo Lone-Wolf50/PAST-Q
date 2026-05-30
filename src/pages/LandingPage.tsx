@@ -105,15 +105,15 @@ const LandingPage = () => {
                 )}
               />
             ))}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent" />
             
             <div className="absolute bottom-6 left-6 right-6 text-white text-left z-10">
               <div className="overflow-hidden">
-                <p className="text-white font-black text-2xl mb-1.5 tracking-tight animate-fade-in">
+                <p className="text-white font-black text-2xl sm:text-3xl mb-1.5 tracking-tight animate-fade-in drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
                   {HERO_IMAGES[imageIndex].title}
                 </p>
               </div>
-              <p className="text-gray-300 text-xs font-semibold leading-relaxed max-w-xs">
+              <p className="text-white/95 text-xs sm:text-sm font-bold leading-relaxed max-w-xs drop-shadow-[0_1.5px_4px_rgba(0,0,0,0.8)]">
                 {HERO_IMAGES[imageIndex].desc}
               </p>
               
@@ -156,12 +156,12 @@ const LandingPage = () => {
           <div className="md:col-span-2 md:row-span-2 glass-card border border-theme-border/60 bg-gradient-to-br from-theme-surface via-theme-surface to-theme-surface-2 p-6 md:p-8 flex flex-col justify-between overflow-hidden group relative hover:border-indigo-500/50 transition-all duration-300">
             <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-indigo-500/10 to-purple-500/5 blur-3xl -mr-24 -mt-24 pointer-events-none" />
             
-            <div className="max-w-md relative z-10">
+            <div className="max-w-md relative z-10 text-left">
               <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-5 shadow-sm">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <h3 className="text-2xl font-bold text-theme-primary mb-2">Cortana AI Assistant</h3>
-              <p className="text-sm text-theme-muted leading-relaxed font-medium">
+              <h3 className="text-2xl font-black text-theme-primary mb-2">Cortana AI Assistant</h3>
+              <p className="text-sm text-theme-secondary leading-relaxed font-semibold">
                 Our advanced AI is specifically trained on college past examination papers. Ask Cortana math queries, request law essay prompts, or explain accounting formulas to receive immediate step-by-step guidance.
               </p>
             </div>
@@ -172,10 +172,10 @@ const LandingPage = () => {
                 <div className="flex items-center gap-2 border-b border-theme-border/60 pb-1.5">
                   <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-black tracking-tight uppercase">Step-by-Step Explanation</span>
                 </div>
-                <p className="text-indigo-400">Step 1: Simplify expression.</p>
-                <p>2x + 5 = 15 &rArr; 2x = 10</p>
-                <p className="text-indigo-400">Step 2: Solve for x.</p>
-                <p>x = 5 &rArr; Verified Answer ✅</p>
+                <p className="text-indigo-400 font-bold">Step 1: Simplify expression.</p>
+                <p className="font-bold">2x + 5 = 15 &rArr; 2x = 10</p>
+                <p className="text-indigo-400 font-bold">Step 2: Solve for x.</p>
+                <p className="font-bold">x = 5 &rArr; Verified Answer ✅</p>
               </div>
               
               {/* Inset visual using user's graduation photo */}
@@ -188,19 +188,19 @@ const LandingPage = () => {
 
           {/* Card 2: 20 Year Archive (utilizes user's books image in bg) */}
           <div className="glass-card border border-theme-border/60 p-0 flex flex-col justify-between overflow-hidden hover:border-indigo-500/30 transition-all duration-300 group relative">
-            <img src="/ahmadardity-books-2463779_1920.jpg" alt="Archive Books" className="absolute inset-0 w-full h-full object-cover opacity-60 scale-102 group-hover:scale-105 transition-transform duration-500" />
-            <div className="absolute inset-0 bg-gradient-to-t from-theme-surface via-theme-surface/90 to-theme-surface/75" />
+            <img src="/ahmadardity-books-2463779_1920.jpg" alt="Archive Books" className="absolute inset-0 w-full h-full object-cover opacity-25 scale-102 group-hover:scale-105 transition-transform duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-t from-theme-surface via-theme-surface/95 to-theme-surface/85" />
             
             <div className="p-6 md:p-8 flex flex-col justify-between h-full w-full relative z-10">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shadow-sm backdrop-blur-md">
                   <BookOpen className="w-5 h-5" />
                 </div>
-                <span className="text-[10px] text-theme-muted font-bold tracking-tight bg-theme-surface-2/65 px-2 py-0.5 rounded border border-theme-border/40">2005 - 2025</span>
+                <span className="text-[10px] text-theme-secondary font-black tracking-tight bg-theme-surface-2 border border-theme-border/60 px-2 py-0.5 rounded shadow-sm">2005 - 2025</span>
               </div>
               <div className="text-left">
-                <h3 className="text-lg font-bold text-theme-primary mb-1">Two Decades of Archive</h3>
-                <p className="text-xs text-theme-muted leading-relaxed font-medium">
+                <h3 className="text-lg font-black text-theme-primary mb-1">Two Decades of Archive</h3>
+                <p className="text-xs sm:text-sm text-theme-secondary leading-relaxed font-bold">
                   A massive digitized vault of past exams across every major department. Organized by year and semester.
                 </p>
               </div>
@@ -213,8 +213,8 @@ const LandingPage = () => {
               <Search className="w-5 h-5" />
             </div>
             <div className="text-left">
-              <h3 className="text-lg font-bold text-theme-primary mb-1">Speed Index</h3>
-              <p className="text-xs text-theme-muted leading-relaxed font-medium">
+              <h3 className="text-lg font-black text-theme-primary mb-1">Speed Index</h3>
+              <p className="text-xs sm:text-sm text-theme-secondary leading-relaxed font-semibold">
                 Find exactly the course, code, or topic you need instantly. Autocompletes as you type with zero delay.
               </p>
             </div>
@@ -229,8 +229,8 @@ const LandingPage = () => {
               <span className="text-[10px] text-amber-500 font-extrabold uppercase tracking-tight flex items-center gap-1"><Flame size={10} /> Streak System</span>
             </div>
             <div className="text-left">
-              <h3 className="text-lg font-bold text-theme-primary mb-1">Interactive Streaks</h3>
-              <p className="text-xs text-theme-muted leading-relaxed font-medium">
+              <h3 className="text-lg font-black text-theme-primary mb-1">Interactive Streaks</h3>
+              <p className="text-xs sm:text-sm text-theme-secondary leading-relaxed font-semibold">
                 Keep the momentum going. Track consecutive study days and earn premium badges to gamify your exam prep.
               </p>
             </div>
@@ -238,16 +238,16 @@ const LandingPage = () => {
 
           {/* Card 5: Verified Answers (utilizes user's team image in bg) */}
           <div className="glass-card border border-theme-border/60 p-0 flex flex-col justify-between overflow-hidden hover:border-indigo-500/30 transition-all duration-300 group relative">
-            <img src="/this_is_engineering-team-8499960_1920.jpg" alt="Verified Team" className="absolute inset-0 w-full h-full object-cover opacity-60 scale-102 group-hover:scale-105 transition-transform duration-500" />
-            <div className="absolute inset-0 bg-gradient-to-t from-theme-surface via-theme-surface/90 to-theme-surface/75" />
+            <img src="/this_is_engineering-team-8499960_1920.jpg" alt="Verified Team" className="absolute inset-0 w-full h-full object-cover opacity-25 scale-102 group-hover:scale-105 transition-transform duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-t from-theme-surface via-theme-surface/95 to-theme-surface/85" />
             
             <div className="p-6 md:p-8 flex flex-col justify-between h-full w-full relative z-10">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-sm backdrop-blur-md">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div className="text-left">
-                <h3 className="text-lg font-bold text-theme-primary mb-1">Verified Solutions</h3>
-                <p className="text-xs text-theme-muted leading-relaxed font-medium">
+                <h3 className="text-lg font-black text-theme-primary mb-1">Verified Solutions</h3>
+                <p className="text-xs sm:text-sm text-theme-secondary leading-relaxed font-bold">
                   Answer keys verified by faculty and top tutors, ensuring you learn correct logic and study with confidence.
                 </p>
               </div>
@@ -256,21 +256,22 @@ const LandingPage = () => {
 
           {/* Card 6: Fast Download (utilizes user's library image in bg) */}
           <div className="glass-card border border-theme-border/60 p-0 flex flex-col justify-between overflow-hidden hover:border-indigo-500/30 transition-all duration-300 group relative">
-            <img src="/xpresshealth-nursing-agency-ireland-9866597_1920.jpg" alt="Library Study" className="absolute inset-0 w-full h-full object-cover opacity-60 scale-102 group-hover:scale-105 transition-transform duration-500" />
-            <div className="absolute inset-0 bg-gradient-to-t from-theme-surface via-theme-surface/90 to-theme-surface/75" />
+            <img src="/xpresshealth-nursing-agency-ireland-9866597_1920.jpg" alt="Library Study" className="absolute inset-0 w-full h-full object-cover opacity-25 scale-102 group-hover:scale-105 transition-transform duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-t from-theme-surface via-theme-surface/95 to-theme-surface/85" />
             
             <div className="p-6 md:p-8 flex flex-col justify-between h-full w-full relative z-10">
               <div className="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 flex items-center justify-center shadow-sm backdrop-blur-md">
                 <Download className="w-5 h-5" />
               </div>
               <div className="text-left">
-                <h3 className="text-lg font-bold text-theme-primary mb-1">Instant Offline Access</h3>
-                <p className="text-xs text-theme-muted leading-relaxed font-medium">
+                <h3 className="text-lg font-black text-theme-primary mb-1">Instant Offline Access</h3>
+                <p className="text-xs sm:text-sm text-theme-secondary leading-relaxed font-bold">
                   Download verified papers and answers directly as clean, lightweight PDFs to study offline without data.
                 </p>
               </div>
             </div>
           </div>
+
 
         </div>
       </section>
