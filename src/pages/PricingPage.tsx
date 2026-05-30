@@ -126,7 +126,7 @@ const PricingPage = () => {
       <div 
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex md:grid md:grid-cols-2 xl:grid-cols-4 gap-6 w-[calc(100%+2rem)] md:w-full overflow-x-auto md:overflow-x-visible snap-x snap-mandatory px-4 md:px-0 pb-8 md:pb-0 scrollbar-hide -mx-4 md:mx-0"
+        className="flex md:grid md:grid-cols-2 xl:grid-cols-4 gap-6 w-[calc(100%+2rem)] md:w-full overflow-x-auto md:overflow-x-visible snap-x snap-mandatory px-4 md:px-0 pt-6 pb-8 md:pb-0 scrollbar-hide -mx-4 md:mx-0"
       >
         {PLANS.map((plan, index) => (
           <div 
