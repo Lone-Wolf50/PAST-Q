@@ -1064,7 +1064,7 @@ const AskAIPage = () => {
                 </Link>
               ) : (
                 <p className="text-[10px] text-theme-muted uppercase tracking-widest font-bold">
-                  {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-indigo-500 dark:text-indigo-400">Cortana Premium AI v3.0</span>
+                  {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-indigo-500 dark:text-indigo-400">Cortana AI v3.0</span>
                 </p>
               )}
             </div>

@@ -59,7 +59,7 @@ const LandingPage = () => {
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-400" />
             </span>
             <Sparkles className="w-3 h-3 text-indigo-300" />
-            Cortana Premium AI v3.0 · Now Live
+            Cortana AI v3.0 · Now Live
           </div>
 
           {/* Main headline */}
