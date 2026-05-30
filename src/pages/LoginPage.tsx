@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -55,6 +55,53 @@ const LoginPage = () => {
     
     return false;
   };
+
+  // ── Auto-Login on Browser Autofill ──────────────────────────
+  useEffect(() => {
+    if (loading || googleLoading) return;
+
+    const checkAutofillAndLogin = () => {
+      const emailEl = document.querySelector('input[type="email"]') as HTMLInputElement;
+      const passwordEl = document.querySelector('input[type="password"]') as HTMLInputElement;
+      
+      if (emailEl && passwordEl) {
+        const hasEmail = emailEl.value.length > 0;
+        const hasPassword = passwordEl.value.length > 0;
+        
+        const isEmailAutofilled = (() => {
+          try {
+            return emailEl.matches(':-webkit-autofill') || emailEl.matches(':autofill') || emailEl.matches(':-moz-autofill');
+          } catch {
+            return false;
+          }
+        })();
+
+        const isPasswordAutofilled = (() => {
+          try {
+            return passwordEl.matches(':-webkit-autofill') || passwordEl.matches(':autofill') || passwordEl.matches(':-moz-autofill');
+          } catch {
+            return false;
+          }
+        })();
+
+        if (hasEmail && hasPassword && (isEmailAutofilled || isPasswordAutofilled)) {
+          // Sync React state with the physical DOM input values
+          setEmail(emailEl.value);
+          setPassword(passwordEl.value);
+          
+          // Submit the parent form
+          const form = emailEl.form;
+          if (form) {
+            form.requestSubmit();
+          }
+        }
+      }
+    };
+
+    // Poll periodically to catch browser-level autofill inserts
+    const interval = setInterval(checkAutofillAndLogin, 300);
+    return () => clearInterval(interval);
+  }, [loading, googleLoading]);
 
   // ── Manual email/password login ──────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
