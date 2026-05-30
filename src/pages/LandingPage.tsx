@@ -1,278 +1,343 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, Sparkles, Layout, Zap, ShieldCheck } from 'lucide-react';
-import { clsx } from 'clsx';
+import { 
+  ArrowRight, Sparkles, Zap, ShieldCheck, FileText, 
+  Search, Flame, Download, Compass, BookOpen, ArrowUpRight 
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const CAROUSEL_WORDS = ["breakthrough.", "A+ Grade.", "study hack.", "past paper."];
-
-const HERO_IMAGES = [
-  { url: "/adonyig-school-times-3599175_1920.jpg", title: "Study Smarter", desc: "Collaborate with peers and access the best materials." },
-  { url: "/adonyig-school-times-3599176_1920.jpg", title: "Focused Learning", desc: "Master difficult concepts with step-by-step guidance." },
-  { url: "/adonyig-school-times-3599182_1920.jpg", title: "Better Results", desc: "Join thousands of successful students." },
-  { url: "/ahmadardity-books-2463779_1920.jpg", title: "Infinite Knowledge", desc: "Explore over 20 years of past examination papers." },
-  { url: "/elasticcomputefarm-library-1147815_1920.jpg", title: "Your Digital Library", desc: "Access resources anytime, anywhere." },
-  { url: "/kollinger-books-5211309_1920.jpg", title: "Organized Success", desc: "Everything you need for your exams in one place." },
-];
-
 const LandingPage = () => {
-  const [wordIndex, setWordIndex] = useState(0);
-  const [imageIndex, setImageIndex] = useState(0);
   const { isLoggedIn } = useAuth();
 
-  useEffect(() => {
-    const wordInterval = setInterval(() => {
-      setWordIndex((prev) => (prev + 1) % CAROUSEL_WORDS.length);
-    }, 3000);
-    const imageInterval = setInterval(() => {
-      setImageIndex((prev) => (prev + 1) % HERO_IMAGES.length);
-    }, 5000);
-    return () => {
-      clearInterval(wordInterval);
-      clearInterval(imageInterval);
-    };
-  }, []);
-
   return (
-    <div className="w-full flex-grow flex flex-col items-center">
+    <div className="w-full flex-grow flex flex-col items-center overflow-x-hidden relative">
+      
+      {/* Ambient background glow elements (Apple/Samsung-style) */}
+      <div className="absolute top-[-100px] left-[50%] -translate-x-[50%] w-[100vw] h-[600px] bg-gradient-to-b from-indigo-500/10 via-purple-500/5 to-transparent blur-[120px] pointer-events-none" />
+      <div className="absolute top-[800px] left-[-200px] w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-[1600px] right-[-200px] w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Hero Section */}
-      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mt-12 md:mt-20 mb-24 grid lg:grid-cols-2 gap-12 items-center">
-        <div className="text-left">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-theme-surface-2 border border-theme-border text-sm font-medium text-theme-secondary mb-6">
-            <SparklesIcon className="w-4 h-4 text-indigo-400" />
-            <span>The ultimate study companion for university students</span>
-          </div>
-
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-theme-primary mb-6 leading-[1.1] min-h-[160px] sm:min-h-[180px] md:min-h-[220px]">
-            Find your next <br />
-            <span className="gradient-text transition-all duration-500 inline-block">
-              {CAROUSEL_WORDS[wordIndex]}
-            </span>
-          </h1>
-
-          <p className="text-lg text-theme-muted mb-8 max-w-lg leading-relaxed">
-            Stop guessing what will be on the exam. Access 20 years of past questions, comprehensive answers, and a powerful AI tutor to help you study smarter, not harder.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center gap-4 mb-10">
-            {isLoggedIn ? (
-              <Link to="/papers" className="w-full sm:w-auto px-8 py-3.5 rounded-full text-white bg-indigo-500 hover:bg-indigo-600 transition-all font-semibold text-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
-                Browse Papers
-              </Link>
-            ) : (
-              <>
-                <Link to="/register" className="w-full sm:w-auto px-8 py-3.5 rounded-full text-white bg-indigo-500 hover:bg-indigo-600 transition-all font-semibold text-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
-                  Get Started for Free
-                </Link>
-                <Link to="/login" className="w-full sm:w-auto px-8 py-3.5 rounded-full text-theme-primary bg-theme-surface-2 border border-theme-border hover:bg-theme-surface transition-all font-semibold text-center">
-                  Log In
-                </Link>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-4 w-full overflow-x-auto no-scrollbar pb-1 sm:pb-0">
-            {[
-              { label: `All Departments`, color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
-              { label: '20 Years', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-              { label: `1,500+ Papers`, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-            ].map((stat) => (
-              <div key={stat.label} className={clsx("flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold border whitespace-nowrap shrink-0", stat.color)}>
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-current opacity-80 shrink-0" />
-                {stat.label}
-              </div>
-            ))}
-          </div>
+      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mt-16 md:mt-24 mb-24 text-center flex flex-col items-center">
+        
+        {/* Cortana AI Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-theme-surface-2/80 border border-theme-border/60 text-xs font-bold text-theme-secondary mb-8 shadow-sm backdrop-blur-md">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+          </span>
+          <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+          <span className="uppercase tracking-widest text-[9px] font-black text-theme-secondary">Now with Cortana Premium AI v3.0</span>
         </div>
 
-        <div className="relative w-full h-[400px] md:h-[500px] hidden lg:block perspective-1000">
-          <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 rounded-3xl blur-3xl transform -rotate-6"></div>
-          <div className="absolute inset-0 bg-theme-surface border border-theme-border rounded-2xl shadow-2xl overflow-hidden transform rotate-2 hover:rotate-0 transition-transform duration-700">
-            {HERO_IMAGES.map((img, idx) => (
-              <img
-                key={img.url}
-                src={img.url}
-                alt={img.title}
-                className={clsx(
-                  "absolute inset-0 w-full h-full object-cover transition-opacity duration-1000",
-                  idx === imageIndex ? "opacity-100" : "opacity-0"
-                )}
-              />
-            ))}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-            <div className="absolute bottom-6 left-6 right-6">
-              <div className="overflow-hidden">
-                <p className={clsx(
-                  "text-white font-bold text-2xl mb-1 transition-all duration-500 transform",
-                  "translate-y-0 opacity-100"
-                )}>
-                  {HERO_IMAGES[imageIndex].title}
-                </p>
-              </div>
-              <p className="text-gray-200 text-sm max-w-xs transition-opacity duration-500">
-                {HERO_IMAGES[imageIndex].desc}
-              </p>
-              <div className="flex gap-1.5 mt-4">
-                {HERO_IMAGES.map((_, idx) => (
-                  <div
-                    key={idx}
-                    className={clsx(
-                      "h-1 rounded-full transition-all duration-300",
-                      idx === imageIndex ? "w-6 bg-indigo-400" : "w-1.5 bg-white/30"
-                    )}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+        {/* Hero Typography */}
+        <h1 className="text-4xl sm:text-6xl md:text-8xl font-black tracking-tight text-theme-primary leading-[1.05] max-w-4xl mb-6">
+          Find your next <br />
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 dark:from-indigo-400 dark:via-purple-400 dark:to-pink-400">
+            breakthrough.
+          </span>
+        </h1>
 
-      {/* Feature Showcase 1: AI Tutor */}
-      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mb-32">
-        <div className="glass-card p-8 md:p-12 border-theme-border relative overflow-hidden grid lg:grid-cols-2 gap-12 items-center">
-          <div className="relative z-10 w-full h-[300px] md:h-[450px] rounded-2xl overflow-hidden border border-theme-border shadow-2xl group">
-            <img src="/leo_fontes-graduation-4502796_1920.jpg" alt="AI Tutor Chat" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-            <div className="absolute inset-0 bg-indigo-500/10 group-hover:bg-transparent transition-colors" />
-          </div>
-          <div className="relative z-10 text-left">
-            <div className="inline-flex p-3 rounded-2xl bg-indigo-500/10 mb-6">
-              <Zap className="w-8 h-8 text-indigo-400" />
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-theme-primary mb-4">Stuck on a question? <br />Ask Cortana.</h2>
-            <p className="text-theme-muted text-lg mb-8 leading-relaxed">
-              Our advanced AI model is trained specifically on university curriculum. Get instant step-by-step explanations, formulas, and guidance without waiting for office hours.
-            </p>
-            <ul className="space-y-4">
-              {[
-                "Available 24/7 for instant help",
-                "Deep understanding of past papers",
-                "Generates practice questions"
-              ].map((item) => (
-                <li key={item} className="flex items-center gap-3 text-theme-secondary font-medium">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400" /> {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
+        <p className="text-base sm:text-lg md:text-xl text-theme-muted max-w-2xl mb-10 leading-relaxed font-medium px-4">
+          Stop guessing what will be on the exam. Access 20 years of past examination papers, step-by-step answers, and a powerful AI tutor tailored to your syllabus.
+        </p>
 
-      {/* Feature Showcase 2: Comprehensive Archive */}
-      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mb-32">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          <div className="order-2 lg:order-1 text-left">
-            <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 mb-6">
-              <Layout className="w-8 h-8 text-emerald-400" />
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-theme-primary mb-4">20 Years of Academic <br />Excellence in One Place.</h2>
-            <p className="text-theme-muted text-lg mb-8 leading-relaxed">
-              We've digitized and organized a decade and a half of examination materials across all major departments. No more hunting through dusty files or broken links.
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { title: "IT", desc: "Latest tech trends" },
-                { title: "Accounting", desc: "Financial mastery" },
-                { title: "Marketing", desc: "Brand strategies" },
-                { title: "LLB (Law)", desc: "Legal frameworks" },
-                { title: "Actuarial Science", desc: "Risk analysis" },
-                { title: "Business Admin", desc: "Management core" },
-                { title: "Logistics", desc: "Supply chain" },
-                { title: "PR", desc: "Media communications" }
-              ].map((dept) => (
-                <div key={dept.title} className="p-4 rounded-2xl bg-theme-surface border border-theme-border">
-                  <p className="text-theme-primary font-bold">{dept.title}</p>
-                  <p className="text-theme-muted text-xs">{dept.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="order-1 lg:order-2 relative w-full h-[300px] md:h-[450px] rounded-2xl overflow-hidden border border-theme-border shadow-2xl">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-emerald-500/20 blur-2xl" />
-            <div className="relative h-full w-full p-8 flex items-center justify-center">
-              <div className="grid grid-cols-2 gap-4 w-full">
-                <div className="aspect-square relative rounded-2xl border border-indigo-500/20 overflow-hidden group hover:scale-[1.02] transition-transform duration-500">
-                  <img src="/this_is_engineering-team-8499960_1920.jpg" alt="Verified" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                  <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-indigo-900/40">
-                    <ShieldCheck className="w-10 h-10 text-indigo-400 mb-2" />
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-indigo-100">Verified</p>
-                  </div>
-                </div>
-                <div className="aspect-square relative rounded-2xl border border-emerald-500/20 overflow-hidden translate-y-8 group hover:scale-[1.02] transition-transform duration-500">
-                  <img src="/ahmadardity-books-2463779_1920.jpg" alt="Organized" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                  <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-emerald-900/40">
-                    <Layout className="w-10 h-10 text-emerald-400 mb-2" />
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-100">Organized</p>
-                  </div>
-                </div>
-                <div className="aspect-square relative rounded-2xl border border-amber-500/20 overflow-hidden group hover:scale-[1.02] transition-transform duration-500">
-                  <img src="/poison_ivy-painting-1673774_1920.jpg" alt="Curated" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                  <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-amber-900/40">
-                    <Sparkles className="w-10 h-10 text-amber-400 mb-2" />
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-amber-100">Curated</p>
-                  </div>
-                </div>
-                <div className="aspect-square relative rounded-2xl border border-purple-500/20 overflow-hidden translate-y-8 group hover:scale-[1.02] transition-transform duration-500">
-                  <img src="/xpresshealth-nursing-agency-ireland-9866597_1920.jpg" alt="Instant" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
-                  <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-purple-900/40">
-                    <Zap className="w-10 h-10 text-purple-400 mb-2" />
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-purple-100">Instant</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Key Motivation / Community Section */}
-      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto mb-20">
-        <div className="relative py-20 px-8 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 overflow-hidden text-center">
-          <div className="absolute top-0 left-1/4 w-64 h-64 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
-          <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-purple-500/10 rounded-full blur-[100px] pointer-events-none" />
-          
-          <div className="relative z-10 max-w-3xl mx-auto">
-            <h2 className="text-4xl md:text-6xl font-black text-theme-primary mb-6 tracking-tight leading-tight">
-              The <span className="gradient-text">Future of Learning</span> <br className="hidden md:block" /> is in your hands.
-            </h2>
-            <p className="text-lg md:text-xl text-theme-muted mb-8 leading-relaxed">
-              We're building more than just a past paper repository. We're building a community of excellence where every UPSA student has the tools to succeed.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-6">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-theme-surface border border-theme-border shadow-sm">
-                <div className="w-2 h-2 rounded-full bg-indigo-400" />
-                <span className="text-sm font-semibold text-theme-secondary">24/7 AI Support</span>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-theme-surface border border-theme-border shadow-sm">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-sm font-semibold text-theme-secondary">Verified Content</span>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-theme-surface border border-theme-border shadow-sm">
-                <div className="w-2 h-2 rounded-full bg-purple-400" />
-                <span className="text-sm font-semibold text-theme-secondary">Zero Downtime</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Final CTA */}
-
-      {!isLoggedIn && (
-        <section className="w-full px-4 md:px-8 max-w-5xl mx-auto mb-32">
-          <div className="glass-card p-12 text-center border-indigo-500/20 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
-            <h2 className="text-3xl md:text-5xl font-bold text-theme-primary mb-6">Ready to ace your exams?</h2>
-            <p className="text-theme-muted text-lg mb-10 max-w-2xl mx-auto">
-              Join thousands of students who are already using PastQ to simplify their studies and achieve better results.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/register" className="w-full sm:w-auto px-10 py-4 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+        {/* CTA Buttons */}
+        <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto px-4">
+          {isLoggedIn ? (
+            <Link 
+              to="/papers" 
+              className="w-full sm:w-auto px-10 py-4 rounded-full text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:opacity-95 transition-all font-bold text-center shadow-[0_10px_30px_rgba(99,102,241,0.25)] hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Start Studying
+            </Link>
+          ) : (
+            <>
+              <Link 
+                to="/register" 
+                className="w-full sm:w-auto px-10 py-4 rounded-full text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:opacity-95 transition-all font-bold text-center shadow-[0_10px_30px_rgba(99,102,241,0.25)] hover:scale-[1.02] active:scale-[0.98]"
+              >
                 Create Free Account
               </Link>
-              <Link to="/papers" className="w-full sm:w-auto px-10 py-4 rounded-full bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all">
-                Explore Papers <ArrowRight className="w-4 h-4 inline-block ml-2" />
+              <Link 
+                to="/login" 
+                className="w-full sm:w-auto px-10 py-4 rounded-full text-theme-primary bg-theme-surface-2 border border-theme-border/80 hover:bg-theme-surface-2-hover transition-all font-bold text-center hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Log In
+              </Link>
+            </>
+          )}
+        </div>
+
+        {/* Interactive CSS UI Mockup of the Platform */}
+        <div className="w-full max-w-5xl mt-16 md:mt-24 px-2 md:px-0">
+          <div className="relative aspect-[16/10] md:aspect-[16/9] w-full rounded-2xl md:rounded-[2.5rem] border border-theme-border bg-gradient-to-b from-theme-surface/60 to-theme-surface-2/40 backdrop-blur-2xl shadow-[0_30px_100px_rgba(0,0,0,0.6)] p-3 md:p-5 flex gap-3 md:gap-5 overflow-hidden group">
+            
+            {/* Ambient inner glow inside mockup */}
+            <div className="absolute top-0 right-0 w-[400px] h-[300px] bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent blur-[80px]" />
+
+            {/* Sidebar Mock */}
+            <div className="w-[50px] md:w-[70px] h-full bg-theme-surface-2/60 border border-theme-border rounded-xl md:rounded-2xl p-2.5 md:p-4 flex flex-col items-center gap-6 md:gap-8 shrink-0">
+              <div className="w-7 md:w-9 h-7 md:h-9 rounded-xl bg-indigo-500 flex items-center justify-center text-white font-black text-sm md:text-base shadow-lg shadow-indigo-500/30">P</div>
+              <div className="flex flex-col gap-5 md:gap-6 mt-4">
+                <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400"><FileText className="w-4 h-4 md:w-5 md:h-5" /></div>
+                <div className="p-2 rounded-lg text-theme-muted hover:text-theme-secondary"><Compass className="w-4 h-4 md:w-5 md:h-5" /></div>
+                <div className="p-2 rounded-lg text-theme-muted hover:text-theme-secondary"><Zap className="w-4 h-4 md:w-5 md:h-5" strokeWidth={2.5} /></div>
+              </div>
+              <div className="mt-auto w-6 md:w-8 h-6 md:h-8 rounded-full bg-gradient-to-tr from-amber-500 to-orange-400" />
+            </div>
+
+            {/* Main Panel Content: Split View */}
+            <div className="flex-grow h-full flex gap-3 md:gap-5 min-w-0">
+              
+              {/* Paper Reader Pane (Left 55%) */}
+              <div className="w-[55%] md:w-[60%] h-full bg-theme-surface border border-theme-border rounded-xl md:rounded-2xl p-4 md:p-6 flex flex-col text-left relative overflow-hidden">
+                <div className="flex items-center justify-between mb-4 border-b border-theme-border pb-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded font-black">UPSA</span>
+                    <span className="text-[10px] text-theme-secondary font-bold tracking-tight">IT - Year 2024</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-[9px] text-emerald-400 font-extrabold tracking-widest uppercase">ANSWERS AVAILABLE</span>
+                  </div>
+                </div>
+
+                {/* Simulated Exam Questions */}
+                <div className="flex-grow overflow-y-auto space-y-4 pr-1 scrollbar-hide text-xs md:text-sm">
+                  <div className="p-3 bg-theme-surface-2/40 rounded-xl border border-theme-border/50">
+                    <p className="font-black text-theme-primary mb-1.5">QUESTION 1</p>
+                    <p className="text-theme-secondary leading-relaxed font-medium">Explain the difference between SQL database normalization and denormalization. Provide a typical use case for each.</p>
+                  </div>
+                  <div className="p-3 bg-theme-surface-2/40 rounded-xl border border-theme-border/50 opacity-60">
+                    <p className="font-black text-theme-primary mb-1.5">QUESTION 2</p>
+                    <p className="text-theme-secondary leading-relaxed font-medium">Draw a schema diagram illustrating a one-to-many relationship in an ecommerce store database.</p>
+                  </div>
+                  <div className="p-3 bg-theme-surface-2/40 rounded-xl border border-theme-border/50 opacity-30">
+                    <p className="font-black text-theme-primary mb-1.5">QUESTION 3</p>
+                    <p className="text-theme-secondary leading-relaxed font-medium">Analyze how indexing impacts execution speed of SELECT and UPDATE queries.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cortana AI Pane (Right 45%) */}
+              <div className="w-[45%] md:w-[40%] h-full bg-theme-surface-2/80 border border-theme-border rounded-xl md:rounded-2xl p-4 flex flex-col text-left relative overflow-hidden backdrop-blur-sm shrink-0">
+                <div className="flex items-center gap-2 mb-4 border-b border-theme-border pb-3 shrink-0">
+                  <div className="w-6 h-6 rounded-lg bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 shrink-0">
+                    <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-theme-primary leading-tight">Cortana AI</span>
+                    <span className="text-[8px] text-indigo-400 font-extrabold uppercase tracking-widest leading-none">AI TUTOR V3</span>
+                  </div>
+                </div>
+
+                {/* Simulated Chat Feed */}
+                <div className="flex-grow overflow-y-auto space-y-3.5 pr-1 scrollbar-hide text-[10px] md:text-xs">
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="bg-indigo-500 text-white rounded-2xl rounded-tr-none px-3 py-2 max-w-[85%] font-medium leading-relaxed">
+                      How is index speed optimization achieved in SQL?
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-md shadow-indigo-500/10">
+                      <Sparkles className="w-2.5 h-2.5" />
+                    </div>
+                    <div className="bg-theme-surface border border-theme-border/60 text-theme-secondary rounded-2xl rounded-tl-none px-3 py-2 max-w-[85%] font-medium leading-relaxed space-y-1.5">
+                      <p>An <strong className="text-theme-primary">index</strong> operates like an index in a book. It stores columns in a B-Tree structure:</p>
+                      <ul className="list-disc pl-3.5 space-y-0.5">
+                        <li><strong className="text-theme-primary">SELECT:</strong> Speed jumps from O(N) linear search to O(log N) binary search.</li>
+                        <li><strong className="text-theme-primary">UPDATE:</strong> Slightly slower since index must rebuild.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fake Input Box */}
+                <div className="mt-3 bg-theme-surface border border-theme-border rounded-xl p-2 flex items-center gap-2 shrink-0">
+                  <div className="text-theme-muted text-[10px] flex-grow font-medium">Ask Cortana a question...</div>
+                  <div className="w-6 h-6 rounded-lg bg-indigo-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/25">
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Bento Grid Feature Section */}
+      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto py-16 mb-24 relative z-10">
+        
+        {/* Section title */}
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-5xl font-black text-theme-primary tracking-tight mb-4">
+            Designed for academic success.
+          </h2>
+          <p className="text-base md:text-lg text-theme-muted max-w-xl mx-auto font-medium">
+            Every feature is hand-crafted to streamline your exam preparation and boost your comprehension.
+          </p>
+        </div>
+
+        {/* Bento Grid layout */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[220px] md:auto-rows-[250px]">
+          
+          {/* Card 1: Cortana AI (Large - Span 2 cols, Row 2 rows) */}
+          <div className="md:col-span-2 md:row-span-2 glass-card border border-theme-border/60 bg-gradient-to-br from-theme-surface via-theme-surface to-theme-surface-2 p-6 md:p-8 flex flex-col justify-between overflow-hidden group relative hover:border-indigo-500/50 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-indigo-500/10 to-purple-500/5 blur-3xl -mr-24 -mt-24 pointer-events-none" />
+            
+            <div className="max-w-md">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-5 shadow-sm">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <h3 className="text-2xl font-bold text-theme-primary mb-2">Cortana AI Assistant</h3>
+              <p className="text-sm text-theme-muted leading-relaxed font-medium">
+                Our advanced AI is specifically trained on college past examination papers. Highlight any math question, law essay prompt, or accounting formula to receive immediate, step-by-step explanations.
+              </p>
+            </div>
+
+            {/* Feature Demo block */}
+            <div className="w-full mt-6 bg-theme-surface-2 border border-theme-border rounded-xl p-4 flex flex-col gap-2 relative">
+              <div className="flex items-center gap-2 border-b border-theme-border/60 pb-2">
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-black tracking-tight uppercase">Step-by-Step Explanation</span>
+              </div>
+              <div className="font-mono text-[10px] md:text-xs text-theme-secondary space-y-1">
+                <p className="text-indigo-400">Step 1: Simplify expression.</p>
+                <p>2x + 5 = 15 &rArr; 2x = 10</p>
+                <p className="text-indigo-400">Step 2: Solve for x.</p>
+                <p>x = 5 &rArr; Verified Answer ✅</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: 20 Year Archive */}
+          <div className="glass-card border border-theme-border/60 p-6 md:p-8 flex flex-col justify-between overflow-hidden hover:border-indigo-500/30 transition-all duration-300 group">
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shadow-sm">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] text-theme-muted font-bold tracking-tight">2005 - 2025</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-theme-primary mb-1">Two Decades of Archive</h3>
+              <p className="text-xs text-theme-muted leading-relaxed font-medium">
+                A massive digitized vault of past exams across every major department. Organized by year and semester.
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Instant Search */}
+          <div className="glass-card border border-theme-border/60 p-6 md:p-8 flex flex-col justify-between overflow-hidden hover:border-indigo-500/30 transition-all duration-300 group">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shadow-sm">
+              <Search className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-theme-primary mb-1">Speed Index</h3>
+              <p className="text-xs text-theme-muted leading-relaxed font-medium">
+                Find exactly the course, code, or topic you need instantly. Autocompletes as you type with zero delay.
+              </p>
+            </div>
+          </div>
+
+          {/* Card 4: Study Habits */}
+          <div className="glass-card border border-theme-border/60 p-6 md:p-8 flex flex-col justify-between overflow-hidden hover:border-indigo-500/30 transition-all duration-300 group">
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center shadow-sm">
+                <Flame className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] text-amber-500 font-extrabold uppercase tracking-tight flex items-center gap-1"><Flame size={10} /> Streak System</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-theme-primary mb-1">Interactive Streaks</h3>
+              <p className="text-xs text-theme-muted leading-relaxed font-medium">
+                Keep the momentum going. Track consecutive study days and earn premium badges to gamify your exam prep.
+              </p>
+            </div>
+          </div>
+
+          {/* Card 5: Verified Answers */}
+          <div className="glass-card border border-theme-border/60 p-6 md:p-8 flex flex-col justify-between overflow-hidden hover:border-indigo-500/30 transition-all duration-300 group">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-sm">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-theme-primary mb-1">Verified Solutions</h3>
+              <p className="text-xs text-theme-muted leading-relaxed font-medium">
+                Answer keys verified by faculty and top tutors, ensuring you learn correct logic and study with confidence.
+              </p>
+            </div>
+          </div>
+
+          {/* Card 6: Fast Download */}
+          <div className="glass-card border border-theme-border/60 p-6 md:p-8 flex flex-col justify-between overflow-hidden hover:border-indigo-500/30 transition-all duration-300 group">
+            <div className="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 flex items-center justify-center shadow-sm">
+              <Download className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-theme-primary mb-1">Instant Offline Access</h3>
+              <p className="text-xs text-theme-muted leading-relaxed font-medium">
+                Download verified papers and answers directly as clean, lightweight PDFs to study anytime without data.
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* Value Statement Section */}
+      <section className="w-full px-4 md:px-8 max-w-7xl mx-auto py-16 mb-24">
+        <div className="relative py-24 px-8 md:px-16 rounded-[2.5rem] bg-gradient-to-b from-indigo-500/[0.03] to-purple-500/[0.01] border border-indigo-500/10 overflow-hidden text-center">
+          <div className="absolute top-0 left-1/4 w-72 h-72 bg-indigo-500/[0.03] rounded-full blur-[120px] pointer-events-none" />
+          <div className="absolute bottom-0 right-1/4 w-72 h-72 bg-purple-500/[0.03] rounded-full blur-[120px] pointer-events-none" />
+          
+          <div className="relative z-10 max-w-3xl mx-auto">
+            <h2 className="text-3xl sm:text-5xl font-black text-theme-primary mb-6 tracking-tight leading-[1.15]">
+              The future of learning. <br />In your control.
+            </h2>
+            <p className="text-base sm:text-lg text-theme-muted mb-10 leading-relaxed font-medium">
+              We're building more than just an exam database. We're creating a premium hub of academic excellence to empower every UPSA student to succeed.
+            </p>
+            
+            <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-bold text-theme-secondary">
+              <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-theme-surface border border-theme-border shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                <span>24/7 Cortana AI</span>
+              </div>
+              <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-theme-surface border border-theme-border shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span>Verified Solutions</span>
+              </div>
+              <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-theme-surface border border-theme-border shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                <span>Optimized Performance</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Bottom CTA Block */}
+      {!isLoggedIn && (
+        <section className="w-full px-4 md:px-8 max-w-5xl mx-auto mb-28">
+          <div className="glass-card p-10 md:p-16 text-center border-indigo-500/20 relative overflow-hidden bg-gradient-to-b from-theme-surface to-theme-surface-2">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
+            <h2 className="text-2xl sm:text-4xl font-bold text-theme-primary mb-4">Ready to ace your exams?</h2>
+            <p className="text-theme-muted text-sm sm:text-base mb-10 max-w-xl mx-auto font-medium leading-relaxed">
+              Join thousands of students who are already using PastQ to simplify their studies, master past questions, and get higher grades.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link 
+                to="/register" 
+                className="w-full sm:w-auto px-10 py-4 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_10px_25px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Create Free Account
+              </Link>
+              <Link 
+                to="/papers" 
+                className="w-full sm:w-auto px-10 py-4 rounded-full bg-theme-surface border border-theme-border text-theme-primary font-bold hover:bg-theme-surface-2 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-1.5"
+              >
+                Explore Papers <ArrowUpRight className="w-4 h-4" />
               </Link>
             </div>
           </div>
@@ -281,24 +346,5 @@ const LandingPage = () => {
     </div>
   );
 };
-
-function SparklesIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-    </svg>
-  );
-}
 
 export default LandingPage;

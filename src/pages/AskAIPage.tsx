@@ -1018,7 +1018,7 @@ const AskAIPage = () => {
                 accept=".pdf,.doc,.docx,.txt"
               />
 
-              <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => {
