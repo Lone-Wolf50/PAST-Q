@@ -313,11 +313,11 @@ const LandingPage = () => {
 
       {/* ── STATS BANNER ────────────────────────────────────── */}
       <section className="w-full py-20 md:py-28 px-4 md:px-8 bg-theme-surface-2/30 border-y border-theme-border/40">
-        <div className="max-w-5xl mx-auto grid grid-cols-3 gap-6 md:gap-16 text-center">
+        <div className="max-w-5xl mx-auto grid grid-cols-3 gap-4 sm:gap-6 md:gap-16 text-center">
           {[
             { num: '10,000+', label: 'Active Students' },
             { num: '1,500+',  label: 'Past Papers' },
-            { num: '20 Years', label: 'of Coverage' },
+            { num: '20',      label: 'Years of Coverage' },
           ].map((s) => (
             <div key={s.label}>
               <p className="text-2xl sm:text-4xl md:text-6xl font-black text-theme-primary tracking-tight">{s.num}</p>
