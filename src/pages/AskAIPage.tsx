@@ -1018,7 +1018,7 @@ const AskAIPage = () => {
                 accept=".pdf,.doc,.docx,.txt"
               />
 
-              <div className="absolute right-3 bottom-2 flex items-center gap-1.5">
+              <div className="absolute right-2.5 bottom-2 flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -1034,9 +1034,9 @@ const AskAIPage = () => {
                     fileInputRef.current?.click();
                   }}
                   className={clsx(
-                    "p-2 transition-colors rounded-xl cursor-pointer",
-                    selectedFileName ? "text-indigo-500 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-500 dark:hover:text-indigo-400",
-                    plan === 'Free' && "opacity-50 cursor-not-allowed hover:text-theme-muted"
+                    "h-9 w-9 flex items-center justify-center transition-all rounded-xl cursor-pointer",
+                    selectedFileName ? "text-indigo-500 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-theme-surface-2",
+                    plan === 'Free' && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-theme-muted"
                   )}
                   title={plan === 'Free' ? "Upload blocked on Free plan" : "Attach File"}
                 >
@@ -1046,9 +1046,9 @@ const AskAIPage = () => {
                   type="submit"
                   disabled={!input.trim() || !canSend || isLoading}
                   className={clsx(
-                    "p-3 rounded-2xl transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer",
+                    "h-9 w-9 flex items-center justify-center rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-40 cursor-pointer",
                     input.trim() && canSend && !isLoading
-                      ? "bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-indigo-500/10"
+                      ? "bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-indigo-500/15"
                       : "bg-theme-surface/50 border border-theme-border/30 text-theme-muted"
                   )}
                 >

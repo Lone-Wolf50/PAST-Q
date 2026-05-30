@@ -25,103 +25,105 @@ const Navbar = () => {
   return (
     <Fragment>
       {/* Top Navbar */}
-      <nav className="w-full flex items-center justify-between px-4 md:px-8 py-4 md:py-6 max-w-7xl mx-auto">
-        <div className="flex items-center gap-8">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="relative flex items-center justify-center w-9 h-9 rounded-xl overflow-hidden border border-indigo-400/30 group-hover:border-indigo-300 transition-all duration-500 shadow-[0_0_15px_rgba(99,102,241,0.4)] bg-theme-surface">
-              <img src="/pwa-icon-512.png" alt="PastQ Logo" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-xl -z-10 group-hover:bg-indigo-500/50 transition-all" />
-            </div>
-            <span className="text-xl font-bold tracking-tight text-theme-primary">Past<span className="text-indigo-400">Q</span></span>
-          </Link>
+      <div className="sticky top-0 z-50 w-full glass-header-premium">
+        <nav className="w-full flex items-center justify-between px-4 md:px-8 py-4 md:py-6 max-w-7xl mx-auto">
+          <div className="flex items-center gap-8">
+            <Link to="/" className="flex items-center gap-2 group">
+              <div className="relative flex items-center justify-center w-9 h-9 rounded-xl overflow-hidden border border-indigo-400/30 group-hover:border-indigo-300 transition-all duration-500 shadow-[0_0_15px_rgba(99,102,241,0.4)] bg-theme-surface">
+                <img src="/pwa-icon-512.png" alt="PastQ Logo" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-xl -z-10 group-hover:bg-indigo-500/50 transition-all" />
+              </div>
+              <span className="text-xl font-bold tracking-tight text-theme-primary">Past<span className="text-indigo-400">Q</span></span>
+            </Link>
 
-          {isLoggedIn && (
-            <ul className="hidden md:flex items-center gap-6 desktop-cool-nav ml-6">
-              {desktopNavLinks.map((link) => {
-                const isActive = location.pathname === link.path;
-                const Icon = link.icon;
+            {isLoggedIn && (
+              <ul className="hidden md:flex items-center gap-6 desktop-cool-nav ml-6">
+                {desktopNavLinks.map((link) => {
+                  const isActive = location.pathname === link.path;
+                  const Icon = link.icon;
 
-                let iColor = '#a955ff';
-                let jColor = '#ea51ff';
-                if (link.name === 'Papers') {
-                  iColor = '#56CCF2';
-                  jColor = '#2F80ED';
-                } else if (link.name === 'Pricing') {
-                  iColor = '#FF9966';
-                  jColor = '#FF5E62';
-                }
+                  let iColor = '#a955ff';
+                  let jColor = '#ea51ff';
+                  if (link.name === 'Papers') {
+                    iColor = '#56CCF2';
+                    jColor = '#2F80ED';
+                  } else if (link.name === 'Pricing') {
+                    iColor = '#FF9966';
+                    jColor = '#FF5E62';
+                  }
 
-                return (
-                  <li
-                    key={link.name}
-                    style={{ '--i': iColor, '--j': jColor } as React.CSSProperties}
-                    className={clsx(
-                      'nav-item',
-                      isActive && 'active-item'
-                    )}
-                  >
-                    <Link to={link.path} className="w-full h-full flex justify-center items-center">
-                      <span className="icon-wrapper">
-                        <Icon className={clsx("w-6 h-6", isActive ? "text-indigo-400" : "text-theme-secondary")} />
-                      </span>
-                      <span className="title">{link.name}</span>
-                    </Link>
-                  </li>
-                );
-              })}
+                  return (
+                    <li
+                      key={link.name}
+                      style={{ '--i': iColor, '--j': jColor } as React.CSSProperties}
+                      className={clsx(
+                        'nav-item',
+                        isActive && 'active-item'
+                      )}
+                    >
+                      <Link to={link.path} className="w-full h-full flex justify-center items-center">
+                        <span className="icon-wrapper">
+                          <Icon className={clsx("w-6 h-6", isActive ? "text-indigo-400" : "text-theme-secondary")} />
+                        </span>
+                        <span className="title">{link.name}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
 
-              {/* Ask AI */}
-              <li
-                style={{ '--i': '#a855f7', '--j': '#7EE8FA' } as React.CSSProperties}
-                className={clsx(
-                  'nav-item',
-                  location.pathname === '/ask-ai' && 'active-item'
-                )}
-              >
-                <Link to="/ask-ai" className="w-full h-full flex justify-center items-center">
-                  <span className="icon-wrapper">
-                    <BrainCircuit className={clsx("w-6 h-6", location.pathname === '/ask-ai' ? "text-indigo-400" : "text-theme-secondary")} />
-                  </span>
-                  <span className="title">Cortana</span>
-                </Link>
-              </li>
-            </ul>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {isLoggedIn ? (
-            <>
-              <ThemeToggle />
-              <Link
-                to="/profile"
-                className="hidden md:flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-theme-surface border border-theme-border hover:bg-theme-surface-2 transition-colors"
-              >
-                <div className="w-8 h-8 rounded-full overflow-hidden bg-theme-surface-2 flex items-center justify-center border border-theme-border">
-                  {user?.avatar_url ? (
-                    <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="w-4 h-4 text-theme-secondary" />
+                {/* Ask AI */}
+                <li
+                  style={{ '--i': '#a855f7', '--j': '#7EE8FA' } as React.CSSProperties}
+                  className={clsx(
+                    'nav-item',
+                    location.pathname === '/ask-ai' && 'active-item'
                   )}
-                </div>
-                <span className="text-sm font-medium text-theme-primary max-w-[100px] truncate">
-                  {user?.full_name || 'Account'}
-                </span>
-              </Link>
-            </>
-          ) : (
-            <div className="flex items-center gap-2 md:gap-4">
-              <div className="hidden md:block"><ThemeToggle /></div>
-              <Link to="/login" className="hidden md:block px-4 py-2 text-sm font-medium text-theme-secondary hover:text-theme-primary transition-colors">
-                Log in
-              </Link>
-              <Link to="/register" className="hidden md:flex px-4 py-2 rounded-full text-sm font-medium text-theme-primary bg-theme-surface-2 hover:bg-theme-surface-2 border border-theme-border transition-colors">
-                Register
-              </Link>
-            </div>
-          )}
-        </div>
-      </nav>
+                >
+                  <Link to="/ask-ai" className="w-full h-full flex justify-center items-center">
+                    <span className="icon-wrapper">
+                      <BrainCircuit className={clsx("w-6 h-6", location.pathname === '/ask-ai' ? "text-indigo-400" : "text-theme-secondary")} />
+                    </span>
+                    <span className="title">Cortana</span>
+                  </Link>
+                </li>
+              </ul>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            {isLoggedIn ? (
+              <>
+                <ThemeToggle />
+                <Link
+                  to="/profile"
+                  className="hidden md:flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-theme-surface border border-theme-border hover:bg-theme-surface-2 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-theme-surface-2 flex items-center justify-center border border-theme-border">
+                    {user?.avatar_url ? (
+                      <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-4 h-4 text-theme-secondary" />
+                    )}
+                  </div>
+                  <span className="text-sm font-medium text-theme-primary max-w-[100px] truncate">
+                    {user?.full_name || 'Account'}
+                  </span>
+                </Link>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 md:gap-4">
+                <div className="hidden md:block"><ThemeToggle /></div>
+                <Link to="/login" className="hidden md:block px-4 py-2 text-sm font-medium text-theme-secondary hover:text-theme-primary transition-colors">
+                  Log in
+                </Link>
+                <Link to="/register" className="hidden md:flex px-4 py-2 rounded-full text-sm font-medium text-theme-primary bg-theme-surface-2 hover:bg-theme-surface-2 border border-theme-border transition-colors">
+                  Register
+                </Link>
+              </div>
+            )}
+          </div>
+        </nav>
+      </div>
 
       {/* Mobile Bottom Navigation — fixed, stays in place while page scrolls */}
       {isLoggedIn && (
