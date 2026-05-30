@@ -779,4 +779,41 @@
 .animate-fade-in {
   animation: fadeInSlide 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
+
+/* ── AI Chat Input — Glowing Border (both themes) ─────────────────────────── */
+.ai-chat-input {
+  border: 1.5px solid rgba(99, 102, 241, 0.45);
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.08),
+    0 0 16px rgba(99, 102, 241, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ai-chat-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.80);
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.18),
+    0 0 24px rgba(99, 102, 241, 0.22),
+    0 0 48px rgba(139, 92, 246, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+:root.light .ai-chat-input {
+  border: 1.5px solid rgba(99, 102, 241, 0.35);
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.07),
+    0 0 14px rgba(99, 102, 241, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+:root.light .ai-chat-input:focus {
+  border-color: rgba(99, 102, 241, 0.70);
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.14),
+    0 0 20px rgba(99, 102, 241, 0.18),
+    0 0 40px rgba(139, 92, 246, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
 

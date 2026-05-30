@@ -1007,7 +1007,7 @@ const AskAIPage = () => {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={canSend ? "Ask your academic question..." : "Limit reached."}
                 rows={1}
-                className="w-full glass-panel-premium glass-panel-premium-hover py-3.5 pl-4 pr-[100px] rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 text-sm text-theme-primary font-medium placeholder:text-theme-muted transition-all resize-none min-h-[52px] max-h-[200px] overflow-y-auto scrollbar-hide align-bottom"
+                className="w-full glass-panel-premium ai-chat-input py-3.5 pl-4 pr-[100px] rounded-2xl text-sm text-theme-primary font-medium placeholder:text-theme-muted transition-all resize-none min-h-[52px] max-h-[200px] overflow-y-auto scrollbar-hide align-bottom focus:outline-none"
                 disabled={!canSend || isLoading}
               />
               <input
