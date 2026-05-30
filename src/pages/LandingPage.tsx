@@ -103,21 +103,6 @@ const LandingPage = () => {
               </>
             )}
           </div>
-
-          {/* Slide dots */}
-          <div className="flex justify-center gap-1.5 mt-12">
-            {HERO_IMAGES.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setImageIndex(idx)}
-                aria-label={`Show slide ${idx + 1}`}
-                className={clsx(
-                  "h-1 rounded-full transition-all duration-400",
-                  idx === imageIndex ? "w-8 bg-white" : "w-1.5 bg-white/30"
-                )}
-              />
-            ))}
-          </div>
         </div>
 
         {/* Scroll indicator */}
