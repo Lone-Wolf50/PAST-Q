@@ -39,9 +39,10 @@ const LandingPage = () => {
             src={src}
             alt=""
             className={clsx(
-              "absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out",
-              idx === imageIndex ? "opacity-100 scale-100" : "opacity-0 scale-[1.04]"
+              "absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out",
+              idx === imageIndex ? "opacity-100 pointer-events-auto z-0" : "opacity-0 pointer-events-none -z-10"
             )}
+            style={{ backfaceVisibility: 'hidden', transform: 'translate3d(0,0,0)' }}
           />
         ))}
 
