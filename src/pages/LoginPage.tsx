@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +26,9 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Track credentials already attempted to prevent infinite autofill login loops
+  const attemptedCredentialsRef = useRef({ email: '', password: '' });
 
   // Alert modal state for restricted email
   const [showAlert, setShowAlert] = useState(false);
@@ -85,9 +88,23 @@ const LoginPage = () => {
         })();
 
         if (hasEmail && hasPassword && (isEmailAutofilled || isPasswordAutofilled)) {
+          // Do not auto-submit if we already tried these exact credentials
+          if (
+            emailEl.value === attemptedCredentialsRef.current.email &&
+            passwordEl.value === attemptedCredentialsRef.current.password
+          ) {
+            return;
+          }
+
           // Sync React state with the physical DOM input values
           setEmail(emailEl.value);
           setPassword(passwordEl.value);
+
+          // Update the attempted credentials
+          attemptedCredentialsRef.current = {
+            email: emailEl.value,
+            password: passwordEl.value,
+          };
           
           // Submit the parent form
           const form = emailEl.form;
@@ -108,6 +125,9 @@ const LoginPage = () => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    // Record this attempt to prevent autofill loop on failure
+    attemptedCredentialsRef.current = { email, password };
 
     if (!isAllowedEmail(email)) {
       setAlertTitle('Email Restricted');
