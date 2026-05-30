@@ -206,7 +206,7 @@ const Footer = () => {
   const sections = buildSections(openContact);
 
   return (
-    <footer className="mt-16 px-4 md:px-8 pb-28 md:pb-6 max-w-7xl mx-auto w-full">
+    <footer className="mt-2 md:mt-16 px-3 md:px-8 pb-28 md:pb-6 max-w-7xl mx-auto w-full">
       <ContactModal
         isOpen={contactOpen}
         onClose={() => setContactOpen(false)}
@@ -219,7 +219,7 @@ const Footer = () => {
         <div className="absolute top-0 left-0 w-48 h-48 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* ── Brand + Newsletter ── */}
-        <div className="px-5 md:px-10 pt-8 pb-6 border-b border-theme-border relative z-10">
+        <div className="px-5 md:px-10 pt-7 pb-5 border-b border-theme-border relative z-10">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
             {/* Brand */}
             <div>
@@ -246,8 +246,8 @@ const Footer = () => {
               </div>
             </div>
 
-            {/* Newsletter */}
-            <div className="sm:max-w-[240px] w-full shrink-0">
+            {/* Newsletter — hidden on mobile to keep footer clean */}
+            <div className="hidden sm:block sm:max-w-[240px] w-full shrink-0">
               <p className="text-xs font-semibold text-theme-primary mb-0.5">Stay in the loop</p>
               <p className="text-[11px] text-theme-muted mb-2.5">New papers drop weekly — be first to know.</p>
               <form className="flex gap-2" onSubmit={handleSubscribe}>
@@ -279,8 +279,8 @@ const Footer = () => {
           </div>
         </div>
 
-        {/* ── CTA Banner ── */}
-        <div className="mx-5 md:mx-10 mt-5 mb-1 relative z-10">
+        {/* ── CTA Banner — hidden on mobile ── */}
+        <div className="hidden md:block mx-5 md:mx-10 mt-5 mb-1 relative z-10">
           {!isLoggedIn ? (
             <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-indigo-500/5 border border-indigo-500/10">
               <div className="flex items-center gap-2.5">
@@ -355,19 +355,16 @@ const Footer = () => {
         </div>
 
         {/* ── Bottom Bar ── */}
-        <div className="px-5 md:px-10 py-4 border-t border-theme-border flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
-          <p className="text-[11px] text-theme-muted text-center sm:text-left flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-0.5">
-            <span>© {new Date().getFullYear()} PastQ — Built for students, by students. 🇬🇭</span>
+        <div className="px-5 md:px-10 py-3.5 border-t border-theme-border flex items-center justify-between gap-3 relative z-10">
+          <p className="text-[10px] text-theme-muted flex items-center gap-1.5 flex-wrap">
+            <span>© {new Date().getFullYear()} PastQ</span>
             <span className="text-theme-border hidden sm:inline">·</span>
-            <span className="text-[10px] font-black tracking-widest text-indigo-400/60 uppercase">
-              Wolf Team 🐺
-            </span>
+            <span className="hidden sm:inline">Built for students, by students 🇬🇭</span>
+            <span className="text-[10px] font-black tracking-widest text-indigo-400/50 uppercase hidden sm:inline">Wolf Team 🐺</span>
           </p>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] animate-pulse" />
-            <span className="text-[10px] font-semibold text-theme-muted tracking-widest uppercase">
-              All Systems Go
-            </span>
+            <span className="text-[10px] font-semibold text-theme-muted tracking-widest uppercase">Live</span>
           </div>
         </div>
       </div>
