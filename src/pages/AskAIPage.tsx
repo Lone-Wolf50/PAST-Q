@@ -52,21 +52,74 @@ const getCleanFirstName = (fullName: string | null | undefined): string => {
   if (!firstWord) return 'Student';
   return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
 };
+type CortanaEmotion = 'laugh' | 'happy' | 'supportive' | 'thinking' | 'tutor';
+
+interface EmotionConfig {
+  emoji: string;
+  label: string;
+  class: string;
+}
+
+const detectMessageEmotion = (content: string): CortanaEmotion => {
+  if (!content) return 'tutor';
+
+  // 1. EMOJI-FIRST SCANNING (Prioritize exact emotional icons output by Cortana)
+  if (/😂|🤣|😆|😅/.test(content)) return 'laugh';
+  if (/😊|😄|🥳|👏|🎉|🌟/.test(content)) return 'happy';
+  if (/🥺|😢|😭|😔|💔/.test(content)) return 'supportive';
+  if (/🤔|🧐|💡/.test(content)) return 'thinking';
+
+  // 2. TIGHT & SAFE KEYWORD FALLBACKS (Extremely restricted to avoid false positives)
+  const lower = content.toLowerCase();
+  if (/\b(congrats|excellent|well done)\b/.test(lower)) return 'happy';
+  if (/\b(unfortunately)\b/.test(lower)) return 'supportive';
+
+  // 3. DEFAULT STATE
+  return 'tutor';
+};
+
+const EMOTION_MAP: Record<CortanaEmotion, EmotionConfig> = {
+  laugh: {
+    emoji: '😆',
+    label: 'Laughing',
+    class: 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 shadow-amber-500/5',
+  },
+  happy: {
+    emoji: '😊',
+    label: 'Happy',
+    class: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-emerald-500/5',
+  },
+  supportive: {
+    emoji: '🥺',
+    label: 'Empathetic',
+    class: 'bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400 shadow-blue-500/5',
+  },
+  thinking: {
+    emoji: '🤔',
+    label: 'Analyzing',
+    class: 'bg-purple-500/10 border-purple-500/20 text-purple-600 dark:text-purple-400 shadow-purple-500/5',
+  },
+  tutor: {
+    emoji: '✨',
+    label: 'Tutor',
+    class: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400 shadow-indigo-500/5',
+  },
+};
 
 const getWelcomeMessage = (username: string): Message => {
   const greetings = [
-    `Welcome back, ${username}! Ready to ace it?`,
-    `Hey ${username}, let's tackle some past questions!`,
-    `Good to see you, ${username}! Time to study smart`,
-    `Welcome, ${username}! Your next A grade starts here`,
-    `Let's go, ${username}! Past questions await`,
-    `Hey ${username}, ready to pass with flying colours?`,
+    `Welcome back, ${username}! Ready to ace it? 🚀✨`,
+    `Hey ${username}, let's tackle some past questions together! 📚💪`,
+    `Good to see you, ${username}! Time to study smart 🧠💡`,
+    `Welcome, ${username}! Your next A grade starts here 🎯🏆`,
+    `Let's go, ${username}! Past questions await! 📝🔥`,
+    `Hey ${username}, ready to pass with flying colours? 🌈🎓`,
   ];
   const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
   return {
     id: 'welcome',
     role: 'assistant',
-    content: `${randomGreeting}\n\nI'm **Cortana**, your personal academic tutor. I can help you understand concepts from past papers, summarize topics, and guide your exam preparation.\n\nWhat would you like to study today?`,
+    content: `${randomGreeting}\n\nI'm **Cortana**, your personal academic tutor. 🎓✨ I can help you understand concepts from past papers, summarize complex topics, and guide your exam preparation to success!\n\nWhat exciting topic would you like to study today? 💡`,
     timestamp: Date.now(),
   };
 };
@@ -817,9 +870,19 @@ const AskAIPage = () => {
                 exit={{ opacity: 0, y: -20 }}
                 className="max-w-2xl mx-auto mt-12 text-center"
               >
-                <div className="w-20 h-20 rounded-[1.8rem] shadow-lg flex items-center justify-center mx-auto mb-8 relative group overflow-hidden border-2 border-indigo-500/30">
-                  <img src="/lumio.jpg" alt="Cortana" className="w-full h-full object-cover" />
-                </div>
+                <motion.div 
+                  whileHover={{ 
+                    scale: 1.08, 
+                    y: -4, 
+                    boxShadow: "0 20px 30px rgba(99, 102, 241, 0.2)",
+                    borderColor: "rgba(99, 102, 241, 0.6)"
+                  }}
+                  transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                  className="w-20 h-20 rounded-[1.8rem] shadow-lg flex items-center justify-center mx-auto mb-8 relative group overflow-hidden border-2 border-indigo-500/30 cursor-pointer"
+                >
+                  <img src="/lumio.jpg" alt="Cortana" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                </motion.div>
                 <h3 className="text-3xl font-extrabold text-theme-primary mb-3 tracking-tight">How can I help you today?</h3>
                 <p className="text-theme-muted max-w-sm mx-auto mb-10 text-sm font-medium leading-relaxed">
                   Choose a topic below or type your own assignment or concept question to get started.
@@ -863,7 +926,26 @@ const AskAIPage = () => {
                   {message.role === 'user' ? (
                     <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed">{message.content}</p>
                   ) : (
-                    <div className="ai-prose">
+                    <>
+                      {(() => {
+                        const emotion = detectMessageEmotion(message.content);
+                        const config = EMOTION_MAP[emotion];
+                        return (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.85, y: -2 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 18, delay: 0.05 }}
+                            className={clsx(
+                              "mb-3 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border w-max flex items-center gap-1.5 backdrop-blur-md shadow-sm transition-all duration-300 select-none",
+                              config.class
+                            )}
+                          >
+                            <span className="text-xs leading-none">{config.emoji}</span>
+                            <span className="leading-none">{config.label}</span>
+                          </motion.div>
+                        );
+                      })()}
+                      <div className="ai-prose">
                       <Markdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -943,6 +1025,7 @@ const AskAIPage = () => {
                         </div>
                       )}
                     </div>
+                    </>
                   )}
                 </div>
                 <div className={clsx(
