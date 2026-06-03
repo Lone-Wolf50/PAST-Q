@@ -17,6 +17,7 @@ import adminRouter from './routes/admin';
 import aiRouter from './routes/ai';
 import supportRouter from './routes/support';
 import streaksRouter from './routes/streaks';
+import quizRouter from './routes/quiz';
 import { supabase } from './lib/supabase';
 import { redis } from './lib/redis';
 
@@ -180,6 +181,7 @@ app.use('/api/hq-management', adminRouter);   // includes /api/hq-management/aut
 app.use('/api/ai', aiRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/streaks', streaksRouter);
+app.use('/api/quiz', quizRouter);
 
 // ── 404 Handler ────────────────────────────────────────────────────────────────
 app.use((req, res) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Check, Trash2, Menu, Flag, Loader2 } from 'lucide-react';
+import { Bell, Check, Trash2, Menu, Flag, Loader2, UserX, TriangleAlert } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
 
@@ -89,20 +89,33 @@ const AdminNotificationsPage = () => {
             ) : (
               notifications.map((notif) => {
                 const isReport = notif.type === 'report';
+                const isAlert = notif.type === 'alert';   // account deletion
+                const isWarning = notif.type === 'warning'; // failed attempts
+
+                const cardBg = isReport && !notif.is_read
+                  ? 'bg-red-500/5 border-red-500/20'
+                  : isAlert && !notif.is_read
+                  ? 'bg-rose-500/8 border-rose-500/25'
+                  : isWarning && !notif.is_read
+                  ? 'bg-amber-500/5 border-amber-500/20'
+                  : !notif.is_read
+                  ? 'bg-indigo-500/5 border-indigo-500/20'
+                  : 'border-white/5';
+
+                const iconBg = isReport
+                  ? (!notif.is_read ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-red-400/50')
+                  : isAlert
+                  ? (!notif.is_read ? 'bg-rose-500/20 text-rose-400' : 'bg-white/5 text-rose-400/50')
+                  : isWarning
+                  ? (!notif.is_read ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-amber-400/50')
+                  : (!notif.is_read ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-gray-400');
+
+                const NotifIcon = isReport ? Flag : isAlert ? UserX : isWarning ? TriangleAlert : Bell;
+
                 return (
-                  <div key={notif.id} className={`glass-card p-4 flex items-start gap-4 transition-colors ${
-                    isReport && !notif.is_read
-                      ? 'bg-red-500/5 border-red-500/20'
-                      : !notif.is_read
-                      ? 'bg-indigo-500/5 border-indigo-500/20'
-                      : 'border-white/5'
-                  }`}>
-                    <div className={`p-2 rounded-lg shrink-0 mt-1 ${
-                      isReport
-                        ? !notif.is_read ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-red-400/50'
-                        : !notif.is_read ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-gray-400'
-                    }`}>
-                      {isReport ? <Flag className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+                  <div key={notif.id} className={`glass-card p-4 flex items-start gap-4 transition-colors ${cardBg}`}>
+                    <div className={`p-2 rounded-lg shrink-0 mt-1 ${iconBg}`}>
+                      <NotifIcon className="w-5 h-5" />
                     </div>
                     <div className="flex-grow">
                       <div className="flex items-start justify-between gap-4">
@@ -112,6 +125,16 @@ const AdminNotificationsPage = () => {
                             {isReport && (
                               <span className="px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 text-[9px] font-black uppercase tracking-widest border border-red-500/20">
                                 Content Report
+                              </span>
+                            )}
+                            {isAlert && (
+                              <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-[9px] font-black uppercase tracking-widest border border-rose-500/20">
+                                Account Deleted
+                              </span>
+                            )}
+                            {isWarning && (
+                              <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 text-[9px] font-black uppercase tracking-widest border border-amber-500/20">
+                                Warning
                               </span>
                             )}
                           </div>

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FileText, User, Tag, BrainCircuit } from 'lucide-react';
+import { Home, FileText, User, Tag, BrainCircuit, HelpCircle, Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { clsx } from 'clsx';
 import { Fragment } from 'react';
@@ -12,13 +12,15 @@ const Navbar = () => {
   const desktopNavLinks = [
     { name: 'Home', path: '/', icon: Home },
     { name: 'Papers', path: '/papers', icon: FileText },
+    { name: 'Quiz', path: '/quiz', icon: HelpCircle },
+    { name: 'Leaderboard', path: '/leaderboard', icon: Trophy },
     { name: 'Pricing', path: '/pricing', icon: Tag },
   ];
 
   const mobileNavLinks = [
-    { name: 'Home', path: '/', icon: Home },
     { name: 'Papers', path: '/papers', icon: FileText },
-    { name: 'Pricing', path: '/pricing', icon: Tag },
+    { name: 'Quiz', path: '/quiz', icon: HelpCircle },
+    { name: 'Leaderboard', path: '/leaderboard', icon: Trophy },
     { name: 'Account', path: '/profile', icon: User },
   ];
 
@@ -47,6 +49,12 @@ const Navbar = () => {
                   if (link.name === 'Papers') {
                     iColor = '#56CCF2';
                     jColor = '#2F80ED';
+                  } else if (link.name === 'Quiz') {
+                    iColor = '#10B981';
+                    jColor = '#059669';
+                  } else if (link.name === 'Leaderboard') {
+                    iColor = '#F59E0B';
+                    jColor = '#D97706';
                   } else if (link.name === 'Pricing') {
                     iColor = '#FF9966';
                     jColor = '#FF5E62';

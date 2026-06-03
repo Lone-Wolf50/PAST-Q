@@ -109,6 +109,8 @@ const AdminNotificationsPage = lazyWithRetry(() => import('./pages/AdminNotifica
 const AdminFallbacksPage = lazyWithRetry(() => import('./pages/AdminFallbacksPage'));
 const StudentSubscriptionPage = lazyWithRetry(() => import('./pages/StudentSubscriptionPage'));
 const StudentNotificationsPage = lazyWithRetry(() => import('./pages/StudentNotificationsPage'));
+const QuizPage = lazyWithRetry(() => import('./pages/QuizPage'));
+const LeaderboardPage = lazyWithRetry(() => import('./pages/LeaderboardPage'));
 
 const PageLoader = () => (
   <div className="w-full flex-grow flex items-center justify-center min-h-[60vh]">
@@ -228,6 +230,8 @@ function AppRoutes() {
             <Route path="/papers" element={<ProtectedRoute><PapersPage /></ProtectedRoute>} />
             <Route path="/papers/:id" element={<ProtectedRoute><PaperViewerPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="/quiz" element={<ProtectedRoute><QuizPage /></ProtectedRoute>} />
+            <Route path="/leaderboard" element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>} />
             <Route path="/subscription" element={<ProtectedRoute><StudentSubscriptionPage /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><StudentNotificationsPage /></ProtectedRoute>} />
             <Route path="/ask-ai" element={<ProtectedRoute><AskAIPage /></ProtectedRoute>} />

@@ -2,7 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import {
   User, Mail, CreditCard, LogOut, ShieldAlert, Bell, Camera,
   Sparkles, X as CloseIcon, Zap, MessageSquare,
-  Target, Flame, ChevronRight, CheckCircle2
+  Target, Flame, ChevronRight, CheckCircle2,
+  Award, Eye, Crown, Timer, CalendarDays, Shield,
+  GraduationCap, Compass, Waves, Trophy, Bug, Moon, Sun, Ghost, Medal, Gem, Activity, BookOpen, Lock
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -86,6 +88,10 @@ const StatPill = ({ label, value, color }: StatPillProps) => (
   </div>
 );
 
+const IconMap: Record<string, React.ComponentType<any>> = {
+  Flame, Award, Zap, Eye, Crown, Timer, CheckCircle2, Target, ShieldAlert, CalendarDays, Shield, GraduationCap, Compass, Waves, Trophy, Sparkles, Bug, Moon, Sun, Ghost, Medal, Gem, Activity, BookOpen, Lock
+};
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const ProfilePage = () => {
   const { user, token, updateUser, logout } = useAuth();
@@ -99,6 +105,10 @@ const ProfilePage = () => {
   const [isEditingName, setIsEditingName] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [streak, setStreak] = useState<number>(0);
+  
+  // Quiz stats & Badges states
+  const [quizStats, setQuizStats] = useState<any>(null);
+  const [badges, setBadges] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -122,7 +132,19 @@ const ProfilePage = () => {
         }
       } catch { /* silent */ }
     };
+
+    const fetchQuizStats = async () => {
+      try {
+        const res = await apiFetch('/quiz/stats', { token: token || undefined });
+        if (res) {
+          setQuizStats(res.stats);
+          setBadges(res.badges || []);
+        }
+      } catch { /* silent */ }
+    };
+
     fetchProfile();
+    fetchQuizStats();
     const cached = sessionStorage.getItem('streak_count');
     if (cached) setStreak(parseInt(cached, 10));
   }, []);
@@ -264,6 +286,88 @@ const ProfilePage = () => {
           value={streak}
           color="text-orange-400"
         />
+      </div>
+
+      {/* ── Quiz Performance Stats ─────────────────────────────────────── */}
+      <div className="w-full">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-theme-muted px-1 mb-2">
+          Quiz Performance
+        </p>
+        <div className="w-full grid grid-cols-3 gap-3">
+          <StatPill
+            label="Quiz Points"
+            value={quizStats?.points || 0}
+            color="text-indigo-400"
+          />
+          <StatPill
+            label="Global Rank"
+            value={quizStats?.rank ? `#${quizStats.rank}` : '—'}
+            color="text-amber-400"
+          />
+          <StatPill
+            label="Accuracy"
+            value={quizStats ? `${quizStats.accuracy}%` : '0%'}
+            color="text-emerald-400"
+          />
+        </div>
+      </div>
+
+      {/* ── Badges Collection ────────────────────────────────────────────── */}
+      <div className="w-full flex flex-col gap-3">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-theme-muted px-1">
+          Badges Collection ({badges.filter(b => b.is_earned).length}/{badges.filter(b => !b.hidden || b.is_earned).length})
+        </p>
+        <div className="rounded-2xl bg-theme-surface/60 border border-theme-border/50 p-5 backdrop-blur-sm shadow-xl">
+          {badges.length === 0 ? (
+            <p className="text-xs font-semibold text-theme-muted text-center py-4">Loading achievements...</p>
+          ) : (
+            <div className="grid grid-cols-4 sm:grid-cols-5 gap-4">
+              {badges.map((badge) => {
+                const IconComponent = IconMap[badge.icon] || Award;
+                return (
+                  <div
+                    key={badge.slug}
+                    className="flex flex-col items-center group relative cursor-pointer"
+                  >
+                    <div
+                      className={clsx(
+                        "w-12 h-12 rounded-xl flex items-center justify-center border transition-all duration-300 relative",
+                        badge.is_earned
+                          ? "bg-gradient-to-br from-indigo-500/20 to-purple-600/10 border-indigo-400/40 text-indigo-400 shadow-[0_4px_12px_rgba(99,102,241,0.15)] scale-102 hover:scale-108"
+                          : "bg-theme-surface-2/30 border-theme-border/40 text-theme-muted/40 opacity-50"
+                      )}
+                    >
+                      <IconComponent className="w-6 h-6" />
+                      {!badge.is_earned && (
+                        <div className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-theme-surface border border-theme-border flex items-center justify-center">
+                          <Lock className="w-2.5 h-2.5 text-theme-muted/50" />
+                        </div>
+                      )}
+                    </div>
+                    <span className={clsx(
+                      "text-[9px] font-bold text-center mt-1.5 truncate max-w-full leading-tight",
+                      badge.is_earned ? "text-theme-primary font-extrabold" : "text-theme-muted/65"
+                    )}>
+                      {badge.name}
+                    </span>
+
+                    {/* Custom tooltip on hover */}
+                    <div className="pointer-events-none absolute bottom-14 left-1/2 -translate-x-1/2 w-48 p-2.5 rounded-xl bg-theme-base border border-theme-border text-[10px] text-theme-secondary font-semibold shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-50 text-center leading-relaxed">
+                      <p className="font-extrabold text-theme-primary mb-1">{badge.name}</p>
+                      <p className="mb-1 text-theme-muted">{badge.description}</p>
+                      <p className="text-[9px] text-indigo-400 font-bold border-t border-theme-border/50 pt-1 mt-1">
+                        {badge.is_earned
+                          ? `Unlocked on ${new Date(badge.earned_at).toLocaleDateString()}`
+                          : `To unlock: ${badge.condition}`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Profile Section ──────────────────────────────────────────────── */}

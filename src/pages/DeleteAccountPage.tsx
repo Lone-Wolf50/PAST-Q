@@ -62,7 +62,7 @@ const DeleteAccountPage = () => {
             </div>
             <h2 className="text-2xl font-bold text-theme-primary mb-2">Account Deleted</h2>
             <p className="text-theme-muted mb-6">
-              Your account and all associated data have been permanently removed from our servers. We're sorry to see you go!
+              Your account has been successfully deleted. Your personal data and activity have been removed. We’re sorry to see you go!
             </p>
             <button
               onClick={handleCloseModal}
@@ -93,7 +93,7 @@ const DeleteAccountPage = () => {
           </div>
           
           <p className="text-sm text-theme-secondary mb-6 bg-red-500/5 p-4 rounded-xl border border-red-500/10">
-            This action is <strong className="text-red-400 font-semibold">permanent and cannot be undone</strong>. All your past papers history, AI conversations, and premium plan access will be permanently deleted.
+            This action is <strong className="text-red-400 font-semibold">permanent and cannot be undone</strong>. Your history, AI conversations, and premium plan access will be removed. Note: your email address will be retained to prevent re-registration and preserve platform integrity.
           </p>
 
           {error && (

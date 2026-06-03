@@ -824,4 +824,72 @@
     0 0 40px rgba(139, 92, 246, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
-
+
+/* ── Podium Premium Animations ────────────────────────────────────────────── */
+
+/* Horizontal shimmer sweep across a card face */
+@keyframes podiumShimmer {
+  0%   { transform: translateX(-150%) skewX(-20deg); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateX(250%)  skewX(-20deg); opacity: 0; }
+}
+
+.podium-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.podium-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 50%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.10) 40%,
+    rgba(255, 255, 255, 0.20) 50%,
+    rgba(255, 255, 255, 0.10) 60%,
+    transparent 100%
+  );
+  animation: podiumShimmer 4s ease-in-out infinite;
+  animation-delay: 1s;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* Pulsing outer glow ring — applied to gold card */
+@keyframes goldRingPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 50px rgba(245, 158, 11, 0.4),
+      0 0 100px rgba(245, 158, 11, 0.18),
+      inset 0 1px 0 rgba(245, 158, 11, 0.12),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 70px rgba(245, 158, 11, 0.6),
+      0 0 130px rgba(245, 158, 11, 0.28),
+      0 0 5px rgba(245, 158, 11, 0.15),
+      inset 0 1px 0 rgba(245, 158, 11, 0.18),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  }
+}
+
+.podium-gold-pulse {
+  animation: goldRingPulse 3s ease-in-out infinite;
+}
+
+/* Gentle float for the crown area above the card */
+@keyframes podiumFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+.podium-float {
+  animation: podiumFloat 3s ease-in-out infinite;
+}

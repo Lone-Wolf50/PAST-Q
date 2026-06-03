@@ -172,6 +172,22 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
 
   try {
     console.log(`📝 Registering user: ${email}`);
+
+    // ── Block previously-deleted accounts from re-registering ──
+    const { data: deletedRecord } = await supabase
+      .from('upsa_deleted_accounts')
+      .select('email, deleted_at')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (deletedRecord) {
+      console.warn(`🚫 Re-registration blocked for deleted account: ${email}`);
+      res.status(403).json({
+        error: 'This email address is associated with a previously deleted account and cannot be used to register again. Please contact support if you believe this is a mistake.'
+      });
+      return;
+    }
+
     const { data: existing, error: existingErr } = await supabase
       .from('upsa_users')
       .select('id, is_verified')
@@ -623,6 +639,21 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
     const avatar_url = googleUser.user_metadata?.avatar_url || googleUser.user_metadata?.picture || null;
 
     console.log(`🔑 Google OAuth login: ${email}`);
+
+    // ── Block previously-deleted accounts from re-registering via Google ──
+    const { data: deletedGoogleRecord } = await supabase
+      .from('upsa_deleted_accounts')
+      .select('email, deleted_at')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (deletedGoogleRecord) {
+      console.warn(`🚫 Google OAuth re-registration blocked for deleted account: ${email}`);
+      res.status(403).json({
+        error: 'This email address is associated with a previously deleted account and cannot be used to register again. Please contact support if you believe this is a mistake.'
+      });
+      return;
+    }
 
     // 2. Check if user already exists in our table
     const { data: existingUser } = await supabase
