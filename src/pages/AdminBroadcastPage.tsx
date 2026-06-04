@@ -7,10 +7,16 @@ import { apiFetch } from '../lib/api';
 const AdminBroadcastPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Initialize state from localStorage draft if present
-  const [subject, setSubject] = useState(() => localStorage.getItem('broadcast_draft_subject') || '');
-  const [title, setTitle] = useState(() => localStorage.getItem('broadcast_draft_title') || '');
-  const [body, setBody] = useState(() => localStorage.getItem('broadcast_draft_body') || '');
+  // Broadcast mode fields
+  const [broadcastSubject, setBroadcastSubject] = useState(() => localStorage.getItem('broadcast_draft_subject') || '');
+  const [broadcastTitle, setBroadcastTitle] = useState(() => localStorage.getItem('broadcast_draft_title') || '');
+  const [broadcastBody, setBroadcastBody] = useState(() => localStorage.getItem('broadcast_draft_body') || '');
+
+  // Individual mode fields
+  const [individualSubject, setIndividualSubject] = useState(() => localStorage.getItem('individual_draft_subject') || '');
+  const [individualTitle, setIndividualTitle] = useState(() => localStorage.getItem('individual_draft_title') || '');
+  const [individualBody, setIndividualBody] = useState(() => localStorage.getItem('individual_draft_body') || '');
+
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ total: number; sent: number; failed: number; errors?: string[] } | null>(null);
   const [error, setError] = useState('');
@@ -33,24 +39,40 @@ const AdminBroadcastPage = () => {
 
   const [blockerOpen, setBlockerOpen] = useState(false);
 
-  const isDirty = !!(subject.trim() || title.trim() || body.trim() || recipients.length > 0);
+  const isBroadcastDirty = !!(broadcastSubject.trim() || broadcastTitle.trim() || broadcastBody.trim());
+  const isIndividualDirty = !!(individualSubject.trim() || individualTitle.trim() || individualBody.trim() || recipients.length > 0);
+  const isDirty = isBroadcastDirty || isIndividualDirty;
 
   // Auto-save changes to localStorage
   useEffect(() => {
-    if (isDirty) {
-      localStorage.setItem('broadcast_draft_subject', subject);
-      localStorage.setItem('broadcast_draft_title', title);
-      localStorage.setItem('broadcast_draft_body', body);
-      localStorage.setItem('broadcast_draft_mode', mode);
-      localStorage.setItem('broadcast_draft_recipients', JSON.stringify(recipients));
+    if (broadcastSubject.trim() || broadcastTitle.trim() || broadcastBody.trim()) {
+      localStorage.setItem('broadcast_draft_subject', broadcastSubject);
+      localStorage.setItem('broadcast_draft_title', broadcastTitle);
+      localStorage.setItem('broadcast_draft_body', broadcastBody);
     } else {
       localStorage.removeItem('broadcast_draft_subject');
       localStorage.removeItem('broadcast_draft_title');
       localStorage.removeItem('broadcast_draft_body');
-      localStorage.removeItem('broadcast_draft_mode');
+    }
+  }, [broadcastSubject, broadcastTitle, broadcastBody]);
+
+  useEffect(() => {
+    if (individualSubject.trim() || individualTitle.trim() || individualBody.trim() || recipients.length > 0) {
+      localStorage.setItem('individual_draft_subject', individualSubject);
+      localStorage.setItem('individual_draft_title', individualTitle);
+      localStorage.setItem('individual_draft_body', individualBody);
+      localStorage.setItem('broadcast_draft_recipients', JSON.stringify(recipients));
+    } else {
+      localStorage.removeItem('individual_draft_subject');
+      localStorage.removeItem('individual_draft_title');
+      localStorage.removeItem('individual_draft_body');
       localStorage.removeItem('broadcast_draft_recipients');
     }
-  }, [subject, title, body, mode, recipients, isDirty]);
+  }, [individualSubject, individualTitle, individualBody, recipients]);
+
+  useEffect(() => {
+    localStorage.setItem('broadcast_draft_mode', mode);
+  }, [mode]);
 
   // Window unload warning (browser close / tab refresh)
   useEffect(() => {
@@ -77,9 +99,12 @@ const AdminBroadcastPage = () => {
   }, [blocker.state]);
 
   const handleSaveDraft = () => {
-    localStorage.setItem('broadcast_draft_subject', subject);
-    localStorage.setItem('broadcast_draft_title', title);
-    localStorage.setItem('broadcast_draft_body', body);
+    localStorage.setItem('broadcast_draft_subject', broadcastSubject);
+    localStorage.setItem('broadcast_draft_title', broadcastTitle);
+    localStorage.setItem('broadcast_draft_body', broadcastBody);
+    localStorage.setItem('individual_draft_subject', individualSubject);
+    localStorage.setItem('individual_draft_title', individualTitle);
+    localStorage.setItem('individual_draft_body', individualBody);
     localStorage.setItem('broadcast_draft_mode', mode);
     localStorage.setItem('broadcast_draft_recipients', JSON.stringify(recipients));
     setBlockerOpen(false);
@@ -89,13 +114,19 @@ const AdminBroadcastPage = () => {
   };
 
   const handleClearAll = () => {
-    setSubject('');
-    setTitle('');
-    setBody('');
+    setBroadcastSubject('');
+    setBroadcastTitle('');
+    setBroadcastBody('');
+    setIndividualSubject('');
+    setIndividualTitle('');
+    setIndividualBody('');
     setRecipients([]);
     localStorage.removeItem('broadcast_draft_subject');
     localStorage.removeItem('broadcast_draft_title');
     localStorage.removeItem('broadcast_draft_body');
+    localStorage.removeItem('individual_draft_subject');
+    localStorage.removeItem('individual_draft_title');
+    localStorage.removeItem('individual_draft_body');
     localStorage.removeItem('broadcast_draft_mode');
     localStorage.removeItem('broadcast_draft_recipients');
     setBlockerOpen(false);
@@ -136,9 +167,18 @@ const AdminBroadcastPage = () => {
     setError('');
     setResult(null);
 
+    const activeSubject = mode === 'broadcast' ? broadcastSubject : individualSubject;
+    const activeTitle = mode === 'broadcast' ? broadcastTitle : individualTitle;
+    const activeBody = mode === 'broadcast' ? broadcastBody : individualBody;
+
     try {
       const token = localStorage.getItem('admin_token')!;
-      const payload: any = { subject, title, body, sendInAppNotification };
+      const payload: any = {
+        subject: activeSubject,
+        title: activeTitle,
+        body: activeBody,
+        sendInAppNotification
+      };
       if (mode === 'individual') {
         payload.recipients = recipients;
       }
@@ -148,11 +188,17 @@ const AdminBroadcastPage = () => {
         body: payload,
       });
       setResult({ total: data.total, sent: data.sent, failed: data.failed, errors: data.errors });
-      setSubject('');
-      setTitle('');
-      setBody('');
+      if (mode === 'broadcast') {
+        setBroadcastSubject('');
+        setBroadcastTitle('');
+        setBroadcastBody('');
+      } else {
+        setIndividualSubject('');
+        setIndividualTitle('');
+        setIndividualBody('');
+        setRecipients([]);
+      }
       setSendInAppNotification(false);
-      if (mode === 'individual') setRecipients([]);
     } catch (err: any) {
       setError(err.message || 'Failed to send broadcast.');
     } finally {
@@ -160,7 +206,10 @@ const AdminBroadcastPage = () => {
     }
   };
 
-  const canSend = subject.trim() && title.trim() && body.trim() && !sending && (mode === 'broadcast' || recipients.length > 0);
+  const activeSubject = mode === 'broadcast' ? broadcastSubject : individualSubject;
+  const activeTitle = mode === 'broadcast' ? broadcastTitle : individualTitle;
+  const activeBody = mode === 'broadcast' ? broadcastBody : individualBody;
+  const canSend = activeSubject.trim() && activeTitle.trim() && activeBody.trim() && !sending && (mode === 'broadcast' || recipients.length > 0);
 
   return (
     <div className="min-h-screen bg-theme-base flex">
@@ -285,7 +334,7 @@ const AdminBroadcastPage = () => {
             <div className="p-5 border-b border-theme-border flex items-center gap-2">
               <FileText className="w-4 h-4 text-theme-secondary" />
               <span className="text-sm font-bold text-theme-secondary">Compose Message</span>
-              {isDirty && (
+              {(mode === 'broadcast' ? isBroadcastDirty : isIndividualDirty) && (
                 <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/15 px-2.5 py-0.5 rounded-full animate-pulse">
                   <Save className="w-3.5 h-3.5" />
                   Draft auto-saved
@@ -303,8 +352,8 @@ const AdminBroadcastPage = () => {
                 <input
                   id="broadcast-subject"
                   type="text"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
+                  value={mode === 'broadcast' ? broadcastSubject : individualSubject}
+                  onChange={(e) => mode === 'broadcast' ? setBroadcastSubject(e.target.value) : setIndividualSubject(e.target.value)}
                   placeholder="e.g. Important Update from PastQ"
                   className="w-full px-4 py-3 bg-theme-base/60 border border-theme-border rounded-xl text-theme-primary font-medium placeholder:text-theme-muted/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all text-sm"
                 />
@@ -319,8 +368,8 @@ const AdminBroadcastPage = () => {
                 <input
                   id="broadcast-title"
                   type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  value={mode === 'broadcast' ? broadcastTitle : individualTitle}
+                  onChange={(e) => mode === 'broadcast' ? setBroadcastTitle(e.target.value) : setIndividualTitle(e.target.value)}
                   placeholder="e.g. New Features Available"
                   className="w-full px-4 py-3 bg-theme-base/60 border border-theme-border rounded-xl text-theme-primary font-medium placeholder:text-theme-muted/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all text-sm"
                 />
@@ -335,8 +384,8 @@ const AdminBroadcastPage = () => {
                 </label>
                 <textarea
                   id="broadcast-body"
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
+                  value={mode === 'broadcast' ? broadcastBody : individualBody}
+                  onChange={(e) => mode === 'broadcast' ? setBroadcastBody(e.target.value) : setIndividualBody(e.target.value)}
                   placeholder="Write your message here. Line breaks will be preserved in the email..."
                   rows={8}
                   className="w-full px-4 py-3 bg-theme-base/60 border border-theme-border rounded-xl text-theme-primary font-medium placeholder:text-theme-muted/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all text-sm resize-none leading-relaxed"

@@ -286,6 +286,24 @@ UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
 
 ---
 
+## 🗄️ Database Setup & Constraints (Critical)
+
+To run this project, the Supabase PostgreSQL database requires custom constraints on the `upsa_admin_notifications` table to handle all types of system alerts. By default, constraints may restrict the allowed type field.
+
+To update the constraint and enable notifications for all system events (signups, payments, user deletions, content reports, warnings, and error fallbacks), execute the following SQL in your **Supabase SQL Editor**:
+
+```sql
+-- Alter the check constraint on upsa_admin_notifications to support all used notification types
+ALTER TABLE upsa_admin_notifications 
+DROP CONSTRAINT IF EXISTS upsa_admin_notifications_type_check;
+
+ALTER TABLE upsa_admin_notifications 
+ADD CONSTRAINT upsa_admin_notifications_type_check 
+CHECK (type IN ('signup', 'payment', 'alert', 'warning', 'info', 'report'));
+```
+
+---
+
 ## 📦 Local Installation & Development
 
 1. **Clone & Install Dependencies**:
