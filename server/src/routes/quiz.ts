@@ -147,19 +147,29 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
 
     if (plan === 'free' || plan === 'basic') {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { count, error: countErr } = await supabase
+      const { data: recentSessions, error: countErr } = await supabase
         .from('upsa_sessions')
-        .select('*', { count: 'exact', head: true })
+        .select('questions_shown')
         .eq('user_id', userId)
         .gte('started_at', twentyFourHoursAgo);
 
       if (countErr) throw countErr;
 
-      const limit = plan === 'free' ? 3 : 20;
-      if ((count || 0) >= limit) {
+      // Count standard (Arena) sessions only
+      const standardCount = (recentSessions || []).filter((s: any) => {
+        try {
+          const shown = typeof s.questions_shown === 'string'
+            ? JSON.parse(s.questions_shown)
+            : s.questions_shown;
+          return !Array.isArray(shown) || !shown.includes('is_custom:true');
+        } catch { return true; }
+      }).length;
+
+      const limit = plan === 'free' ? 5 : 20;
+      if (standardCount >= limit) {
         res.status(403).json({
           error: 'quiz_limit_reached',
-          message: `You have reached your daily limit of ${limit} quizzes on the ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan. Upgrade to Plus or Pro to take unlimited quizzes!`
+          message: `You have reached your daily limit of ${limit} Arena quizzes on the ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan. Upgrade to Plus or Pro to take unlimited quizzes!`
         });
         return;
       }
