@@ -1,4 +1,4 @@
-import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from './huggingface';
+import { getHFConfigs, getHFModelId, defaultHFModels, askHuggingFace } from './huggingface';
 import { askPuter, isPuterAvailable } from './puter';
 
 export interface AiMessage {
@@ -19,17 +19,19 @@ export async function getAiCompletion(
 
   // ── Step 1: HuggingFace (primary) ──────────────────────────────────────
   try {
-    const hfConfig = await getHFConfig();
-    if (hfConfig && hfConfig.apiKey) {
-      const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
-      for (const rawModel of hfModels) {
-        const modelId = getHFModelId(rawModel);
-        try {
-          const reply = await askHuggingFace(modelId, hfConfig.apiKey, systemInstruction, history, userMessage);
-          return reply;
-        } catch (err: any) {
-          lastError = err;
-          console.warn(`[ai-helper] HF model ${modelId} failed:`, err.message);
+    const hfConfigs = await getHFConfigs();
+    for (const config of hfConfigs) {
+      if (config.apiKey) {
+        const hfModels = config.modelNames.length > 0 ? config.modelNames : defaultHFModels;
+        for (const rawModel of hfModels) {
+          const modelId = getHFModelId(rawModel);
+          try {
+            const reply = await askHuggingFace(modelId, config.apiKey, systemInstruction, history, userMessage);
+            return reply;
+          } catch (err: any) {
+            lastError = err;
+            console.warn(`[ai-helper] HF key ending in ...${config.apiKey.slice(-5)} model ${modelId} failed:`, err.message);
+          }
         }
       }
     }

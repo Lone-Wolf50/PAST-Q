@@ -6,15 +6,13 @@ export interface HFConfig {
 }
 
 /**
- * Fetches Hugging Face API key and model names dynamically from Supabase.
+ * Fetches all Hugging Face API keys and model names dynamically from Supabase.
  * Looks for environment variables:
  * - HF_TABLE_NAME
  * - HF_KEY_COLUMN
  * - HF_MODEL_COLUMN
- * If not set, returns null.
  */
-export async function getHFConfig(): Promise<HFConfig | null> {
-  // Fall back to known defaults so production works without needing these env vars
+export async function getHFConfigs(): Promise<HFConfig[]> {
   const tableName  = process.env.HF_TABLE_NAME   || 'upsa_hf_config';
   const keyColumn  = process.env.HF_KEY_COLUMN    || 'hf_api_key';
   const modelColumn = process.env.HF_MODEL_COLUMN || 'model_names';
@@ -22,54 +20,56 @@ export async function getHFConfig(): Promise<HFConfig | null> {
   try {
     const { data, error } = await supabase
       .from(tableName)
-      .select(`${keyColumn}, ${modelColumn}`)
-      .limit(1)
-      .maybeSingle();
+      .select(`${keyColumn}, ${modelColumn}`);
 
     if (error) {
       console.error(`[HuggingFace] Error querying Supabase table "${tableName}":`, error);
-      return null;
+      return [];
     }
 
-    if (!data) {
-      console.warn(`[HuggingFace] No configuration row found in table "${tableName}".`);
-      return null;
+    if (!data || data.length === 0) {
+      console.warn(`[HuggingFace] No configuration rows found in table "${tableName}".`);
+      return [];
     }
 
-    const configData = data as unknown as Record<string, unknown>;
-    const apiKey = configData[keyColumn] as string;
-    const rawModelNames = configData[modelColumn];
+    return (data as any[]).map((row) => {
+      const apiKey = row[keyColumn] as string;
+      const rawModelNames = row[modelColumn];
 
-    if (!apiKey) {
-      console.warn(`[HuggingFace] API Key column "${keyColumn}" in table "${tableName}" is empty.`);
-      return null;
-    }
-
-    let modelNames: string[] = [];
-    if (Array.isArray(rawModelNames)) {
-      modelNames = rawModelNames.map(String);
-    } else if (typeof rawModelNames === 'string') {
-      const trimmed = rawModelNames.trim();
-      if (trimmed.startsWith('[')) {
-        try {
-          modelNames = JSON.parse(trimmed);
-        } catch {
+      let modelNames: string[] = [];
+      if (Array.isArray(rawModelNames)) {
+        modelNames = rawModelNames.map(String);
+      } else if (typeof rawModelNames === 'string') {
+        const trimmed = rawModelNames.trim();
+        if (trimmed.startsWith('[')) {
+          try {
+            modelNames = JSON.parse(trimmed);
+          } catch {
+            modelNames = trimmed.split(',').map(s => s.trim());
+          }
+        } else {
           modelNames = trimmed.split(',').map(s => s.trim());
         }
-      } else {
-        modelNames = trimmed.split(',').map(s => s.trim());
       }
-    }
 
-    return {
-      apiKey,
-      modelNames: modelNames.filter(Boolean),
-    };
+      return {
+        apiKey,
+        modelNames: modelNames.filter(Boolean),
+      };
+    }).filter(c => c.apiKey);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[HuggingFace] Critical error fetching Hugging Face config:`, message);
-    return null;
+    console.error(`[HuggingFace] Critical error fetching Hugging Face configs:`, message);
+    return [];
   }
+}
+
+/**
+ * Fetches the first Hugging Face API key and model names from Supabase for compatibility.
+ */
+export async function getHFConfig(): Promise<HFConfig | null> {
+  const configs = await getHFConfigs();
+  return configs.length > 0 ? configs[0] : null;
 }
 
 /**
