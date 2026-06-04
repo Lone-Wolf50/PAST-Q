@@ -203,7 +203,8 @@ router.post('/webhook', async (req: Request, res: Response) => {
   }
 
   if (hash !== req.headers['x-paystack-signature']) {
-
+    res.status(401).json({ error: 'Invalid webhook signature.' });
+    return;
   }
 
   const event = req.body;

@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { Ratelimit } from '@upstash/ratelimit';
 import validator from 'validator';
 import { supabase } from '../lib/supabase';
-import { invalidateCachedSession, redis } from '../lib/redis';
+import { invalidateCachedSession, setCachedSession, redis } from '../lib/redis';
 import { sendOtpEmail } from '../lib/mailer';
 import crypto from 'crypto';
 
@@ -109,6 +109,64 @@ const sanitizeOtp = (value: unknown): string | null => {
   const trimmed = value.trim();
   if (!/^\d{6}$/.test(trimmed)) return null;
   return trimmed;
+};
+
+/**
+ * Manual cookie parser since cookie-parser middleware is not used.
+ */
+const parseCookies = (cookieHeader: string | undefined): Record<string, string> => {
+  const list: Record<string, string> = {};
+  if (!cookieHeader) return list;
+  cookieHeader.split(';').forEach((cookie) => {
+    const parts = cookie.split('=');
+    const name = parts[0].trim();
+    if (name) {
+      list[name] = parts.slice(1).join('=').trim();
+    }
+  });
+  return list;
+};
+
+/**
+ * Parse JWT_EXPIRES_IN and cap it at 30 days.
+ */
+const getJwtExpiresInSeconds = (envVal: string | undefined, defaultSeconds: number): number => {
+  if (!envVal) return defaultSeconds;
+  
+  // If it's a numeric string (seconds)
+  if (/^\d+$/.test(envVal)) {
+    const val = parseInt(envVal, 10);
+    return Math.min(val, 30 * 24 * 60 * 60);
+  }
+  
+  // Format like 1h, 2d, 30d
+  const match = envVal.match(/^(\d+)([smhd])$/);
+  if (!match) return defaultSeconds;
+  
+  const num = parseInt(match[1], 10);
+  const unit = match[2];
+  let multiplier = 1;
+  switch (unit) {
+    case 's': multiplier = 1; break;
+    case 'm': multiplier = 60; break;
+    case 'h': multiplier = 60 * 60; break;
+    case 'd': multiplier = 24 * 60 * 60; break;
+  }
+  
+  return Math.min(num * multiplier, 30 * 24 * 60 * 60);
+};
+
+/**
+ * Helper to set the httpOnly refresh token cookie.
+ */
+const setRefreshTokenCookie = (res: Response, token: string, maxAgeSeconds: number) => {
+  res.cookie('refreshToken', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/',
+    maxAge: maxAgeSeconds * 1000,
+  });
 };
 
 
@@ -220,7 +278,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
     if (error || !user) {
       console.error('❌ DB Error during registration:', error);
       logFailedAccount(email, full_name, `DB error during account creation: ${error?.message || 'unknown'}`).catch(() => {});
-      res.status(500).json({ error: 'Failed to create account. Please try again.', detail: error?.message });
+      res.status(500).json({ error: 'Failed to create account. Please try again.' });
       return;
     }
 
@@ -233,7 +291,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
       // Rollback: delete the unverified user from the database since the email failed to send
       await supabase.from('upsa_users').delete().eq('id', user.id);
       logFailedAccount(email, full_name, `Verification email delivery failed: ${emailErr.message}`).catch(() => {});
-      res.status(500).json({ error: 'Failed to send verification email. Please check your email address and try again.', detail: emailErr.message });
+      res.status(500).json({ error: 'Failed to send verification email. Please check your email address and try again.' });
       return;
     }
 
@@ -241,7 +299,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('❌ Unexpected Registration Error:', err);
     logFailedAccount(email, full_name, `Unexpected server error: ${err.message}`).catch(() => {});
-    res.status(500).json({ error: 'Internal server error.', detail: err.message });
+    res.status(500).json({ error: 'Internal server error.' });
   }
 });
 
@@ -280,7 +338,7 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
     if (user.otp !== otp) {
       await supabase.from('upsa_admin_notifications').insert({
         title: '❌ Wrong OTP Entered',
-        message: `Failed verification: User ${email} entered an invalid OTP code: ${otp}.`,
+        message: `Failed verification: User ${email} entered an invalid OTP code.`,
         type: 'warning',
       });
       res.status(400).json({ error: 'Invalid OTP code.' });
@@ -329,8 +387,17 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
     const token = jwt.sign(
       { id: fullUser.id, email: fullUser.email, plan: fullUser.plan, role: fullUser.role || 'student', session_version: newSessionVersion },
       process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' } as jwt.SignOptions
+      { expiresIn: '1h' }
     );
+
+    const refreshExpirySeconds = getJwtExpiresInSeconds(process.env.JWT_EXPIRES_IN, 30 * 24 * 60 * 60);
+    const refreshToken = jwt.sign(
+      { id: fullUser.id, type: 'refresh', session_version: newSessionVersion },
+      process.env.JWT_SECRET!,
+      { expiresIn: refreshExpirySeconds }
+    );
+
+    setRefreshTokenCookie(res, refreshToken, refreshExpirySeconds);
 
     res.status(200).json({
       message: 'Email verified successfully.',
@@ -435,8 +502,17 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     const token = jwt.sign(
       { id: user.id, email: user.email, plan: user.plan, role: user.role || 'student', session_version: newSessionVersion },
       process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' } as jwt.SignOptions
+      { expiresIn: '1h' }
     );
+
+    const refreshExpirySeconds = getJwtExpiresInSeconds(process.env.JWT_EXPIRES_IN, 30 * 24 * 60 * 60);
+    const refreshToken = jwt.sign(
+      { id: user.id, type: 'refresh', session_version: newSessionVersion },
+      process.env.JWT_SECRET!,
+      { expiresIn: refreshExpirySeconds }
+    );
+
+    setRefreshTokenCookie(res, refreshToken, refreshExpirySeconds);
 
     res.status(200).json({
       token,
@@ -658,7 +734,7 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
     // 2. Check if user already exists in our table
     const { data: existingUser } = await supabase
       .from('upsa_users')
-      .select('id, full_name, email, plan, role, avatar_url, status, session_version, password_hash')
+      .select('id, full_name, email, plan, role, avatar_url, status, session_version')
       .eq('email', email)
       .single();
 
@@ -740,8 +816,17 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
         session_version: dbUser.session_version,
       },
       process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' } as jwt.SignOptions
+      { expiresIn: '1h' }
     );
+
+    const refreshExpirySeconds = getJwtExpiresInSeconds(process.env.JWT_EXPIRES_IN, 30 * 24 * 60 * 60);
+    const refreshToken = jwt.sign(
+      { id: dbUser.id, type: 'refresh', session_version: dbUser.session_version },
+      process.env.JWT_SECRET!,
+      { expiresIn: refreshExpirySeconds }
+    );
+
+    setRefreshTokenCookie(res, refreshToken, refreshExpirySeconds);
 
     res.status(200).json({
       token: jwtToken,
@@ -758,6 +843,109 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
     console.error('❌ Google OAuth Error:', err);
     res.status(500).json({ error: 'Internal server error during Google login.' });
   }
+});
+
+// ─── REFRESH TOKEN ───────────────────────────────────────────
+router.post('/refresh', authLimiter, async (req: Request, res: Response) => {
+  const cookies = parseCookies(req.headers.cookie);
+  const refreshToken = cookies.refreshToken;
+
+  if (!refreshToken) {
+    res.status(401).json({ error: 'Refresh token missing.' });
+    return;
+  }
+
+  try {
+    const payload = jwt.verify(refreshToken, process.env.JWT_SECRET!) as {
+      id: string;
+      type?: string;
+      session_version?: number;
+    };
+
+    if (payload.type !== 'refresh') {
+      res.status(401).json({ error: 'Invalid token type.' });
+      return;
+    }
+
+    // Fetch user details to verify session status & version
+    const { data: dbUser, error: dbErr } = await supabase
+      .from('upsa_users')
+      .select('id, full_name, email, plan, role, avatar_url, status, session_version')
+      .eq('id', payload.id)
+      .single();
+
+    if (dbErr || !dbUser) {
+      res.status(401).json({ error: 'User not found.' });
+      return;
+    }
+
+    if (dbUser.status === 'suspended') {
+      res.status(403).json({ error: 'Your account is suspended. Please contact support.' });
+      return;
+    }
+
+    if (dbUser.status === 'deactivated') {
+      res.status(403).json({ error: 'This account has been deactivated.' });
+      return;
+    }
+
+    if (payload.session_version === undefined || dbUser.session_version === undefined || dbUser.session_version === null || String(payload.session_version) !== String(dbUser.session_version)) {
+      res.status(401).json({ code: 'SESSION_EXPIRED', error: 'Session expired.' });
+      return;
+    }
+
+    // Update Redis Cache
+    const cachedData = {
+      status: dbUser.status || 'active',
+      session_version: dbUser.session_version ?? 0,
+      role: dbUser.role || 'student',
+    };
+    setCachedSession(dbUser.id, cachedData).catch(() => {});
+
+    // Issue new Access Token (1h)
+    const newAccessToken = jwt.sign(
+      { id: dbUser.id, email: dbUser.email, plan: dbUser.plan, role: dbUser.role || 'student', session_version: dbUser.session_version },
+      process.env.JWT_SECRET!,
+      { expiresIn: '1h' }
+    );
+
+    // Issue new Refresh Token (30d capped)
+    const refreshExpirySeconds = getJwtExpiresInSeconds(process.env.JWT_EXPIRES_IN, 30 * 24 * 60 * 60);
+    const newRefreshToken = jwt.sign(
+      { id: dbUser.id, type: 'refresh', session_version: dbUser.session_version },
+      process.env.JWT_SECRET!,
+      { expiresIn: refreshExpirySeconds }
+    );
+
+    setRefreshTokenCookie(res, newRefreshToken, refreshExpirySeconds);
+
+    res.status(200).json({
+      token: newAccessToken,
+      user: {
+        id: dbUser.id,
+        full_name: dbUser.full_name,
+        email: dbUser.email,
+        plan: dbUser.plan,
+        role: dbUser.role || 'student',
+        avatar_url: dbUser.avatar_url,
+      },
+    });
+  } catch (err: any) {
+    console.error('❌ Refresh Token Error:', err.message);
+    res.status(401).json({ error: 'Refresh token invalid or expired.' });
+  }
+});
+
+// ─── LOGOUT ──────────────────────────────────────────────────
+router.post('/logout', async (req: Request, res: Response) => {
+  res.cookie('refreshToken', '', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 0,
+  });
+  res.status(200).json({ message: 'Logged out successfully.' });
 });
 
 export default router;

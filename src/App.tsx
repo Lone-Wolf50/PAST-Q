@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -107,6 +107,7 @@ const NotFoundPage = lazyWithRetry(() => import('./pages/NotFoundPage'));
 const AuthCallback = lazyWithRetry(() => import('./pages/AuthCallback'));
 const AdminNotificationsPage = lazyWithRetry(() => import('./pages/AdminNotificationsPage'));
 const AdminFallbacksPage = lazyWithRetry(() => import('./pages/AdminFallbacksPage'));
+const AdminBroadcastPage = lazyWithRetry(() => import('./pages/AdminBroadcastPage'));
 const StudentSubscriptionPage = lazyWithRetry(() => import('./pages/StudentSubscriptionPage'));
 const StudentNotificationsPage = lazyWithRetry(() => import('./pages/StudentNotificationsPage'));
 const QuizPage = lazyWithRetry(() => import('./pages/QuizPage'));
@@ -168,8 +169,12 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function AppRoutes() {
-  const { isLoggedIn, logout } = useAuth();
+  const { isLoggedIn, logout, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) {
+    return <PageLoader />;
+  }
   const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
   const [accountSuspendedOpen, setAccountSuspendedOpen] = useState(false);
   const [accountDeactivatedOpen, setAccountDeactivatedOpen] = useState(false);
@@ -251,6 +256,7 @@ function AppRoutes() {
                     <Route path="/payments" element={<AdminPaymentsPage />} />
                     <Route path="/notifications" element={<AdminNotificationsPage />} />
                     <Route path="/fallbacks" element={<AdminFallbacksPage />} />
+                    <Route path="/broadcast" element={<AdminBroadcastPage />} />
                     <Route path="*" element={<NotFoundPage />} />
                   </Routes>
                 </React.Suspense>
@@ -295,13 +301,22 @@ function AppRoutes() {
   );
 }
 
+const router = createBrowserRouter([
+  {
+    path: '*',
+    element: (
+      <>
+        <ScrollToTop />
+        <AppRoutes />
+      </>
+    )
+  }
+]);
+
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <ScrollToTop />
-        <AppRoutes />
-      </Router>
+      <RouterProvider router={router} />
     </AuthProvider>
   );
 }

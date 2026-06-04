@@ -60,3 +60,36 @@ export const sendOtpEmail = async (to: string, otp: string, type: 'verify' | 're
     html,
   });
 };
+
+/**
+ * Send a general-purpose email (announcements, broadcasts, etc.)
+ */
+export const sendGeneralEmail = async (to: string, subject: string, title: string, bodyText: string) => {
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background:#0f0c1b;font-family:'Segoe UI',sans-serif;">
+      <div style="max-width:480px;margin:40px auto;background:#1c1a2e;border-radius:16px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px 40px;">
+          <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;">PastQ</h1>
+          <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;">${title}</p>
+        </div>
+        <div style="padding:40px;">
+          <p style="color:#cbd5e1;margin:0;line-height:1.8;font-size:15px;white-space:pre-line;">${bodyText}</p>
+        </div>
+        <div style="padding:20px 40px;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="color:#475569;font-size:12px;margin:0;">© ${new Date().getFullYear()} PastQ. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await transporter.sendMail({
+    from: `"PastQ" <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    html,
+  });
+};

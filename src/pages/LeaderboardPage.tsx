@@ -13,6 +13,7 @@ interface LeaderboardEntry {
   user_id: string;
   username: string;
   score: number;
+  login_streak: number;
   badge_count: number;
   avatar_url?: string;
 }
@@ -47,32 +48,6 @@ const AnimatedScore = ({ value, delay = 0, className = '' }: { value: number; de
   return <span className={className}>{count.toLocaleString()}</span>;
 };
 
-// ── Rank badge ─────────────────────────────────────────────────────────────────
-const RankBadge = ({ rank }: { rank: number }) => {
-  if (rank === 1) return (
-    <div className="relative flex items-center justify-center">
-      <div className="absolute inset-0 rounded-full bg-amber-400/30 animate-ping" style={{ animationDuration: '2s' }} />
-      <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/40">
-        <Crown className="w-5 h-5 text-white drop-shadow" />
-      </div>
-    </div>
-  );
-  if (rank === 2) return (
-    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-300 to-slate-500 flex items-center justify-center shadow-md shadow-slate-400/30">
-      <span className="text-white font-black text-sm">2</span>
-    </div>
-  );
-  if (rank === 3) return (
-    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-600 to-amber-900 flex items-center justify-center shadow-md shadow-amber-700/30">
-      <span className="text-white font-black text-sm">3</span>
-    </div>
-  );
-  return (
-    <div className="w-10 h-10 rounded-full bg-theme-surface border border-theme-border flex items-center justify-center">
-      <span className="text-theme-muted font-bold text-xs">{rank}</span>
-    </div>
-  );
-};
 
 // ── Score progress bar ─────────────────────────────────────────────────────────
 const ScoreBar = ({ score, maxScore, rank }: { score: number; maxScore: number; rank: number }) => {
@@ -171,7 +146,7 @@ const RulesContent = () => (
 );
 
 // ── Podium Card ────────────────────────────────────────────────────────────────
-const PodiumCard = ({ user, maxScore, onClick }: { user: LeaderboardEntry; maxScore: number; onClick: () => void }) => {
+const PodiumCard = ({ user, onClick }: { user: LeaderboardEntry; onClick: () => void }) => {
   const isGold = user.rank === 1;
   const isSilver = user.rank === 2;
   const isBronze = user.rank === 3;
@@ -323,20 +298,35 @@ const PodiumCard = ({ user, maxScore, onClick }: { user: LeaderboardEntry; maxSc
           <span className={clsx('text-[9px] font-bold uppercase tracking-widest', theme.labelColor)}>pts</span>
         </div>
 
-        {/* Badge count */}
-        {user.badge_count > 0 && (
-          <div className={clsx(
-            'relative z-10 mt-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold',
-            isGold
-              ? 'bg-amber-500/15 border border-amber-400/25 text-amber-300'
-              : isSilver
-              ? 'bg-slate-400/10 border border-slate-400/20 text-slate-300'
-              : 'bg-amber-700/10 border border-amber-700/20 text-amber-600'
-          )}>
-            <Sparkles className="w-2.5 h-2.5" />
-            {user.badge_count}
-          </div>
-        )}
+        {/* Badge count & Streak */}
+        <div className="relative z-10 mt-2 flex items-center gap-1.5">
+          {user.login_streak > 0 && (
+            <div className={clsx(
+              'flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold',
+              isGold
+                ? 'bg-orange-500/15 border border-orange-400/25 text-orange-300'
+                : isSilver
+                ? 'bg-orange-400/10 border border-orange-400/20 text-orange-300'
+                : 'bg-orange-700/10 border border-orange-700/20 text-orange-500'
+            )}>
+              <Flame className="w-2.5 h-2.5" />
+              {user.login_streak}
+            </div>
+          )}
+          {user.badge_count > 0 && (
+            <div className={clsx(
+              'flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold',
+              isGold
+                ? 'bg-amber-500/15 border border-amber-400/25 text-amber-300'
+                : isSilver
+                ? 'bg-slate-400/10 border border-slate-400/20 text-slate-300'
+                : 'bg-amber-700/10 border border-amber-700/20 text-amber-600'
+            )}>
+              <Sparkles className="w-2.5 h-2.5" />
+              {user.badge_count}
+            </div>
+          )}
+        </div>
 
         {/* Bottom vignette */}
         <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/30 to-transparent pointer-events-none rounded-b-2xl" />
@@ -553,7 +543,7 @@ const LeaderboardPage = () => {
                   {/* Cards row — items-end so larger gold card naturally rises */}
                   <div className="relative flex items-end justify-center gap-2 sm:gap-4 md:gap-8 pt-14 pb-6">
                     {podiumOrder.map((user) => (
-                      <PodiumCard key={user.user_id} user={user} maxScore={maxScore} onClick={() => openProfile(user.user_id)} />
+                      <PodiumCard key={user.user_id} user={user} onClick={() => openProfile(user.user_id)} />
                     ))}
                   </div>
 
@@ -616,6 +606,12 @@ const LeaderboardPage = () => {
                               <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] text-indigo-400 font-bold bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.05)] group-hover:shadow-[0_0_10px_rgba(99,102,241,0.15)] transition-shadow">
                                 <Sparkles className="w-2.5 h-2.5 animate-pulse" />
                                 {user.badge_count}
+                              </span>
+                            )}
+                            {user.login_streak > 0 && (
+                              <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] text-orange-400 font-bold bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded-full">
+                                <Flame className="w-2.5 h-2.5" />
+                                {user.login_streak}d
                               </span>
                             )}
                           </div>

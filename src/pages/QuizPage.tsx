@@ -4,7 +4,7 @@ import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { clsx } from 'clsx';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useBlocker } from 'react-router-dom';
 
 // Lazy-load ReactMarkdown for performance — only loaded when Cortana drawer opens
 const ReactMarkdown = lazy(() => import('react-markdown'));
@@ -48,6 +48,32 @@ const QuizPage = () => {
   const [sessionStats, setSessionStats] = useState<any>(null);
   const [isQuizFinished, setIsQuizFinished] = useState(false);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
+
+  // Blocker for client-side navigation warning
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isQuizActive && currentLocation.pathname !== nextLocation.pathname
+  );
+
+  useEffect(() => {
+    if (blocker.state === 'blocked') {
+      setConfirmQuitOpen(true);
+    }
+  }, [blocker.state]);
+
+  const handleConfirmQuit = () => {
+    handleQuit();
+    if (blocker.state === 'blocked') {
+      blocker.proceed();
+    }
+  };
+
+  const handleCancelQuit = () => {
+    setConfirmQuitOpen(false);
+    if (blocker.state === 'blocked') {
+      blocker.reset();
+    }
+  };
 
   // Cortana Explainer state
   const [cortanaDrawerOpen, setCortanaDrawerOpen] = useState(false);
@@ -631,7 +657,7 @@ const QuizPage = () => {
             {currentQuestion.options.map((option, idx) => {
               const label = ['A', 'B', 'C', 'D'][idx] ?? String(idx + 1);
               const isSelected = selectedAnswer === option;
-              const isCorrectResult = result?.correct_answer === option;
+              const isCorrectResult = result?.is_correct && selectedAnswer === option;
               const isUserWrongSubmit = result && selectedAnswer === option && !result.is_correct;
 
               return (
@@ -703,7 +729,9 @@ const QuizPage = () => {
                     <p className="text-xs font-semibold mt-2 text-theme-secondary leading-relaxed">
                       {result.is_correct
                         ? `Nice work! You earned +${result.points_awarded} points for answering correctly in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
-                        : `The correct answer was: "${result.correct_answer}". Better luck next time!`
+                        : result.is_expired
+                          ? `Time ran out before you could answer. Keep going!`
+                          : `That wasn't the right answer. The correct answers will be revealed when you complete the quiz.`
                       }
                     </p>
 
@@ -855,8 +883,8 @@ const QuizPage = () => {
       {/* Confirm Quit Dialog */}
       <ConfirmModal
         isOpen={confirmQuitOpen}
-        onClose={() => setConfirmQuitOpen(false)}
-        onConfirm={handleQuit}
+        onClose={handleCancelQuit}
+        onConfirm={handleConfirmQuit}
         title="Abandon Quiz Arena?"
         message="Are you sure you want to quit? All progress, streak, and points from this session will be permanently lost."
         confirmText="Quit Arena"

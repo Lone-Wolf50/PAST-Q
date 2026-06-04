@@ -22,6 +22,7 @@ interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
   isLoggedIn: boolean;
+  loading: boolean;
   login: (token: string, user: AuthUser) => void;
   updateUser: (updates: Partial<AuthUser>) => void;
   logout: () => void;
@@ -34,50 +35,18 @@ const isApp = () => {
   return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
 };
 
-// Returns the appropriate storage based on environment
-const getStorage = () => localStorage;
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [token, setToken] = useState<string | null>(() => {
-    const storage = getStorage();
-    
-    // If it's an app, enforce the 7-day rolling window
-    if (isApp()) {
-      const lastVisit = storage.getItem('last_visit');
-      if (lastVisit) {
-        const timeSince = Date.now() - parseInt(lastVisit, 10);
-        if (timeSince > 7 * 24 * 60 * 60 * 1000) {
-          // More than 7 days, clear storage
-          storage.removeItem('token');
-          storage.removeItem('user');
-          storage.removeItem('last_visit');
-          return null;
-        }
-      }
-      // Update last visit timestamp
-      storage.setItem('last_visit', Date.now().toString());
-    }
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
-    return storage.getItem('token');
-  });
-
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const stored = getStorage().getItem('user');
-    return stored ? JSON.parse(stored) : null;
-  });
-
+  // Sync token refreshes and sessions across tabs via events
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      // Sync login/logout state across tabs
-      if (e.key === 'token') {
-        if (!e.newValue) {
-          setToken(null);
-          setUser(null);
-        } else {
-          setToken(e.newValue);
-          const storedUser = getStorage().getItem('user');
-          if (storedUser) setUser(JSON.parse(storedUser));
-        }
+    const handleTokenRefreshed = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        setToken(customEvent.detail.token);
+        setUser(customEvent.detail.user);
       }
     };
 
@@ -85,35 +54,61 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       logout();
     };
 
-    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('token_refreshed', handleTokenRefreshed);
     window.addEventListener('session_expired', handleSessionExpired);
     
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('token_refreshed', handleTokenRefreshed);
       window.removeEventListener('session_expired', handleSessionExpired);
     };
   }, []);
 
-  // App-Load Token Validation
+  // App-Load Token Validation (Silent Refresh on mount)
   useEffect(() => {
-    const currentToken = getStorage().getItem('token');
-    if (!currentToken) return;
-
-    fetch(`${BASE_URL}/profile/me`, {
-      headers: { Authorization: `Bearer ${currentToken}` }
-    })
-      .then(res => {
-        if (res.status === 401) {
-          logout();
+    const initAuth = async () => {
+      const storage = localStorage;
+      if (isApp()) {
+        const lastVisit = storage.getItem('last_visit');
+        if (lastVisit) {
+          const timeSince = Date.now() - parseInt(lastVisit, 10);
+          if (timeSince > 7 * 24 * 60 * 60 * 1000) {
+            // More than 7 days, clear session and storage
+            try {
+              await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+            } catch {}
+            storage.removeItem('last_visit');
+            setLoading(false);
+            return;
+          }
         }
-      })
-      .catch(() => {}); // Ignore network errors
+        storage.setItem('last_visit', Date.now().toString());
+      }
+
+      try {
+        const res = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.token && data.user) {
+            setToken(data.token);
+            setUser(data.user);
+          }
+        }
+      } catch (err) {
+        console.error('Silent refresh failed on startup:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
   // Ping streak once per browser session when user is logged in
   useEffect(() => {
     if (!token) return;
-    // Only ping once per browser session (not on every re-render)
     if (sessionStorage.getItem('streak_pinged')) return;
     sessionStorage.setItem('streak_pinged', '1');
 
@@ -127,15 +122,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           sessionStorage.setItem('streak_count', String(data.streak));
         }
       })
-      .catch(() => {}); // Never crash the app over streak
+      .catch(() => {});
   }, [token]);
 
   const login = (newToken: string, newUser: AuthUser) => {
-    const storage = getStorage();
-    storage.setItem('token', newToken);
-    storage.setItem('user', JSON.stringify(newUser));
-    
-    // Clear streak cache to prevent cross-account leakage if logged in without explicit logout
+    const storage = localStorage;
     sessionStorage.removeItem('streak_pinged');
     sessionStorage.removeItem('streak_count');
 
@@ -143,46 +134,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       storage.setItem('last_visit', Date.now().toString());
     }
     
-    // The 'token' storage event will automatically sync the login to other tabs
-    
     setToken(newToken);
     setUser(newUser);
   };
 
   const updateUser = (updates: Partial<AuthUser>) => {
     if (!user) return;
-    const updatedUser = { ...user, ...updates };
-    getStorage().setItem('user', JSON.stringify(updatedUser));
-    setUser(updatedUser);
+    setUser(prev => prev ? { ...prev, ...updates } : null);
   };
 
-  const logout = () => {
-    const storage = getStorage();
-    storage.removeItem('token');
-    storage.removeItem('user');
-    storage.removeItem('last_visit');
-    
-    // Optional: Also clear the other storage just in case they switch contexts
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
-    sessionStorage.removeItem('dismissed_banner');
-    sessionStorage.removeItem('streak_pinged');
-    sessionStorage.removeItem('streak_count');
-    
-    // Clear paper browsing states from sessionStorage to prevent filter leakage across accounts
-    sessionStorage.removeItem('papers_page');
-    sessionStorage.removeItem('papers_selected_subject');
-    sessionStorage.removeItem('papers_selected_department');
-    sessionStorage.removeItem('papers_selected_year');
-    sessionStorage.removeItem('papers_selected_semester');
-    sessionStorage.removeItem('papers_search_query');
-    sessionStorage.removeItem('papers_show_saved');
-
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  const logout = async () => {
+    // Clear student local storage / session storage
+    sessionStorage.clear();
     localStorage.removeItem('dismissed_banner');
-
-    // Clear all AI chat related storage keys to prevent cross-account leakage
+    
+    // Clear AI chat related storage keys
     localStorage.removeItem('pastq_ai_messages');
     localStorage.removeItem('pastq_ai_active_conv');
     Object.keys(localStorage).forEach(key => {
@@ -191,15 +157,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    // Sign out from Supabase to clear its local session tokens and prevent cross-account auto-login
+    // Clear Supabase session (OAuth)
     supabase.auth.signOut().catch(() => {});
     
     setToken(null);
     setUser(null);
+
+    // Call server endpoint to remove httpOnly cookie
+    try {
+      await fetch(`${BASE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (err) {
+      console.error('Logout request failed:', err);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoggedIn: !!token && !!user, login, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoggedIn: !!token && !!user, loading, login, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

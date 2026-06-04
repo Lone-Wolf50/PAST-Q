@@ -1095,7 +1095,7 @@ router.get('/test-ocr/:paperId', protect, async (req: AuthRequest, res: any) => 
       .single();
 
     if (paperErr || !paper) {
-      return res.status(404).json({ error: 'Paper not found in database', details: paperErr?.message });
+      return res.status(404).json({ error: 'Paper not found in database.' });
     }
 
     if (!paper.file_url) {
@@ -1240,7 +1240,7 @@ router.get('/test-ocr/:paperId', protect, async (req: AuthRequest, res: any) => 
     });
 
   } catch (err: any) {
-    res.status(500).json({ error: 'Unexpected test route failure', details: err.message });
+    res.status(500).json({ error: 'Unexpected test route failure.' });
   }
 });
 

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
@@ -6,10 +7,12 @@ import fs from 'fs';
 import { supabase } from '../lib/supabase';
 import { protect, adminOnly, AuthRequest } from '../middleware/auth';
 import { uploadToR2, deleteFromR2, keyFromUrl } from '../lib/r2';
-import { invalidateCachedSession } from '../lib/redis';
+import { invalidateCachedSession, redis } from '../lib/redis';
 import { getAIHealth } from '../lib/ai-health';
 import { generatePaperInsights, getProcessingState, isProcessing } from '../lib/ai-insights';
 import { deleteUserComplete } from '../lib/user-deletion';
+import { sendGeneralEmail } from '../lib/mailer';
+import { Ratelimit } from '@upstash/ratelimit';
 
 const router = Router();
 const upload = multer({
@@ -24,8 +27,36 @@ const upload = multer({
   },
 });
 
-// ── Admin Login (password-only, separate from student auth) ──────────────────
-router.post('/auth/login', async (req: Request, res: Response) => {
+// ── Admin Login Rate Limiter ─────────────────────────────────────────────────
+const adminAuthRatelimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, '15 m'),
+      prefix: 'rl:admin-auth:',
+    })
+  : null;
+
+const adminAuthLimiter = async (req: Request, res: Response, next: any): Promise<void> => {
+  if (!adminAuthRatelimit) {
+    next();
+    return;
+  }
+  try {
+    const ip = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anonymous';
+    const { success } = await adminAuthRatelimit.limit(ip);
+    if (!success) {
+      res.status(429).json({ error: 'Too many login attempts. Please try again after 15 minutes.' });
+      return;
+    }
+    next();
+  } catch {
+    next();
+  }
+};
+
+
+// ── Admin Login (bcrypt + DB credentials, rate-limited) ──────────────────────
+router.post('/auth/login', adminAuthLimiter, async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -33,19 +64,44 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     return;
   }
 
-  if (email !== process.env.ADMIN_EMAIL || password !== process.env.ADMIN_PASSWORD) {
-    await new Promise((r) => setTimeout(r, 400));
-    res.status(401).json({ error: 'Invalid admin credentials.' });
-    return;
+  try {
+    // Fetch admin credentials from database
+    const { data: config, error: configErr } = await supabase
+      .from('upsa_app_config')
+      .select('admin_email, admin_password_hash')
+      .eq('id', 1)
+      .single();
+
+    if (configErr || !config?.admin_email || !config?.admin_password_hash) {
+      // Constant-time delay to prevent timing attacks
+      await new Promise((r) => setTimeout(r, 400));
+      res.status(401).json({ error: 'Invalid admin credentials.' });
+      return;
+    }
+
+    if (email !== config.admin_email) {
+      await new Promise((r) => setTimeout(r, 400));
+      res.status(401).json({ error: 'Invalid admin credentials.' });
+      return;
+    }
+
+    const isMatch = await bcrypt.compare(password, config.admin_password_hash);
+    if (!isMatch) {
+      await new Promise((r) => setTimeout(r, 400));
+      res.status(401).json({ error: 'Invalid admin credentials.' });
+      return;
+    }
+
+    const token = jwt.sign(
+      { id: 'admin', email: config.admin_email, plan: 'pro', role: 'admin' },
+      process.env.JWT_SECRET!,
+      { expiresIn: '8h' } as jwt.SignOptions
+    );
+
+    res.status(200).json({ token });
+  } catch {
+    res.status(500).json({ error: 'Admin login failed.' });
   }
-
-  const token = jwt.sign(
-    { id: 'admin', email: process.env.ADMIN_EMAIL!, plan: 'pro', role: 'admin' },
-    process.env.JWT_SECRET!,
-    { expiresIn: '8h' } as jwt.SignOptions
-  );
-
-  res.status(200).json({ token });
 });
 
 // All routes below require JWT + admin role
@@ -95,7 +151,7 @@ router.post('/subjects', async (req: AuthRequest, res: Response) => {
     res.status(201).json({ subject: data });
   } catch (e: any) {
     console.error('[POST /subjects]', e?.message || e);
-    res.status(500).json({ error: e?.message || 'Failed to create subject.' });
+    res.status(500).json({ error: 'Failed to create subject.' });
   }
 });
 
@@ -149,7 +205,7 @@ router.get('/papers', async (_req: AuthRequest, res: Response) => {
     });
   } catch (err: any) {
 
-    res.status(500).json({ error: err.message || 'Failed to fetch papers.' });
+    res.status(500).json({ error: 'Failed to fetch papers.' });
   }
 });
 
@@ -234,7 +290,7 @@ router.post(
       res.status(201).json({ paper: data, file_url: finalFileUrl });
     } catch (e: any) {
 
-      res.status(500).json({ error: e.message || 'Failed to upload paper.' });
+      res.status(500).json({ error: 'Failed to upload paper.' });
     }
   }
 );
@@ -292,7 +348,7 @@ router.patch(
       res.status(200).json({ paper: data });
     } catch (e: any) {
 
-      res.status(500).json({ error: e.message || 'Failed to update paper.' });
+      res.status(500).json({ error: 'Failed to update paper.' });
     }
   }
 );
@@ -669,7 +725,7 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     const errorMsg = err?.message || String(err) || 'Unknown error during deletion';
     console.error('[DELETE /users/:id] Deletion error:', errorMsg);
-    res.status(500).json({ error: `Failed to delete user: ${errorMsg}` });
+    res.status(500).json({ error: 'Failed to delete user.' });
   }
 });
 
@@ -1103,6 +1159,79 @@ router.post('/ai-config', async (req: AuthRequest, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to save config' });
+  }
+});
+
+// ── Broadcast Email ──────────────────
+// If `recipients` array is provided, send only to those emails (individual mode).
+// Otherwise, send to ALL verified students (broadcast mode).
+router.post('/broadcast', async (req: AuthRequest, res: Response) => {
+  const { subject, title, body: bodyText, recipients } = req.body;
+
+  if (!subject || !title || !bodyText) {
+    res.status(400).json({ error: 'Subject, title, and body are required.' });
+    return;
+  }
+
+  try {
+    let emails: string[] = [];
+
+    if (Array.isArray(recipients) && recipients.length > 0) {
+      // Individual mode — use provided email list
+      emails = recipients.map((e: string) => e.trim().toLowerCase()).filter(Boolean);
+    } else {
+      // Broadcast mode — fetch all verified student emails
+      const { data: users, error } = await supabase
+        .from('upsa_users')
+        .select('email')
+        .eq('role', 'student')
+        .eq('is_verified', true);
+
+      if (error) throw error;
+      if (!users || users.length === 0) {
+        res.status(200).json({ message: 'No verified students found.', sent: 0, failed: 0 });
+        return;
+      }
+      emails = users.map((u: any) => u.email).filter(Boolean);
+    }
+
+    let sent = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    // Send in batches of 10 with 1s delay between batches
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < emails.length; i += BATCH_SIZE) {
+      const batch = emails.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((email: string) => sendGeneralEmail(email, subject, title, bodyText))
+      );
+      results.forEach((r, idx) => {
+        if (r.status === 'fulfilled') {
+          sent++;
+        } else {
+          failed++;
+          errors.push(`${batch[idx]}: ${r.reason?.message || 'Unknown error'}`);
+        }
+      });
+      // Delay between batches to avoid SMTP rate limiting
+      if (i + BATCH_SIZE < emails.length) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+
+    // Log the broadcast as an admin notification
+    const isIndividual = Array.isArray(recipients) && recipients.length > 0;
+    await supabase.from('upsa_admin_notifications').insert({
+      title: isIndividual ? '📧 Individual Email Sent' : '📧 Broadcast Email Sent',
+      message: `Subject: "${subject}" — Sent to ${sent}/${emails.length} ${isIndividual ? 'recipient(s)' : 'students'}. ${failed > 0 ? `${failed} failed.` : ''}`,
+      type: 'info',
+    });
+
+    res.status(200).json({ message: 'Broadcast complete.', total: emails.length, sent, failed, errors: errors.slice(0, 10) });
+  } catch (err: any) {
+    console.error('Broadcast error:', err);
+    res.status(500).json({ error: 'Failed to send broadcast.' });
   }
 });
 

@@ -71,7 +71,7 @@ export async function awardBadges(userId: string): Promise<string[]> {
     // 1. Fetch user detail & currently earned badges
     const { data: user, error: userErr } = await supabase
       .from('upsa_users')
-      .select('created_at, login_streak, total_points')
+      .select('created_at, streak_count, total_points')
       .eq('id', userId)
       .single();
 
@@ -214,10 +214,10 @@ export async function awardBadges(userId: string): Promise<string[]> {
     }
 
     // --- LOYALTY BADGES ---
-    if (user.login_streak >= 7 && !hasBadge('seven_day')) {
+    if (user.streak_count >= 7 && !hasBadge('seven_day')) {
       await grantBadge('seven_day');
     }
-    if (user.login_streak >= 30 && !hasBadge('thirty_day')) {
+    if (user.streak_count >= 30 && !hasBadge('thirty_day')) {
       await grantBadge('thirty_day');
     }
     if (!hasBadge('veteran') && totalCount >= 500) {

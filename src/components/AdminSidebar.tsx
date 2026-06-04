@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, BookOpen, FileText, Users, CreditCard, 
-  LogOut, X, Shield, ChevronRight, Bell, Shuffle
+  LogOut, X, Shield, ChevronRight, Bell, Shuffle, Mail
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -21,6 +21,7 @@ const AdminSidebar = ({ open, onClose }: AdminSidebarProps) => {
     { name: 'Payments', path: '/hq-portal/payments', icon: CreditCard },
     { name: 'Notifications', path: '/hq-portal/notifications', icon: Bell },
     { name: 'Fallback Monitor', path: '/hq-portal/fallbacks', icon: Shuffle },
+    { name: 'Broadcast', path: '/hq-portal/broadcast', icon: Mail },
   ];
 
   const handleLogout = () => {

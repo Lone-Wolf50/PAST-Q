@@ -1,9 +1,10 @@
 import { Router, Response } from 'express';
-import { protect, AuthRequest } from '../middleware/auth';
+import { protect, adminOnly, AuthRequest } from '../middleware/auth';
 import { supabase } from '../lib/supabase';
 import { redis } from '../lib/redis';
 import { generateQuestion } from '../lib/question-generator';
 import { awardBadges, BADGE_REGISTRY } from '../lib/badges';
+import { performOcrPipeline } from '../lib/ocr';
 import { getAiCompletion } from '../lib/ai-helper';
 const pdfParse = require('pdf-parse');
 
@@ -11,6 +12,68 @@ const router = Router();
 
 // All quiz routes require authentication
 router.use(protect);
+
+// --- 9. BACKFILL STREAK POINTS (one-time migration) ---
+// POST /quiz/backfill-streak-points
+// Awards 5 points per streak_count day for users who had streaks before the points system.
+router.post('/backfill-streak-points', adminOnly, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    // Fetch all users with streak_count > 0 and total_points = 0 (never earned quiz points)
+    const { data: eligibleUsers, error: fetchErr } = await supabase
+      .from('upsa_users')
+      .select('id, username, streak_count, total_points')
+      .gt('streak_count', 0)
+      .eq('total_points', 0);
+
+    if (fetchErr) throw fetchErr;
+
+    if (!eligibleUsers || eligibleUsers.length === 0) {
+      res.status(200).json({ message: 'No users need backfill.', updated: 0 });
+      return;
+    }
+
+    let updatedCount = 0;
+    const results: { username: string; streak: number; points_awarded: number }[] = [];
+
+    for (const user of eligibleUsers) {
+      const streakPoints = (user.streak_count || 0) * 5;
+      if (streakPoints <= 0) continue;
+
+      const { error: updateErr } = await supabase
+        .from('upsa_users')
+        .update({ total_points: streakPoints })
+        .eq('id', user.id);
+
+      if (!updateErr) {
+        updatedCount++;
+        results.push({
+          username: user.username || 'Student',
+          streak: user.streak_count,
+          points_awarded: streakPoints
+        });
+      }
+    }
+
+    // Clear Redis leaderboard cache so new points show immediately
+    if (redis) {
+      await Promise.all([
+        redis.del('leaderboard:all_time'),
+        redis.del('leaderboard:weekly'),
+        redis.del('leaderboard:monthly')
+      ]);
+    }
+
+    console.log(`✅ [Backfill] Updated ${updatedCount} users with streak-based points.`);
+    res.status(200).json({
+      message: `Backfilled points for ${updatedCount} users.`,
+      updated: updatedCount,
+      details: results
+    });
+  } catch (err: any) {
+    console.error('❌ [Backfill Streak Points] Error:', err.message);
+    res.status(500).json({ error: 'Failed to backfill streak points.' });
+  }
+});
 
 /**
  * Helper to get the ISO string for the start of the current week (Monday 00:00:00 UTC)
@@ -84,7 +147,7 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
     // Check daily login bonus
     const { data: userData } = await supabase
       .from('upsa_users')
-      .select('total_points, last_login_at, login_streak')
+      .select('total_points, last_login_at')
       .eq('id', userId)
       .single();
 
@@ -93,25 +156,11 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
       const lastLoginStr = userData.last_login_at ? new Date(userData.last_login_at).toISOString().split('T')[0] : '';
 
       if (lastLoginStr !== nowStr) {
-        let newStreak = userData.login_streak || 0;
-        if (userData.last_login_at) {
-          const diffTime = Math.abs(Date.now() - new Date(userData.last_login_at).getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          if (diffDays <= 1.5) {
-            newStreak += 1;
-          } else {
-            newStreak = 1;
-          }
-        } else {
-          newStreak = 1;
-        }
-
         await supabase
           .from('upsa_users')
           .update({
             total_points: (userData.total_points || 0) + 5,
-            last_login_at: new Date().toISOString(),
-            login_streak: newStreak
+            last_login_at: new Date().toISOString()
           })
           .eq('id', userId);
       }
@@ -469,9 +518,8 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
       earnedBadges = await awardBadges(userId);
     }
 
-    res.status(200).json({
+    const responseData: any = {
       is_correct: isCorrect,
-      correct_answer: question.correct_answer, // Return answer for student feedback
       points_awarded: pointsAwarded,
       time_taken_ms: timeTakenMs,
       is_expired: isExpired,
@@ -480,7 +528,23 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
       session_correct: correctCount,
       session_total: totalQs,
       earned_badges: earnedBadges
-    });
+    };
+
+    // Only reveal correct answers after the ENTIRE quiz session is completed
+    // This prevents users from inspecting DevTools mid-quiz to gain an advantage
+    if (isSessionComplete) {
+      const { data: sessionQuestions } = await supabase
+        .from('upsa_questions')
+        .select('id, correct_answer')
+        .in('id', questionIds);
+
+      responseData.session_answers = (sessionQuestions || []).map((q: any) => ({
+        question_id: q.id,
+        correct_answer: q.correct_answer
+      }));
+    }
+
+    res.status(200).json(responseData);
   } catch (err: any) {
     console.error('❌ [Quiz Submit] Error:', err.message);
     res.status(500).json({ error: 'Failed to submit answer.' });
@@ -515,8 +579,10 @@ router.get('/leaderboard', async (req: AuthRequest, res: Response): Promise<void
     if (period === 'all_time') {
       const { data: users } = await supabase
         .from('upsa_users')
-        .select('id, username, total_points, avatar_url, upsa_user_badges(count)')
+        .select('id, username, total_points, streak_count, avatar_url, created_at, upsa_user_badges(count)')
         .order('total_points', { ascending: false })
+        .order('streak_count', { ascending: false })
+        .order('created_at', { ascending: true })
         .limit(100);
 
       leaderboardData = (users || []).map((u: any, idx) => ({
@@ -524,6 +590,7 @@ router.get('/leaderboard', async (req: AuthRequest, res: Response): Promise<void
         user_id: u.id,
         username: u.username || 'Student',
         score: u.total_points || 0,
+        login_streak: u.streak_count || 0,
         badge_count: u.upsa_user_badges?.[0]?.count || 0,
         avatar_url: u.avatar_url
       }));
@@ -533,13 +600,13 @@ router.get('/leaderboard', async (req: AuthRequest, res: Response): Promise<void
 
       const { data: submissions, error: subErr } = await supabase
         .from('upsa_submissions')
-        .select('user_id, points_awarded, upsa_users(username, avatar_url, upsa_user_badges(count))')
+        .select('user_id, points_awarded, upsa_users(username, avatar_url, streak_count, upsa_user_badges(count))')
         .gte('submitted_at', startDate);
 
       if (subErr) throw subErr;
 
       // Group and sum in JS
-      const userSums: Record<string, { username: string; avatar_url: string; score: number; badge_count: number }> = {};
+      const userSums: Record<string, { username: string; avatar_url: string; score: number; badge_count: number; login_streak: number }> = {};
       (submissions || []).forEach((s: any) => {
         const uid = s.user_id;
         const pts = Number(s.points_awarded) || 0;
@@ -548,22 +615,24 @@ router.get('/leaderboard', async (req: AuthRequest, res: Response): Promise<void
             username: s.upsa_users?.username || 'Student',
             avatar_url: s.upsa_users?.avatar_url || '',
             score: 0,
-            badge_count: s.upsa_users?.upsa_user_badges?.[0]?.count || 0
+            badge_count: s.upsa_users?.upsa_user_badges?.[0]?.count || 0,
+            login_streak: s.upsa_users?.streak_count || 0
           };
         }
         userSums[uid].score += pts;
       });
 
-      // Sort and map to leaderboard array
+      // Sort and map to leaderboard array (tiebreak by streak desc, then username)
       leaderboardData = Object.keys(userSums)
         .map(uid => ({
           user_id: uid,
           username: userSums[uid].username,
           avatar_url: userSums[uid].avatar_url,
           score: userSums[uid].score,
-          badge_count: userSums[uid].badge_count
+          badge_count: userSums[uid].badge_count,
+          login_streak: userSums[uid].login_streak
         }))
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => b.score - a.score || (userSums[b.user_id]?.login_streak || 0) - (userSums[a.user_id]?.login_streak || 0) || a.username.localeCompare(b.username))
         .slice(0, 100)
         .map((entry, idx) => ({
           rank: idx + 1,
@@ -603,7 +672,7 @@ router.get('/stats', async (req: AuthRequest, res: Response): Promise<void> => {
     // 1. Fetch user data (points, streak)
     const { data: user, error: userErr } = await supabase
       .from('upsa_users')
-      .select('total_points, login_streak, created_at')
+      .select('total_points, streak_count, created_at')
       .eq('id', userId)
       .single();
 
@@ -630,13 +699,34 @@ router.get('/stats', async (req: AuthRequest, res: Response): Promise<void> => {
 
     const earnedMap = new Map((earnedRows || []).map(r => [r.badge_slug, r.earned_at]));
 
-    // 4. Calculate user's current rank on global all-time leaderboard
-    const { data: rankQuery } = await supabase
-      .from('upsa_users')
-      .select('id')
-      .order('total_points', { ascending: false });
+    // 4. Calculate user's unique rank on global all-time leaderboard
+    //    Rank = (users with MORE points) + (users with SAME points but higher streak)
+    //         + (users with SAME points AND streak but earlier signup) + 1
+    const userPoints = user.total_points || 0;
+    const userStreak = user.streak_count || 0;
+    const userCreatedAt = user.created_at;
 
-    const rank = rankQuery ? rankQuery.findIndex((u: any) => u.id === userId) + 1 : 0;
+    const { count: usersStrictlyAhead } = await supabase
+      .from('upsa_users')
+      .select('id', { count: 'exact', head: true })
+      .gt('total_points', userPoints);
+
+    const { count: usersTiedHigherStreak } = await supabase
+      .from('upsa_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('total_points', userPoints)
+      .gt('streak_count', userStreak)
+      .neq('id', userId);
+
+    const { count: usersTiedSameStreakEarlier } = await supabase
+      .from('upsa_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('total_points', userPoints)
+      .eq('streak_count', userStreak)
+      .lt('created_at', userCreatedAt)
+      .neq('id', userId);
+
+    const rank = (usersStrictlyAhead ?? 0) + (usersTiedHigherStreak ?? 0) + (usersTiedSameStreakEarlier ?? 0) + 1;
 
     // 5. Check if user qualifies for leaderboard badges
     if (rank > 0) {
@@ -677,7 +767,7 @@ router.get('/stats', async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(200).json({
       stats: {
         points: user.total_points || 0,
-        login_streak: user.login_streak || 0,
+        login_streak: user.streak_count || 0,
         total_answered: totalAnswered,
         correct_answered: correctCount,
         accuracy,
@@ -746,7 +836,7 @@ router.get('/stats/:userId', async (req: AuthRequest, res: Response): Promise<vo
     // 1. Fetch user's public profile data
     const { data: user, error: userErr } = await supabase
       .from('upsa_users')
-      .select('id, username, full_name, avatar_url, plan, total_points, login_streak')
+      .select('id, username, full_name, avatar_url, plan, total_points, streak_count, created_at')
       .eq('id', userId)
       .single();
 
@@ -773,13 +863,31 @@ router.get('/stats/:userId', async (req: AuthRequest, res: Response): Promise<vo
 
     const earnedMap = new Map((earnedRows || []).map((r: any) => [r.badge_slug, r.earned_at]));
 
-    // 4. Calculate rank (count users with more total_points)
-    const { count: usersAhead } = await supabase
+    // 4. Calculate unique rank (points > streak > signup date)
+    const profilePoints = user.total_points || 0;
+    const profileStreak = user.streak_count || 0;
+
+    const { count: profileUsersAhead } = await supabase
       .from('upsa_users')
       .select('id', { count: 'exact', head: true })
-      .gt('total_points', user.total_points || 0);
+      .gt('total_points', profilePoints);
 
-    const rank = (usersAhead || 0) + 1;
+    const { count: profileTiedHigherStreak } = await supabase
+      .from('upsa_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('total_points', profilePoints)
+      .gt('streak_count', profileStreak)
+      .neq('id', userId);
+
+    const { count: profileTiedSameStreakEarlier } = await supabase
+      .from('upsa_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('total_points', profilePoints)
+      .eq('streak_count', profileStreak)
+      .lt('created_at', user.created_at)
+      .neq('id', userId);
+
+    const rank = (profileUsersAhead ?? 0) + (profileTiedHigherStreak ?? 0) + (profileTiedSameStreakEarlier ?? 0) + 1;
 
     // 5. Build badge collection (only earned badges for public profiles)
     const badges = Object.keys(BADGE_REGISTRY)
@@ -802,7 +910,7 @@ router.get('/stats/:userId', async (req: AuthRequest, res: Response): Promise<vo
         avatar_url: user.avatar_url,
         plan: user.plan,
         points: user.total_points || 0,
-        login_streak: user.login_streak || 0,
+        login_streak: user.streak_count || 0,
         total_answered: totalAnswered,
         correct_answered: correctCount,
         accuracy,
@@ -845,16 +953,34 @@ router.post('/generate-from-paper', async (req: AuthRequest, res: Response): Pro
 
     // 2. Download + parse PDF text
     let extractedText = '';
+    let pdfBuffer: Buffer | null = null;
+    let pageCount = 6; // default page count to process if not extractable
+    
     try {
       const pdfRes = await fetch((paper as any).file_url);
       if (pdfRes.ok) {
         const arrayBuffer = await pdfRes.arrayBuffer();
-        const pdfData = await pdfParse(Buffer.from(arrayBuffer));
-        extractedText = (pdfData.text || '').trim().substring(0, 12000); // cap for speed
+        pdfBuffer = Buffer.from(arrayBuffer);
+        const pdfData = await pdfParse(pdfBuffer);
+        extractedText = (pdfData.text || '').trim();
+        pageCount = Number(pdfData.numpages) || pageCount;
       }
     } catch (parseErr: any) {
       console.warn('[generate-from-paper] PDF parse failed:', parseErr.message);
     }
+
+    // OCR Fallback: If the text is empty/too short (scanned PDF), run it through OCR
+    if (extractedText.length < 100 && pdfBuffer) {
+      try {
+        console.log(`[generate-from-paper] Extracted text too short (${extractedText.length} chars). Falling back to OCR pipeline...`);
+        extractedText = await performOcrPipeline(pdfBuffer, pageCount);
+      } catch (ocrErr: any) {
+        console.error('[generate-from-paper] OCR fallback failed:', ocrErr.message);
+      }
+    }
+
+    // Cap the text for the AI query context window
+    extractedText = extractedText.substring(0, 12000);
 
     if (extractedText.length < 100) {
       res.status(422).json({ error: 'Could not extract enough text from this paper to generate questions.' });
@@ -943,5 +1069,4 @@ router.post('/generate-from-paper', async (req: AuthRequest, res: Response): Pro
     res.status(500).json({ error: 'Failed to generate custom practice quiz.' });
   }
 });
-
 export default router;
