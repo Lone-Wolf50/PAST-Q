@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import ReportModal from '../components/ReportModal';
 import { AlertModal } from '../components/ui/AlertModal';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 
 const PaperViewerPage = () => {
   const { id } = useParams();
@@ -95,7 +96,20 @@ const PaperViewerPage = () => {
     setDownloading(true);
     try {
       const res = await apiFetch(`/papers/${id}/download`, { method: 'POST', token: token! });
-      window.open(res.file_url, '_blank');
+      // Fetch as blob to force a real download (cross-origin URLs ignore the download attr)
+      const blob = await fetch(res.file_url).then(r => r.blob());
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      // Derive a filename from the paper title or fall back to a generic name
+      const fileName = paper?.title
+        ? `${paper.title.replace(/[^a-zA-Z0-9_\- ]/g, '').trim()}.pdf`
+        : 'past-question.pdf';
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
     } catch (err: any) {
       setAlert({
         show: true,
@@ -108,8 +122,31 @@ const PaperViewerPage = () => {
     }
   };
 
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeModalConfig, setUpgradeModalConfig] = useState({
+    title: '',
+    message: '',
+    confirmText: 'View Plans',
+    cancelText: 'Maybe Later'
+  });
+
   const handleAskAI = () => {
+    if (!isPremium) {
+      setUpgradeModalConfig({
+        title: 'Premium Feature',
+        message: 'Cortana paper analysis is only available on premium plans. Upgrade to Basic, Plus, or Pro to chat with Cortana about this paper!',
+        confirmText: 'View Pricing',
+        cancelText: 'Maybe Later'
+      });
+      setShowUpgradeModal(true);
+      return;
+    }
     navigate(`/ask-ai?paperId=${id}`);
+  };
+
+  const handleConfirmUpgrade = () => {
+    setShowUpgradeModal(false);
+    navigate('/pricing');
   };
 
   const handleGeneratePracticeQuiz = async () => {
@@ -127,12 +164,23 @@ const PaperViewerPage = () => {
         throw new Error('Failed to generate practice quiz.');
       }
     } catch (err: any) {
-      setAlert({
-        show: true,
-        title: 'Quiz Generation Failed',
-        message: err.message || 'Cortana had trouble compiling questions from this paper. Please try again.',
-        variant: 'error'
-      });
+      const body = err?.body || err?.response || err;
+      if (body?.error === 'quiz_limit_reached') {
+        setUpgradeModalConfig({
+          title: '📝 Quiz Limit Reached',
+          message: body.message || 'You have reached your daily quiz limit. Upgrade your plan for more practice quizzes!',
+          confirmText: 'View Plans',
+          cancelText: 'Maybe Later',
+        });
+        setShowUpgradeModal(true);
+      } else {
+        setAlert({
+          show: true,
+          title: 'Quiz Generation Failed',
+          message: err.message || 'Cortana had trouble compiling questions from this paper. Please try again.',
+          variant: 'error'
+        });
+      }
     } finally {
       setGeneratingQuiz(false);
     }
@@ -261,6 +309,7 @@ const PaperViewerPage = () => {
           >
             <Sparkles className="w-4 h-4" />
             <span className="whitespace-nowrap">Ask Tutor</span>
+            {!isPremium && <span className="ml-1 px-1.5 py-0.5 text-[9px] bg-white/20 rounded-md uppercase font-black tracking-wider">Basic+</span>}
           </button>
         </div>
       </div>
@@ -457,7 +506,8 @@ const PaperViewerPage = () => {
                   className="w-full py-3 rounded-2xl bg-theme-surface border border-theme-border hover:bg-theme-surface-2 text-theme-primary text-xs font-bold transition-all flex items-center justify-center gap-2"
                 >
                   <Sparkles size={14} className="text-indigo-400" />
-                  Explain this paper more
+                  <span>Explain this paper more</span>
+                  {!isPremium && <span className="px-1.5 py-0.5 text-[9px] bg-indigo-500/10 text-indigo-400 rounded-md uppercase font-black tracking-wider">Basic+</span>}
                 </button>
                 <button 
                   onClick={handleGeneratePracticeQuiz}
@@ -500,6 +550,18 @@ const PaperViewerPage = () => {
         title={alert.title}
         message={alert.message}
         variant={alert.variant}
+      />
+
+      {/* Upgrade Modal */}
+      <ConfirmModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        onConfirm={handleConfirmUpgrade}
+        title={upgradeModalConfig.title}
+        message={upgradeModalConfig.message}
+        confirmText={upgradeModalConfig.confirmText}
+        cancelText={upgradeModalConfig.cancelText}
+        variant="info"
       />
     </div>
   );

@@ -20,6 +20,7 @@ import streaksRouter from './routes/streaks';
 import quizRouter from './routes/quiz';
 import { supabase } from './lib/supabase';
 import { redis } from './lib/redis';
+import './lib/cron';
 
 dotenv.config();
 

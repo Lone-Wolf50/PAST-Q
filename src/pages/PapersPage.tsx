@@ -205,12 +205,20 @@ const PapersPage = () => {
         if (action === 'view') {
           window.open(res.file_url.split('?')[0], '_blank');
         } else {
+          // Fetch as blob to force a real download (cross-origin URLs ignore the download attr)
+          const blob = await fetch(res.file_url).then(r => r.blob());
+          const blobUrl = URL.createObjectURL(blob);
           const link = document.createElement('a');
-          link.href = res.file_url;
-          link.download = '';
+          link.href = blobUrl;
+          const matchedPaper = papers.find(p => p.id === paperId);
+          const fileName = matchedPaper?.title
+            ? `${matchedPaper.title.replace(/[^a-zA-Z0-9_\- ]/g, '').trim()}.pdf`
+            : 'past-question.pdf';
+          link.download = fileName;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
         }
       }
     } catch (err: any) {

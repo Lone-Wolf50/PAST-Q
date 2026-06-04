@@ -135,6 +135,36 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
+    // Enforce pricing plan quiz limits
+    const { data: limitUserData, error: userErr } = await supabase
+      .from('upsa_users')
+      .select('plan')
+      .eq('id', userId)
+      .single();
+
+    if (userErr) throw userErr;
+    const plan = (limitUserData?.plan || 'free').toLowerCase();
+
+    if (plan === 'free' || plan === 'basic') {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count, error: countErr } = await supabase
+        .from('upsa_sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('started_at', twentyFourHoursAgo);
+
+      if (countErr) throw countErr;
+
+      const limit = plan === 'free' ? 3 : 20;
+      if ((count || 0) >= limit) {
+        res.status(403).json({
+          error: 'quiz_limit_reached',
+          message: `You have reached your daily limit of ${limit} quizzes on the ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan. Upgrade to Plus or Pro to take unlimited quizzes!`
+        });
+        return;
+      }
+    }
+
     // Otherwise, create a new session with the chosen subject
     const { data: newSession, error: createErr } = await supabase
       .from('upsa_sessions')
@@ -231,9 +261,19 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
       shownIds = [];
     }
 
+    // Enforce pricing plan quiz limits
+    const { data: limitUserData, error: userErr } = await supabase
+      .from('upsa_users')
+      .select('plan')
+      .eq('id', userId)
+      .single();
+
+    if (userErr) throw userErr;
+    const plan = (limitUserData?.plan || 'free').toLowerCase();
+
     const isCustom = shownIds.includes('is_custom:true');
     const questionIds = shownIds.filter(id => id !== 'is_custom:true');
-    const totalQuestions = isCustom ? questionIds.length : 10;
+    const totalQuestions = isCustom ? questionIds.length : (plan === 'free' ? 5 : 10);
 
     // Fetch submissions for this session's questions
     let answeredIds = new Set<string>();
@@ -262,13 +302,20 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
         return;
       }
 
-      res.status(200).json({ question, totalQuestions });
+      res.status(200).json({ question, totalQuestions, questionIndex: answeredIds.size + 1, subject: session.subject });
       return;
     }
 
     // All questions in the current shownIds list are answered.
     // If we've already reached the limit, this session is completed!
-    if (isCustom || questionIds.length >= 10) {
+    if (isCustom || questionIds.length >= totalQuestions) {
+      if (plan === 'free' && !isCustom && questionIds.length >= 5) {
+        res.status(403).json({
+          error: 'quiz_limit_reached',
+          message: 'You have reached the 5-question Free plan limit for this quiz. Upgrade to a paid plan to take full-length 10-question quizzes!'
+        });
+        return;
+      }
       res.status(400).json({ error: 'This quiz session is already completed.', isCompleted: true });
       return;
     }
@@ -302,7 +349,7 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
       time_limit_seconds: dbQuestion.time_limit_seconds
     };
 
-    res.status(200).json({ question: clientQuestion, totalQuestions });
+    res.status(200).json({ question: clientQuestion, totalQuestions, questionIndex: answeredIds.size + 1, subject: session.subject });
   } catch (err: any) {
     console.error('❌ [Quiz Question] Error:', err.message);
     res.status(500).json({ error: 'Failed to serve next question.' });
@@ -395,9 +442,18 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
       shownIds = [];
     }
 
+    const { data: limitUserData, error: userErr } = await supabase
+      .from('upsa_users')
+      .select('plan')
+      .eq('id', userId)
+      .single();
+
+    if (userErr) throw userErr;
+    const plan = (limitUserData?.plan || 'free').toLowerCase();
+
     const isCustom = shownIds.includes('is_custom:true');
     const questionIds = shownIds.filter(id => id !== 'is_custom:true');
-    const totalQs = isCustom ? questionIds.length : 10;
+    const totalQs = isCustom ? questionIds.length : (plan === 'free' ? 5 : 10);
 
     const questionIndex = questionIds.indexOf(question_id);
     if (questionIndex === -1) {
@@ -937,6 +993,47 @@ router.post('/generate-from-paper', async (req: AuthRequest, res: Response): Pro
   }
 
   try {
+    // ── Enforce plan-based paper quiz limits ──────────────────────────────
+    const { data: limitUser, error: limitErr } = await supabase
+      .from('upsa_users')
+      .select('plan')
+      .eq('id', userId)
+      .single();
+
+    if (limitErr) throw limitErr;
+    const plan = (limitUser?.plan || 'free').toLowerCase();
+
+    if (plan === 'free' || plan === 'basic') {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      // Count custom (paper-generated) sessions in the last 24h
+      const { data: recentSessions, error: countErr } = await supabase
+        .from('upsa_sessions')
+        .select('questions_shown')
+        .eq('user_id', userId)
+        .gte('started_at', twentyFourHoursAgo);
+
+      if (countErr) throw countErr;
+
+      // Only count sessions that are custom (paper-generated) quizzes
+      const customCount = (recentSessions || []).filter((s: any) => {
+        try {
+          const shown = typeof s.questions_shown === 'string'
+            ? JSON.parse(s.questions_shown)
+            : s.questions_shown;
+          return Array.isArray(shown) && shown.includes('is_custom:true');
+        } catch { return false; }
+      }).length;
+
+      const limit = plan === 'free' ? 5 : 20;
+      if (customCount >= limit) {
+        res.status(403).json({
+          error: 'quiz_limit_reached',
+          message: `You've used all ${limit} practice quizzes for today on the ${plan === 'free' ? 'Free' : 'Basic'} plan. Upgrade for more, or come back in 24 hours!`
+        });
+        return;
+      }
+    }
+
     // 1. Fetch paper metadata + file_url
     const { data: paper, error: paperErr } = await supabase
       .from('upsa_papers')

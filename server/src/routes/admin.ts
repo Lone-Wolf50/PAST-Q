@@ -13,6 +13,7 @@ import { generatePaperInsights, getProcessingState, isProcessing } from '../lib/
 import { deleteUserComplete } from '../lib/user-deletion';
 import { sendGeneralEmail } from '../lib/mailer';
 import { Ratelimit } from '@upstash/ratelimit';
+import { runWeeklyDigestJob } from '../lib/cron';
 
 const router = Router();
 const upload = multer({
@@ -1166,7 +1167,7 @@ router.post('/ai-config', async (req: AuthRequest, res: Response) => {
 // If `recipients` array is provided, send only to those emails (individual mode).
 // Otherwise, send to ALL verified students (broadcast mode).
 router.post('/broadcast', async (req: AuthRequest, res: Response) => {
-  const { subject, title, body: bodyText, recipients } = req.body;
+  const { subject, title, body: bodyText, recipients, sendInAppNotification } = req.body;
 
   if (!subject || !title || !bodyText) {
     res.status(400).json({ error: 'Subject, title, and body are required.' });
@@ -1222,6 +1223,45 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
 
     // Log the broadcast as an admin notification
     const isIndividual = Array.isArray(recipients) && recipients.length > 0;
+
+    // In-app notifications
+    if (sendInAppNotification) {
+      let targetUserIds: string[] = [];
+      if (isIndividual) {
+        const { data: usersData } = await supabase
+          .from('upsa_users')
+          .select('id')
+          .in('email', emails);
+        if (usersData) {
+          targetUserIds = usersData.map((u: any) => u.id);
+        }
+      } else {
+        const { data: usersData } = await supabase
+          .from('upsa_users')
+          .select('id')
+          .eq('role', 'student');
+        if (usersData) {
+          targetUserIds = usersData.map((u: any) => u.id);
+        }
+      }
+
+      if (targetUserIds.length > 0) {
+        const notifications = targetUserIds.map((userId) => ({
+          user_id: userId,
+          title: title,
+          message: bodyText,
+          type: 'info',
+          is_read: false
+        }));
+
+        const NOTIF_BATCH = 500;
+        for (let i = 0; i < notifications.length; i += NOTIF_BATCH) {
+          const batch = notifications.slice(i, i + NOTIF_BATCH);
+          await supabase.from('upsa_notifications').insert(batch);
+        }
+      }
+    }
+
     await supabase.from('upsa_admin_notifications').insert({
       title: isIndividual ? '📧 Individual Email Sent' : '📧 Broadcast Email Sent',
       message: `Subject: "${subject}" — Sent to ${sent}/${emails.length} ${isIndividual ? 'recipient(s)' : 'students'}. ${failed > 0 ? `${failed} failed.` : ''}`,
@@ -1232,6 +1272,16 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     console.error('Broadcast error:', err);
     res.status(500).json({ error: 'Failed to send broadcast.' });
+  }
+});
+
+// ── Test Weekly Digest Cron Job ───────
+router.post('/test-weekly-digest', protect, adminOnly, async (_req: AuthRequest, res: Response) => {
+  try {
+    await runWeeklyDigestJob();
+    res.status(200).json({ message: 'Weekly digest job triggered successfully.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to run weekly digest.' });
   }
 });
 

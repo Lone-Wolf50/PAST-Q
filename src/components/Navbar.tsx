@@ -1,13 +1,48 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FileText, User, Tag, BrainCircuit, HelpCircle, Trophy } from 'lucide-react';
+import { Home, FileText, User, Tag, BrainCircuit, HelpCircle, Trophy, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { clsx } from 'clsx';
-import { Fragment } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { ThemeToggle } from './ui/ThemeToggle';
+import { apiFetch } from '../lib/api';
 
 const Navbar = () => {
   const location = useLocation();
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, token } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchUnreadCount = async () => {
+    if (!token) return;
+    try {
+      const res = await apiFetch('/profile/notifications', { token });
+      if (res.notifications) {
+        const unread = res.notifications.filter((n: any) => !n.is_read).length;
+        setUnreadCount(unread);
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchUnreadCount();
+    } else {
+      setUnreadCount(0);
+    }
+
+    const handleUpdate = () => {
+      fetchUnreadCount();
+    };
+
+    window.addEventListener('notifications_updated', handleUpdate);
+    const interval = setInterval(fetchUnreadCount, 30000);
+
+    return () => {
+      window.removeEventListener('notifications_updated', handleUpdate);
+      clearInterval(interval);
+    };
+  }, [token]);
 
   const desktopNavLinks = [
     { name: 'Home', path: '/', icon: Home },
@@ -102,6 +137,18 @@ const Navbar = () => {
             {isLoggedIn ? (
               <>
                 <ThemeToggle />
+                <Link
+                  to="/notifications"
+                  className="relative p-2 rounded-xl bg-theme-surface border border-theme-border hover:bg-theme-surface-2 transition-colors text-theme-secondary hover:text-theme-primary flex items-center justify-center"
+                  title="Notifications"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 text-[9px] font-black text-white rounded-full flex items-center justify-center shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse">
+                      {unreadCount}
+                    </span>
+                  )}
+                </Link>
                 <Link
                   to="/profile"
                   className="hidden md:flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-theme-surface border border-theme-border hover:bg-theme-surface-2 transition-colors"
@@ -202,13 +249,21 @@ const Navbar = () => {
                   >
                     {link.name === 'Account' && user?.avatar_url ? (
                       <div className={clsx(
-                        "w-5 h-5 rounded-full overflow-hidden border",
+                        "w-5 h-5 rounded-full overflow-hidden border relative",
                         isActive ? "border-indigo-400" : "border-theme-border"
                       )}>
                         <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                        {unreadCount > 0 && (
+                          <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-theme-surface" />
+                        )}
                       </div>
                     ) : (
-                      <Icon className={clsx('w-5 h-5', isActive && 'drop-shadow-[0_0_6px_rgba(99,102,241,0.7)]')} />
+                      <div className="relative">
+                        <Icon className={clsx('w-5 h-5', isActive && 'drop-shadow-[0_0_6px_rgba(99,102,241,0.7)]')} />
+                        {link.name === 'Account' && unreadCount > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-theme-surface animate-pulse" />
+                        )}
+                      </div>
                     )}
                     <span className={clsx('text-[10px] font-semibold', isActive && 'text-indigo-300')}>{link.name}</span>
                   </Link>

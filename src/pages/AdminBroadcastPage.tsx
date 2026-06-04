@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useBlocker } from 'react-router-dom';
-import { Send, Mail, AlertTriangle, CheckCircle2, Loader2, Users, FileText, Type, AlignLeft, User, X, Plus, Save, Trash2 } from 'lucide-react';
+import { Send, Mail, AlertTriangle, CheckCircle2, Loader2, Users, FileText, Type, AlignLeft, User, X, Plus, Save, Trash2, Bell } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
 
@@ -15,6 +15,7 @@ const AdminBroadcastPage = () => {
   const [result, setResult] = useState<{ total: number; sent: number; failed: number; errors?: string[] } | null>(null);
   const [error, setError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [sendInAppNotification, setSendInAppNotification] = useState(false);
 
   // Individual mode
   const [mode, setMode] = useState<'broadcast' | 'individual'>(() => 
@@ -137,7 +138,7 @@ const AdminBroadcastPage = () => {
 
     try {
       const token = localStorage.getItem('admin_token')!;
-      const payload: any = { subject, title, body };
+      const payload: any = { subject, title, body, sendInAppNotification };
       if (mode === 'individual') {
         payload.recipients = recipients;
       }
@@ -150,6 +151,7 @@ const AdminBroadcastPage = () => {
       setSubject('');
       setTitle('');
       setBody('');
+      setSendInAppNotification(false);
       if (mode === 'individual') setRecipients([]);
     } catch (err: any) {
       setError(err.message || 'Failed to send broadcast.');
@@ -339,6 +341,24 @@ const AdminBroadcastPage = () => {
                   rows={8}
                   className="w-full px-4 py-3 bg-theme-base/60 border border-theme-border rounded-xl text-theme-primary font-medium placeholder:text-theme-muted/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all text-sm resize-none leading-relaxed"
                 />
+              </div>
+
+              {/* Send In-App Notification Option */}
+              <div className="flex items-center gap-3 pt-4 border-t border-theme-border/30">
+                <input
+                  id="broadcast-in-app-notification"
+                  type="checkbox"
+                  checked={sendInAppNotification}
+                  onChange={(e) => setSendInAppNotification(e.target.checked)}
+                  className="w-4 h-4 rounded border-theme-border bg-theme-base/60 text-indigo-500 focus:ring-indigo-500/30 transition-all cursor-pointer"
+                />
+                <label
+                  htmlFor="broadcast-in-app-notification"
+                  className="text-xs font-bold text-theme-secondary uppercase tracking-wider cursor-pointer select-none flex items-center gap-1.5"
+                >
+                  <Bell className="w-3.5 h-3.5 text-indigo-400" />
+                  Also Send as In-App Notification (Student Dashboard)
+                </label>
               </div>
             </div>
 

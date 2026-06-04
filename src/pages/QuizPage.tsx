@@ -4,7 +4,7 @@ import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { clsx } from 'clsx';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { Link, useSearchParams, useBlocker } from 'react-router-dom';
+import { Link, useSearchParams, useBlocker, useNavigate } from 'react-router-dom';
 
 // Lazy-load ReactMarkdown for performance — only loaded when Cortana drawer opens
 const ReactMarkdown = lazy(() => import('react-markdown'));
@@ -22,6 +22,7 @@ const QuizPage = () => {
   const { token } = useAuth();
   const [searchParams] = useSearchParams();
   const sessionIdParam = searchParams.get('session_id');
+  const navigate = useNavigate();
   
   // Quiz State
   const [questionNumber, setQuestionNumber] = useState(0);
@@ -48,6 +49,13 @@ const QuizPage = () => {
   const [sessionStats, setSessionStats] = useState<any>(null);
   const [isQuizFinished, setIsQuizFinished] = useState(false);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeModalConfig, setUpgradeModalConfig] = useState({
+    title: '',
+    message: '',
+    confirmText: 'View Plans',
+    cancelText: 'Maybe Later'
+  });
 
   // Blocker for client-side navigation warning
   const blocker = useBlocker(
@@ -260,7 +268,18 @@ const QuizPage = () => {
         throw new Error('Failed to create session');
       }
     } catch (err: any) {
-      setError(err.message || 'Error starting session');
+      const body = err?.body || err?.response || err;
+      if (body?.error === 'quiz_limit_reached') {
+        setUpgradeModalConfig({
+          title: '📝 Quiz Limit Reached',
+          message: body.message || 'You have reached your daily quiz limit. Upgrade your plan for more practice quizzes!',
+          confirmText: 'View Plans',
+          cancelText: 'Maybe Later'
+        });
+        setShowUpgradeModal(true);
+      } else {
+        setError(err.message || 'Error starting session');
+      }
       setLoading(false);
     }
   };
@@ -270,6 +289,10 @@ const QuizPage = () => {
     setError('');
     setSelectedAnswer(null);
     setResult(null);
+    setCortanaDrawerOpen(false);
+    setCortanaExplanation('');
+    setCortanaError('');
+    setCurrentQuestion(null);
     const targetSessionId = sessId || activeSessionId;
     try {
       const url = targetSessionId ? `/quiz/question?session_id=${targetSessionId}` : '/quiz/question';
@@ -277,7 +300,14 @@ const QuizPage = () => {
       if (res.question) {
         setCurrentQuestion(res.question);
         setTimeLeft(res.question.time_limit_seconds);
-        setQuestionNumber(prev => prev + 1);
+        if (res.questionIndex) {
+          setQuestionNumber(res.questionIndex);
+        } else {
+          setQuestionNumber(prev => prev + 1);
+        }
+        if (res.subject) {
+          setSelectedSubject(res.subject);
+        }
         if (res.totalQuestions) {
           setTotalQuestions(res.totalQuestions);
         }
@@ -285,7 +315,18 @@ const QuizPage = () => {
         setError('Failed to fetch next question.');
       }
     } catch (err: any) {
-      setError(err.message || 'Error loading question.');
+      const body = err?.body || err?.response || err;
+      if (body?.error === 'quiz_limit_reached') {
+        setUpgradeModalConfig({
+          title: '📝 Quiz Limit Reached',
+          message: body.message || 'You have reached the 5-question Free plan limit for this quiz. Upgrade to a paid plan to take full-length 10-question quizzes!',
+          confirmText: 'View Plans',
+          cancelText: 'Maybe Later'
+        });
+        setShowUpgradeModal(true);
+      } else {
+        setError(err.message || 'Error loading question.');
+      }
     } finally {
       setLoading(false);
     }
@@ -383,6 +424,11 @@ const QuizPage = () => {
     }
   };
 
+  const handleConfirmUpgrade = () => {
+    setShowUpgradeModal(false);
+    navigate('/pricing');
+  };
+
   // Render Start Screen with Rules
   if (!isQuizActive) {
     return (
@@ -470,22 +516,54 @@ const QuizPage = () => {
           </button>
 
           {error && (
-            <p className="text-xs font-bold text-red-400 text-center">{error}</p>
+            <div className="flex flex-col items-center gap-3 mt-2">
+              <p className="text-xs font-bold text-red-400 text-center">{error}</p>
+              {(error.toLowerCase().includes('limit') || error.toLowerCase().includes('upgrade')) && (
+                <Link
+                  to="/pricing"
+                  className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 active:scale-95"
+                >
+                  View Pricing & Upgrade
+                </Link>
+              )}
+            </div>
           )}
         </div>
       </div>
     );
   }
 
-  // Render Loading state
+  // Render Loading state (Premium Skeleton Loader)
   if (loading && !currentQuestion) {
     return (
-      <div className="w-full flex-grow flex items-center justify-center min-h-[60vh]">
-        <div className="relative w-12 h-12">
-          <svg className="absolute inset-0 w-12 h-12 animate-spin text-indigo-500" viewBox="0 0 64 64" fill="none">
-            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" className="opacity-10" />
-            <circle cx="32" cy="32" r="28" stroke="indigo" strokeWidth="4" strokeDasharray="40 120" />
-          </svg>
+      <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-6 animate-fade-in select-none">
+        {/* Status Bar Skeleton */}
+        <div className="w-full flex flex-col gap-3">
+          <div className="w-full flex items-center justify-between">
+            <div className="h-4 w-24 bg-theme-border/50 rounded-lg animate-pulse" />
+            <div className="h-8 w-8 bg-theme-border/50 rounded-xl animate-pulse" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-5 w-16 bg-theme-border/50 rounded-full animate-pulse" />
+            <div className="h-5 w-16 bg-theme-border/50 rounded-full animate-pulse" />
+          </div>
+        </div>
+
+        {/* Question Card Skeleton */}
+        <div className="w-full rounded-2xl bg-theme-surface/40 border border-theme-border/40 p-6 backdrop-blur-sm shadow-xl flex flex-col gap-2">
+          <div className="h-4 w-full bg-theme-border/50 rounded-lg animate-pulse" />
+          <div className="h-4 w-5/6 bg-theme-border/50 rounded-lg animate-pulse" />
+          <div className="h-4 w-4/6 bg-theme-border/50 rounded-lg animate-pulse" />
+        </div>
+
+        {/* Options Skeleton */}
+        <div className="w-full flex flex-col gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="w-full h-[56px] rounded-2xl border border-theme-border/30 bg-theme-surface/20 flex items-center px-4 gap-4 animate-pulse">
+              <div className="w-7 h-7 rounded-lg bg-theme-border/50" />
+              <div className="h-4 w-3/4 bg-theme-border/50 rounded-lg" />
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -599,61 +677,67 @@ const QuizPage = () => {
   return (
     <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-6 animate-fade-in select-none">
       {currentQuestion && (
-        <div className="w-full flex flex-col gap-6">
+        <div className="w-full flex flex-col gap-6 animate-slide-up">
           {/* Status Bar */}
           <div className="w-full flex flex-col gap-3">
-            {/* Top row: question counter + timer */}
-            <div className="w-full flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-widest text-theme-muted">
-                Question <span className="text-indigo-400">{questionNumber}</span> of <span className="text-theme-primary">10</span>
-              </span>
-
-              <button
-                onClick={() => setConfirmQuitOpen(true)}
-                className="text-[10px] font-extrabold uppercase tracking-widest text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-              >
-                Quit Arena
-              </button>
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">
+                  {selectedSubject}
+                </span>
+                <span className="text-sm font-black text-theme-primary tracking-tight">
+                  Question <span className="text-indigo-400">{questionNumber}</span> of <span className="text-theme-primary">{totalQuestions}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Timer */}
+                {!result && (
+                  <div className={clsx(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors shadow-sm",
+                    timeLeft <= 10
+                      ? "bg-red-500/10 border-red-500/30 text-red-400 animate-pulse"
+                      : "bg-theme-surface border-theme-border text-theme-secondary"
+                  )}>
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{timeLeft}s</span>
+                  </div>
+                )}
+                {/* Quit Arena Button */}
+                <button
+                  onClick={() => setConfirmQuitOpen(true)}
+                  title="Quit Arena"
+                  className="p-2 rounded-xl bg-theme-surface border border-theme-border hover:bg-theme-surface-2 text-theme-muted hover:text-red-400 transition-colors shadow-sm cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Bottom row: category + difficulty badges & timer */}
-            <div className="flex items-center justify-between">
-              <div className="flex gap-2">
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                  {currentQuestion.category}
-                </span>
-                <span className={clsx(
-                  "px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border",
-                  currentQuestion.difficulty === 'Easy' && "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
-                  currentQuestion.difficulty === 'Medium' && "bg-amber-500/10 border-amber-500/20 text-amber-400",
-                  currentQuestion.difficulty === 'Hard' && "bg-red-500/10 border-red-500/20 text-red-400"
-                )}>
-                  {currentQuestion.difficulty}
-                </span>
-              </div>
-
-              {/* Timer */}
-              <div className={clsx(
-                "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-colors",
-                timeLeft <= 10
-                  ? "bg-red-500/10 border-red-500/30 text-red-400 animate-pulse"
-                  : "bg-theme-surface border-theme-border text-theme-secondary"
+            {/* Badges Row */}
+            <div className="flex gap-2">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                {currentQuestion.category}
+              </span>
+              <span className={clsx(
+                "px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border",
+                currentQuestion.difficulty === 'Easy' && "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+                currentQuestion.difficulty === 'Medium' && "bg-amber-500/10 border-amber-500/20 text-amber-400",
+                currentQuestion.difficulty === 'Hard' && "bg-red-500/10 border-red-500/20 text-red-400"
               )}>
-                <Clock className="w-3.5 h-3.5" />
-                <span>{timeLeft}s</span>
-              </div>
+                {currentQuestion.difficulty}
+              </span>
             </div>
           </div>
 
           {/* Question Body */}
-          <div className="w-full rounded-2xl bg-theme-surface/60 border border-theme-border/50 p-6 backdrop-blur-sm shadow-xl">
+          <div className="w-full rounded-2xl bg-theme-surface/60 border border-theme-border/50 p-5 md:p-6 backdrop-blur-sm shadow-xl">
             <p className="text-base font-semibold leading-relaxed text-theme-primary">
               {currentQuestion.body}
             </p>
           </div>
 
           {/* Options */}
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3.5">
             {currentQuestion.options.map((option, idx) => {
               const label = ['A', 'B', 'C', 'D'][idx] ?? String(idx + 1);
               const isSelected = selectedAnswer === option;
@@ -666,7 +750,7 @@ const QuizPage = () => {
                   disabled={!!result || isSubmitting}
                   onClick={() => setSelectedAnswer(option)}
                   className={clsx(
-                    "w-full text-left px-4 py-4 rounded-xl border font-semibold text-sm transition-all duration-200 cursor-pointer flex items-center gap-4",
+                    "w-full text-left px-4 py-4 rounded-2xl border font-semibold text-sm transition-all duration-200 cursor-pointer flex items-center gap-4",
                     isSelected && !result && "bg-indigo-500/10 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.25)]",
                     !isSelected && !result && "bg-theme-surface/40 border-theme-border hover:border-theme-border/80 hover:bg-theme-surface/60",
                     result && isCorrectResult && "bg-emerald-500/10 border-emerald-500",
@@ -702,76 +786,79 @@ const QuizPage = () => {
 
           {/* Submit / Feedback Result Panel */}
           {!result ? (
-            <button
-              onClick={handleSubmit}
-              disabled={!selectedAnswer || isSubmitting}
-              className="w-full py-4 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-2xl font-bold text-sm transition-all shadow-md shadow-indigo-500/15 active:scale-98 cursor-pointer flex items-center justify-center gap-2"
-            >
-              {isSubmitting ? 'Verifying Answer...' : 'Submit Answer'}
-            </button>
+            <div className={clsx(
+              "w-full",
+              "fixed bottom-0 left-0 right-0 p-4 bg-theme-base/95 border-t border-theme-border/60 backdrop-blur-md z-30",
+              "md:relative md:bottom-auto md:p-0 md:bg-transparent md:border-t-0 md:backdrop-blur-none"
+            )}>
+              <button
+                onClick={handleSubmit}
+                disabled={!selectedAnswer || isSubmitting}
+                className="w-full py-4 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-2xl font-bold text-sm transition-all shadow-md shadow-indigo-500/15 active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? 'Verifying Answer...' : 'Submit Answer'}
+              </button>
+            </div>
           ) : (
-              <div className="flex flex-col gap-4 animate-fade-in">
-                <div className={clsx(
-                  "w-full rounded-2xl border p-5 flex items-start gap-4",
-                  result.is_correct
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                    : "bg-red-500/10 border-red-500/30 text-red-400"
-                )}>
-                  {result.is_correct ? (
-                    <CheckCircle2 className="w-6 h-6 shrink-0 mt-0.5" />
-                  ) : (
-                    <XCircle className="w-6 h-6 shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <h4 className="text-base font-extrabold leading-none">
-                      {result.is_correct ? 'Correct Answer!' : result.is_expired ? 'Time Expired!' : 'Incorrect Answer!'}
-                    </h4>
-                    <p className="text-xs font-semibold mt-2 text-theme-secondary leading-relaxed">
-                      {result.is_correct
-                        ? `Nice work! You earned +${result.points_awarded} points for answering correctly in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
-                        : result.is_expired
-                          ? `Time ran out before you could answer. Keep going!`
-                          : `That wasn't the right answer. The correct answers will be revealed when you complete the quiz.`
-                      }
-                    </p>
+            <div className="flex flex-col gap-4 animate-fade-in w-full">
+              {/* Feedback Banner (stays in scroll flow) */}
+              <div className={clsx(
+                "w-full rounded-2xl border p-5 flex items-start gap-4",
+                result.is_correct
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : "bg-red-500/10 border-red-500/30 text-red-400"
+              )}>
+                {result.is_correct ? (
+                  <CheckCircle2 className="w-6 h-6 shrink-0 mt-0.5" />
+                ) : (
+                  <XCircle className="w-6 h-6 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <h4 className="text-base font-extrabold leading-none">
+                    {result.is_correct ? 'Correct Answer!' : result.is_expired ? 'Time Expired!' : 'Incorrect Answer!'}
+                  </h4>
+                  <p className="text-xs font-semibold mt-2 text-theme-secondary leading-relaxed">
+                    {result.is_correct
+                      ? `Nice work! You earned +${result.points_awarded} points for answering correctly in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
+                      : result.is_expired
+                        ? `Time ran out before you could answer. Keep going!`
+                        : `That wasn't the right answer. The correct answers will be revealed when you complete the quiz.`
+                    }
+                  </p>
 
-                    {/* Badges Congratulation banner */}
-                    {result.earned_badges && result.earned_badges.length > 0 && (
-                      <div className="mt-4 p-3 bg-indigo-500/15 border border-indigo-500/25 rounded-xl flex flex-col gap-1.5">
-                        <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[11px] uppercase tracking-wider">
-                          <Sparkles className="w-3.5 h-3.5" />
-                          Badge Unlocked!
-                        </div>
-                        {result.earned_badges.map((slug: string) => (
-                          <span key={slug} className="text-xs font-bold text-white">
-                            🎉 You earned the "{slug.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}" Badge!
-                          </span>
-                        ))}
+                  {/* Badges Congratulation banner */}
+                  {result.earned_badges && result.earned_badges.length > 0 && (
+                    <div className="mt-4 p-3 bg-indigo-500/15 border border-indigo-500/25 rounded-xl flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[11px] uppercase tracking-wider">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Badge Unlocked!
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Ask Cortana Button ── */}
-                <button
-                  onClick={askCortana}
-                  disabled={cortanaLoading}
-                  className="w-full py-3.5 flex items-center justify-center gap-2.5 rounded-2xl border border-violet-500/40 bg-gradient-to-r from-violet-500/10 to-indigo-500/10 hover:from-violet-500/20 hover:to-indigo-500/20 text-violet-300 font-bold text-sm transition-all duration-200 cursor-pointer shadow-[0_0_20px_rgba(139,92,246,0.1)] hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-[0.99]"
-                >
-                  {cortanaLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Bot className="w-4 h-4" />
+                      {result.earned_badges.map((slug: string) => (
+                        <span key={slug} className="text-xs font-bold text-white">
+                          🎉 You earned the "{slug.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}" Badge!
+                        </span>
+                      ))}
+                    </div>
                   )}
-                  {cortanaLoading ? 'Cortana is thinking...' : 'Ask Cortana to Explain'}
-                  {!cortanaLoading && <Sparkles className="w-3.5 h-3.5 opacity-60" />}
-                </button>
+                </div>
+              </div>
 
+              {/* Action Buttons Sticky Container (sticky on mobile, relative on desktop) */}
+              <div className={clsx(
+                "w-full flex flex-col gap-3",
+                "fixed bottom-0 left-0 right-0 p-4 bg-theme-base/95 border-t border-theme-border/60 backdrop-blur-md z-30",
+                "md:relative md:bottom-auto md:p-0 md:bg-transparent md:border-t-0 md:backdrop-blur-none"
+              )}>
+                {/* 1. Next Question Button (Primary) */}
                 <button
                   onClick={() => {
                     if (questionNumber >= totalQuestions) {
                       setIsQuizFinished(true);
                     } else {
+                      setCortanaDrawerOpen(false);
+                      setCortanaExplanation('');
+                      setCortanaError('');
+                      setCurrentQuestion(null);
                       loadNextQuestion();
                     }
                   }}
@@ -779,13 +866,29 @@ const QuizPage = () => {
                     "w-full py-4 rounded-2xl font-bold text-sm transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 shadow-lg",
                     questionNumber >= totalQuestions
                       ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20"
-                      : "bg-theme-surface border border-theme-border text-theme-primary hover:bg-theme-surface-2"
+                      : "bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/20"
                   )}
                 >
                   {questionNumber >= totalQuestions ? 'Finish & View Results' : 'Next Question'}
                   <ArrowRight className="w-4 h-4" />
                 </button>
+
+                {/* 2. Ask Cortana Button (Secondary) */}
+                <button
+                  onClick={askCortana}
+                  disabled={cortanaLoading}
+                  className="w-full py-3.5 flex items-center justify-center gap-2.5 rounded-2xl border border-violet-500/40 bg-gradient-to-r from-violet-500/5 to-indigo-500/5 hover:from-violet-500/10 hover:to-indigo-500/10 text-violet-300 font-bold text-sm transition-all duration-200 cursor-pointer shadow-[0_0_15px_rgba(139,92,246,0.05)] hover:shadow-[0_0_20px_rgba(139,92,246,0.1)] active:scale-[0.99]"
+                >
+                  {cortanaLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Bot className="w-4 h-4 text-violet-400" />
+                  )}
+                  {cortanaLoading ? 'Cortana is thinking...' : 'Ask Cortana to Explain'}
+                  {!cortanaLoading && <Sparkles className="w-3.5 h-3.5 opacity-60" />}
+                </button>
               </div>
+            </div>
           )}
 
           {error && (
@@ -794,7 +897,7 @@ const QuizPage = () => {
         </div>
       )}
 
-      {/* ── CORTANA BOTTOM DRAWER ── */}
+      {/* ── CORTANA POPUP MODAL ── */}
       {/* Backdrop */}
       {cortanaDrawerOpen && (
         <div
@@ -802,22 +905,32 @@ const QuizPage = () => {
           onClick={() => setCortanaDrawerOpen(false)}
         />
       )}
-      {/* Drawer */}
+      {/* Modal / Drawer Wrapper */}
       <div
         className={clsx(
-          'fixed bottom-0 left-0 right-0 z-50 transition-transform duration-500 ease-out',
-          cortanaDrawerOpen ? 'translate-y-0' : 'translate-y-full'
+          'fixed z-50 transition-all duration-300 ease-out',
+          // Mobile: slides up from bottom
+          'bottom-0 left-0 right-0 w-full',
+          // Desktop: centered popup
+          'md:bottom-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-[90vw] md:max-w-xl',
+          cortanaDrawerOpen 
+            ? 'translate-y-0 opacity-100 scale-100' 
+            : 'translate-y-full md:translate-y-10 md:opacity-0 md:scale-95 pointer-events-none'
         )}
       >
-        <div className="mx-auto max-w-xl w-full px-3 pb-6">
-          <div className="rounded-3xl bg-[rgba(15,12,30,0.96)] border border-violet-500/25 shadow-[0_-4px_80px_rgba(139,92,246,0.3)] backdrop-blur-2xl overflow-hidden">
-            {/* Handle */}
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 rounded-full bg-violet-500/40" />
+        <div className="mx-auto w-full px-4 pb-6 md:p-0">
+          <div className={clsx(
+            "bg-[rgba(15,12,30,0.96)] border border-violet-500/25 shadow-[0_-4px_80px_rgba(139,92,246,0.3)] backdrop-blur-2xl overflow-hidden",
+            // Mobile: curved top corners
+            "rounded-t-[2.5rem] md:rounded-[2.5rem]"
+          )}>
+            {/* Handle - mobile only */}
+            <div className="flex justify-center pt-4 pb-2 md:hidden">
+              <div className="w-12 h-1 rounded-full bg-violet-500/30" />
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pb-4 border-b border-violet-500/15">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-violet-500/15">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-500/30">
                   <Bot className="w-4 h-4 text-violet-300" />
@@ -836,7 +949,7 @@ const QuizPage = () => {
             </div>
 
             {/* Body */}
-            <div className="px-5 py-4 max-h-[55vh] overflow-y-auto">
+            <div className="px-6 py-5 max-h-[60vh] md:max-h-[50vh] overflow-y-auto">
               {cortanaLoading && (
                 <div className="flex flex-col items-center gap-4 py-8">
                   <div className="relative">
@@ -846,7 +959,7 @@ const QuizPage = () => {
                     <div className="absolute inset-0 rounded-full border-2 border-violet-500/30 border-t-violet-500 animate-spin" />
                   </div>
                   <div className="flex gap-1">
-                    {[0,1,2].map(i => (
+                    {[0, 1, 2].map(i => (
                       <span key={i} className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
                     ))}
                   </div>
@@ -890,6 +1003,18 @@ const QuizPage = () => {
         confirmText="Quit Arena"
         cancelText="Stay & Complete"
         variant="danger"
+      />
+
+      {/* Upgrade Modal */}
+      <ConfirmModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        onConfirm={handleConfirmUpgrade}
+        title={upgradeModalConfig.title}
+        message={upgradeModalConfig.message}
+        confirmText={upgradeModalConfig.confirmText}
+        cancelText={upgradeModalConfig.cancelText}
+        variant="info"
       />
     </div>
   );

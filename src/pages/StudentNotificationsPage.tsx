@@ -43,6 +43,7 @@ const StudentNotificationsPage = () => {
     try {
       await apiFetch('/profile/notifications/read-all', { method: 'PATCH', token: token! });
       setNotifications(notifications.map(n => ({ ...n, is_read: true })));
+      window.dispatchEvent(new CustomEvent('notifications_updated'));
     } catch (err) {
 
     }
@@ -52,6 +53,7 @@ const StudentNotificationsPage = () => {
     try {
       await apiFetch(`/profile/notifications/${id}/read`, { method: 'PATCH', token: token! });
       setNotifications(notifications.map(n => n.id === id ? { ...n, is_read: true } : n));
+      window.dispatchEvent(new CustomEvent('notifications_updated'));
     } catch (err) {
 
     }
