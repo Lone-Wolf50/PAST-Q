@@ -3,7 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Download, Sparkles, AlertCircle, 
   BookOpen, Target, Lightbulb, ShieldAlert,
-  Loader2, ChevronDown, ChevronUp, Star, Flag, FileCheck
+  Loader2, ChevronDown, ChevronUp, Star, Flag, FileCheck,
+  Trophy
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
@@ -23,6 +24,7 @@ const PaperViewerPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [isInsightsOpen, setIsInsightsOpen] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [generatingQuiz, setGeneratingQuiz] = useState(false);
 
   const [isRevealing, setIsRevealing] = useState(false);
   const [isRevealed, setIsRevealed] = useState(false);
@@ -108,6 +110,32 @@ const PaperViewerPage = () => {
 
   const handleAskAI = () => {
     navigate(`/ask-ai?paperId=${id}`);
+  };
+
+  const handleGeneratePracticeQuiz = async () => {
+    if (generatingQuiz) return;
+    setGeneratingQuiz(true);
+    try {
+      const res = await apiFetch('/quiz/generate-from-paper', {
+        method: 'POST',
+        token: token!,
+        body: { paper_id: id }
+      });
+      if (res.session_id) {
+        navigate(`/quiz?session_id=${res.session_id}`);
+      } else {
+        throw new Error('Failed to generate practice quiz.');
+      }
+    } catch (err: any) {
+      setAlert({
+        show: true,
+        title: 'Quiz Generation Failed',
+        message: err.message || 'Cortana had trouble compiling questions from this paper. Please try again.',
+        variant: 'error'
+      });
+    } finally {
+      setGeneratingQuiz(false);
+    }
   };
 
 
@@ -423,13 +451,30 @@ const PaperViewerPage = () => {
                 )}
              </div>
 
-             <div className="p-5 bg-theme-surface-2/50 border-t border-theme-border shrink-0">
+             <div className="p-5 bg-theme-surface-2/50 border-t border-theme-border shrink-0 flex flex-col gap-2">
                 <button 
                   onClick={handleAskAI}
-                  className="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-2xl bg-theme-surface border border-theme-border hover:bg-theme-surface-2 text-theme-primary text-xs font-bold transition-all flex items-center justify-center gap-2"
                 >
-                  <Sparkles size={14} />
+                  <Sparkles size={14} className="text-indigo-400" />
                   Explain this paper more
+                </button>
+                <button 
+                  onClick={handleGeneratePracticeQuiz}
+                  disabled={generatingQuiz}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 active:scale-98"
+                >
+                  {generatingQuiz ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Cortana is compiling your test...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trophy size={14} className="text-amber-300" />
+                      <span>Practice with AI Quiz</span>
+                    </>
+                  )}
                 </button>
              </div>
           </div>

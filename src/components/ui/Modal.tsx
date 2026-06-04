@@ -10,9 +10,10 @@ interface ModalProps {
   title?: string;
   children: ReactNode;
   maxWidth?: string;
+  hideHeader?: boolean;
 }
 
-export const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-md' }: ModalProps) => {
+export const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-md', hideHeader = false }: ModalProps) => {
   return createPortal(
     <AnimatePresence>
       {isOpen && (
@@ -41,21 +42,23 @@ export const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-md' 
             style={{ background: 'var(--bg-base)', borderColor: 'var(--border)' }}
           >
             {/* Header */}
-            <div
-              className="flex items-center justify-between px-5 py-4 border-b shrink-0 rounded-t-2xl sm:rounded-t-2xl"
-              style={{ borderColor: 'var(--border)', background: 'var(--bg-surface-2)' }}
-            >
-              <h3 className="text-base font-bold text-theme-primary tracking-tight">
-                {title || 'Notice'}
-              </h3>
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-xl text-theme-muted hover:text-theme-primary transition-colors cursor-pointer"
-                style={{ background: 'var(--bg-surface)' }}
+            {!hideHeader && (
+              <div
+                className="flex items-center justify-between px-5 py-4 border-b shrink-0 rounded-t-2xl sm:rounded-t-2xl"
+                style={{ borderColor: 'var(--border)', background: 'var(--bg-surface-2)' }}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+                <h3 className="text-base font-bold text-theme-primary tracking-tight">
+                  {title || 'Notice'}
+                </h3>
+                <button
+                  onClick={onClose}
+                  className="p-1.5 rounded-xl text-theme-muted hover:text-theme-primary transition-colors cursor-pointer"
+                  style={{ background: 'var(--bg-surface)' }}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            )}
 
             {/* Body - scrollable */}
             <div className="p-5 overflow-y-auto flex-1 overscroll-contain">

@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import { HelpCircle, AlertTriangle, Shield, Clock, ArrowRight, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy } from 'lucide-react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { HelpCircle, AlertTriangle, Shield, Clock, ArrowRight, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy, Bot, X, Loader2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { clsx } from 'clsx';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+
+// Lazy-load ReactMarkdown for performance — only loaded when Cortana drawer opens
+const ReactMarkdown = lazy(() => import('react-markdown'));
 
 interface Question {
   id: string;
@@ -17,6 +20,8 @@ interface Question {
 
 const QuizPage = () => {
   const { token } = useAuth();
+  const [searchParams] = useSearchParams();
+  const sessionIdParam = searchParams.get('session_id');
   
   // Quiz State
   const [questionNumber, setQuestionNumber] = useState(0);
@@ -27,6 +32,8 @@ const QuizPage = () => {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [totalQuestions, setTotalQuestions] = useState(10);
   
   // Subject State
   const [subjects, setSubjects] = useState<any[]>([]);
@@ -41,6 +48,12 @@ const QuizPage = () => {
   const [sessionStats, setSessionStats] = useState<any>(null);
   const [isQuizFinished, setIsQuizFinished] = useState(false);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
+
+  // Cortana Explainer state
+  const [cortanaDrawerOpen, setCortanaDrawerOpen] = useState(false);
+  const [cortanaExplanation, setCortanaExplanation] = useState('');
+  const [cortanaLoading, setCortanaLoading] = useState(false);
+  const [cortanaError, setCortanaError] = useState('');
 
   // Refs for Cleanup Auto-submit (leaving page detection)
   const quizActiveRef = useRef(false);
@@ -58,6 +71,28 @@ const QuizPage = () => {
   useEffect(() => {
     currentTokenRef.current = token;
   }, [token]);
+
+  // Handle auto-starting a custom session from URL
+  useEffect(() => {
+    if (!token || !sessionIdParam) return;
+    
+    const initCustomQuiz = async () => {
+      setLoading(true);
+      setError('');
+      setQuestionNumber(0);
+      setSessionStats(null);
+      setIsQuizFinished(false);
+      setActiveSessionId(sessionIdParam);
+      try {
+        setIsQuizActive(true);
+        await loadNextQuestion(sessionIdParam);
+      } catch (err: any) {
+        setError(err.message || 'Error loading custom practice session.');
+        setLoading(false);
+      }
+    };
+    initCustomQuiz();
+  }, [token, sessionIdParam]);
 
   // Load available subjects
   useEffect(() => {
@@ -183,6 +218,8 @@ const QuizPage = () => {
     setQuestionNumber(0);
     setSessionStats(null);
     setIsQuizFinished(false);
+    setActiveSessionId(null);
+    setTotalQuestions(10);
     try {
       const res = await apiFetch('/quiz/session', {
         method: 'POST',
@@ -190,8 +227,9 @@ const QuizPage = () => {
         body: { subject: selectedSubject }
       });
       if (res.session) {
+        setActiveSessionId(res.session.id);
         setIsQuizActive(true);
-        await loadNextQuestion();
+        await loadNextQuestion(res.session.id);
       } else {
         throw new Error('Failed to create session');
       }
@@ -201,17 +239,22 @@ const QuizPage = () => {
     }
   };
 
-  const loadNextQuestion = async () => {
+  const loadNextQuestion = async (sessId?: string) => {
     setLoading(true);
     setError('');
     setSelectedAnswer(null);
     setResult(null);
+    const targetSessionId = sessId || activeSessionId;
     try {
-      const res = await apiFetch('/quiz/question', { token: token || undefined });
+      const url = targetSessionId ? `/quiz/question?session_id=${targetSessionId}` : '/quiz/question';
+      const res = await apiFetch(url, { token: token || undefined });
       if (res.question) {
         setCurrentQuestion(res.question);
         setTimeLeft(res.question.time_limit_seconds);
         setQuestionNumber(prev => prev + 1);
+        if (res.totalQuestions) {
+          setTotalQuestions(res.totalQuestions);
+        }
       } else {
         setError('Failed to fetch next question.');
       }
@@ -233,7 +276,8 @@ const QuizPage = () => {
         token: token || undefined,
         body: {
           question_id: currentQuestion.id,
-          submitted_answer: selectedAnswer
+          submitted_answer: selectedAnswer,
+          session_id: activeSessionId || undefined
         }
       });
       setResult(res);
@@ -261,7 +305,8 @@ const QuizPage = () => {
         token: token || undefined,
         body: {
           question_id: currentQuestion.id,
-          submitted_answer: '' // blank on time-limit expire
+          submitted_answer: '', // blank on time-limit expire
+          session_id: activeSessionId || undefined
         }
       });
       setResult(res);
@@ -288,6 +333,28 @@ const QuizPage = () => {
     setResult(null);
     setSessionStats(null);
     setIsQuizFinished(false);
+    setCortanaDrawerOpen(false);
+    setCortanaExplanation('');
+  };
+
+  const askCortana = async () => {
+    if (!currentQuestion || cortanaLoading) return;
+    setCortanaDrawerOpen(true);
+    setCortanaLoading(true);
+    setCortanaError('');
+    setCortanaExplanation('');
+    try {
+      const res = await apiFetch('/quiz/explain', {
+        method: 'POST',
+        token: token || undefined,
+        body: { question_id: currentQuestion.id }
+      });
+      setCortanaExplanation(res.explanation || 'No explanation available.');
+    } catch (err: any) {
+      setCortanaError('Cortana is unavailable right now. Please try again.');
+    } finally {
+      setCortanaLoading(false);
+    }
   };
 
   // Render Start Screen with Rules
@@ -617,65 +684,80 @@ const QuizPage = () => {
               {isSubmitting ? 'Verifying Answer...' : 'Submit Answer'}
             </button>
           ) : (
-            <div className="flex flex-col gap-4 animate-fade-in">
-              <div className={clsx(
-                "w-full rounded-2xl border p-5 flex items-start gap-4",
-                result.is_correct
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-red-500/10 border-red-500/30 text-red-400"
-              )}>
-                {result.is_correct ? (
-                  <CheckCircle2 className="w-6 h-6 shrink-0 mt-0.5" />
-                ) : (
-                  <XCircle className="w-6 h-6 shrink-0 mt-0.5" />
-                )}
-                <div>
-                  <h4 className="text-base font-extrabold leading-none">
-                    {result.is_correct ? 'Correct Answer!' : result.is_expired ? 'Time Expired!' : 'Incorrect Answer!'}
-                  </h4>
-                  <p className="text-xs font-semibold mt-2 text-theme-secondary leading-relaxed">
-                    {result.is_correct
-                      ? `Nice work! You earned +${result.points_awarded} points for answering correctly in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
-                      : `The correct answer was: "${result.correct_answer}". Better luck next time!`
-                    }
-                  </p>
-
-                  {/* Badges Congratulation banner */}
-                  {result.earned_badges && result.earned_badges.length > 0 && (
-                    <div className="mt-4 p-3 bg-indigo-500/15 border border-indigo-500/25 rounded-xl flex flex-col gap-1.5">
-                      <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[11px] uppercase tracking-wider">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        Badge Unlocked!
-                      </div>
-                      {result.earned_badges.map((slug: string) => (
-                        <span key={slug} className="text-xs font-bold text-white">
-                          🎉 You earned the "{slug.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}" Badge!
-                        </span>
-                      ))}
-                    </div>
+              <div className="flex flex-col gap-4 animate-fade-in">
+                <div className={clsx(
+                  "w-full rounded-2xl border p-5 flex items-start gap-4",
+                  result.is_correct
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    : "bg-red-500/10 border-red-500/30 text-red-400"
+                )}>
+                  {result.is_correct ? (
+                    <CheckCircle2 className="w-6 h-6 shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="w-6 h-6 shrink-0 mt-0.5" />
                   )}
-                </div>
-              </div>
+                  <div>
+                    <h4 className="text-base font-extrabold leading-none">
+                      {result.is_correct ? 'Correct Answer!' : result.is_expired ? 'Time Expired!' : 'Incorrect Answer!'}
+                    </h4>
+                    <p className="text-xs font-semibold mt-2 text-theme-secondary leading-relaxed">
+                      {result.is_correct
+                        ? `Nice work! You earned +${result.points_awarded} points for answering correctly in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
+                        : `The correct answer was: "${result.correct_answer}". Better luck next time!`
+                      }
+                    </p>
 
-              <button
-                onClick={() => {
-                  if (questionNumber >= 10) {
-                    setIsQuizFinished(true);
-                  } else {
-                    loadNextQuestion();
-                  }
-                }}
-                className={clsx(
-                  "w-full py-4 rounded-2xl font-bold text-sm transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 shadow-lg",
-                  questionNumber >= 10
-                    ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20"
-                    : "bg-theme-surface border border-theme-border text-theme-primary hover:bg-theme-surface-2"
-                )}
-              >
-                {questionNumber >= 10 ? 'Finish & View Results' : 'Next Question'}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
+                    {/* Badges Congratulation banner */}
+                    {result.earned_badges && result.earned_badges.length > 0 && (
+                      <div className="mt-4 p-3 bg-indigo-500/15 border border-indigo-500/25 rounded-xl flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[11px] uppercase tracking-wider">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Badge Unlocked!
+                        </div>
+                        {result.earned_badges.map((slug: string) => (
+                          <span key={slug} className="text-xs font-bold text-white">
+                            🎉 You earned the "{slug.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}" Badge!
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Ask Cortana Button ── */}
+                <button
+                  onClick={askCortana}
+                  disabled={cortanaLoading}
+                  className="w-full py-3.5 flex items-center justify-center gap-2.5 rounded-2xl border border-violet-500/40 bg-gradient-to-r from-violet-500/10 to-indigo-500/10 hover:from-violet-500/20 hover:to-indigo-500/20 text-violet-300 font-bold text-sm transition-all duration-200 cursor-pointer shadow-[0_0_20px_rgba(139,92,246,0.1)] hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-[0.99]"
+                >
+                  {cortanaLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Bot className="w-4 h-4" />
+                  )}
+                  {cortanaLoading ? 'Cortana is thinking...' : 'Ask Cortana to Explain'}
+                  {!cortanaLoading && <Sparkles className="w-3.5 h-3.5 opacity-60" />}
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (questionNumber >= totalQuestions) {
+                      setIsQuizFinished(true);
+                    } else {
+                      loadNextQuestion();
+                    }
+                  }}
+                  className={clsx(
+                    "w-full py-4 rounded-2xl font-bold text-sm transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 shadow-lg",
+                    questionNumber >= totalQuestions
+                      ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20"
+                      : "bg-theme-surface border border-theme-border text-theme-primary hover:bg-theme-surface-2"
+                  )}
+                >
+                  {questionNumber >= totalQuestions ? 'Finish & View Results' : 'Next Question'}
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
           )}
 
           {error && (
@@ -683,6 +765,92 @@ const QuizPage = () => {
           )}
         </div>
       )}
+
+      {/* ── CORTANA BOTTOM DRAWER ── */}
+      {/* Backdrop */}
+      {cortanaDrawerOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 animate-fade-in"
+          onClick={() => setCortanaDrawerOpen(false)}
+        />
+      )}
+      {/* Drawer */}
+      <div
+        className={clsx(
+          'fixed bottom-0 left-0 right-0 z-50 transition-transform duration-500 ease-out',
+          cortanaDrawerOpen ? 'translate-y-0' : 'translate-y-full'
+        )}
+      >
+        <div className="mx-auto max-w-xl w-full px-3 pb-6">
+          <div className="rounded-3xl bg-[rgba(15,12,30,0.96)] border border-violet-500/25 shadow-[0_-4px_80px_rgba(139,92,246,0.3)] backdrop-blur-2xl overflow-hidden">
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 rounded-full bg-violet-500/40" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pb-4 border-b border-violet-500/15">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-500/30">
+                  <Bot className="w-4 h-4 text-violet-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white leading-none">Cortana</h3>
+                  <p className="text-[10px] text-violet-400/70 font-semibold mt-0.5">AI Quiz Tutor</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCortanaDrawerOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-white/5 text-theme-muted hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 max-h-[55vh] overflow-y-auto">
+              {cortanaLoading && (
+                <div className="flex flex-col items-center gap-4 py-8">
+                  <div className="relative">
+                    <div className="w-12 h-12 rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                      <Bot className="w-5 h-5 text-violet-400" />
+                    </div>
+                    <div className="absolute inset-0 rounded-full border-2 border-violet-500/30 border-t-violet-500 animate-spin" />
+                  </div>
+                  <div className="flex gap-1">
+                    {[0,1,2].map(i => (
+                      <span key={i} className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                    ))}
+                  </div>
+                  <p className="text-xs text-violet-400/70 font-semibold">Cortana is analyzing the question...</p>
+                </div>
+              )}
+
+              {cortanaError && !cortanaLoading && (
+                <div className="text-center py-6">
+                  <p className="text-sm text-red-400 font-semibold">{cortanaError}</p>
+                  <button
+                    onClick={askCortana}
+                    className="mt-3 text-xs font-bold text-violet-400 hover:text-violet-300 cursor-pointer"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {cortanaExplanation && !cortanaLoading && (
+                <div className="cortana-markdown text-sm text-theme-secondary leading-relaxed">
+                  <Suspense fallback={
+                    <p className="text-xs text-theme-muted animate-pulse">Rendering explanation...</p>
+                  }>
+                    <ReactMarkdown>{cortanaExplanation}</ReactMarkdown>
+                  </Suspense>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Confirm Quit Dialog */}
       <ConfirmModal

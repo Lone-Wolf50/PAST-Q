@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Trophy, Crown, Sparkles, User, Zap, Clock, Flame, Award,
-  BookOpen, Info, ChevronUp, Shield, Target
+  BookOpen, Info, ChevronUp, Shield, Target, X, CheckCircle2, BarChart3
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -171,7 +171,7 @@ const RulesContent = () => (
 );
 
 // ── Podium Card ────────────────────────────────────────────────────────────────
-const PodiumCard = ({ user }: { user: LeaderboardEntry; maxScore: number }) => {
+const PodiumCard = ({ user, maxScore, onClick }: { user: LeaderboardEntry; maxScore: number; onClick: () => void }) => {
   const isGold = user.rank === 1;
   const isSilver = user.rank === 2;
   const isBronze = user.rank === 3;
@@ -255,8 +255,9 @@ const PodiumCard = ({ user }: { user: LeaderboardEntry; maxScore: number }) => {
 
       {/* The square card */}
       <div
+        onClick={onClick}
         className={clsx(
-          'relative flex flex-col items-center justify-center rounded-2xl border backdrop-blur-xl transition-all duration-500 hover:-translate-y-2 cursor-default overflow-hidden podium-shimmer',
+          'relative flex flex-col items-center justify-center rounded-2xl border backdrop-blur-xl transition-all duration-500 hover:-translate-y-2 cursor-pointer overflow-hidden podium-shimmer',
           theme.cardBg, theme.cardBorder, theme.squareSize,
           isGold && 'podium-gold-pulse'
         )}
@@ -353,6 +354,35 @@ const LeaderboardPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showRulesModal, setShowRulesModal] = useState(false);
+
+  // Profile Modal
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
+  const [profileData, setProfileData] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
+
+  const openProfile = async (userId: string) => {
+    setProfileUserId(userId);
+    setProfileData(null);
+    setProfileError('');
+    setProfileLoading(true);
+    try {
+      const res = await apiFetch(`/quiz/stats/${userId}`, { token: token || undefined });
+      setProfileData(res);
+    } catch (err: any) {
+      setProfileError('Could not load this player\'s profile.');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const closeProfile = () => {
+    setProfileUserId(null);
+    setProfileData(null);
+    setProfileLoading(false);
+    setProfileError('');
+  };
+
 
   const fetchLeaderboard = async (currentPeriod: typeof period) => {
     setIsLoading(true);
@@ -523,7 +553,7 @@ const LeaderboardPage = () => {
                   {/* Cards row — items-end so larger gold card naturally rises */}
                   <div className="relative flex items-end justify-center gap-2 sm:gap-4 md:gap-8 pt-14 pb-6">
                     {podiumOrder.map((user) => (
-                      <PodiumCard key={user.user_id} user={user} maxScore={maxScore} />
+                      <PodiumCard key={user.user_id} user={user} maxScore={maxScore} onClick={() => openProfile(user.user_id)} />
                     ))}
                   </div>
 
@@ -551,7 +581,8 @@ const LeaderboardPage = () => {
                       <div
                         key={user.user_id}
                         id={`rank-row-${user.rank}`}
-                        className="group relative flex items-center gap-4 px-4 md:px-5 py-4 rounded-2xl border border-theme-border/30 bg-gradient-to-r from-theme-surface/10 to-theme-surface/5 backdrop-blur-md hover:from-indigo-500/[0.06] hover:to-violet-500/[0.02] hover:border-indigo-500/30 transition-all duration-300 shadow-md hover:shadow-indigo-500/5 hover:-translate-y-0.5 overflow-hidden"
+                        onClick={() => openProfile(user.user_id)}
+                        className="group relative flex items-center gap-4 px-4 md:px-5 py-4 rounded-2xl border border-theme-border/30 bg-gradient-to-r from-theme-surface/10 to-theme-surface/5 backdrop-blur-md hover:from-indigo-500/[0.06] hover:to-violet-500/[0.02] hover:border-indigo-500/30 transition-all duration-300 shadow-md hover:shadow-indigo-500/5 hover:-translate-y-0.5 overflow-hidden cursor-pointer"
                         style={{ animationDelay: `${idx * 40}ms` }}
                       >
                         {/* Glowing ambient line on hover */}
@@ -641,6 +672,148 @@ const LeaderboardPage = () => {
       <Modal isOpen={showRulesModal} onClose={() => setShowRulesModal(false)} title="Rules & Rewards">
         <div className="flex flex-col gap-4">
           <RulesContent />
+        </div>
+      </Modal>
+
+      {/* ── PROFILE MODAL ──────────────────────────────────────────────────────── */}
+      <Modal isOpen={!!profileUserId} onClose={closeProfile} hideHeader={true}>
+        <div className="relative">
+          {/* Close btn */}
+          <button
+            onClick={closeProfile}
+            className="absolute top-4 right-4 p-2 rounded-xl hover:bg-white/5 text-theme-muted hover:text-white transition-colors cursor-pointer z-10"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {profileLoading && (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <div className="relative w-14 h-14">
+                <div className="absolute inset-0 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin" />
+                <div className="absolute inset-2 rounded-full border-2 border-violet-500/20 border-b-violet-500 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }} />
+              </div>
+              <p className="text-xs text-theme-muted font-semibold animate-pulse">Loading profile...</p>
+            </div>
+          )}
+
+          {profileError && !profileLoading && (
+            <div className="p-8 text-center">
+              <p className="text-sm text-red-400 font-semibold">{profileError}</p>
+            </div>
+          )}
+
+          {profileData && !profileLoading && (() => {
+            const { profile, badges } = profileData;
+            const planColors: Record<string, string> = {
+              free: 'from-slate-500/20 to-slate-600/10 border-slate-500/30 text-slate-300',
+              pro: 'from-indigo-500/20 to-violet-600/10 border-indigo-500/30 text-indigo-300',
+              premium: 'from-amber-500/20 to-orange-600/10 border-amber-500/30 text-amber-300',
+            };
+            const planStyle = planColors[profile.plan] || planColors.free;
+
+            return (
+              <div className="flex flex-col">
+                {/* Hero banner */}
+                <div className="relative px-6 pt-8 pb-6 flex flex-col items-center gap-4 border-b border-white/[0.06]">
+                  <div
+                    className="absolute inset-0 opacity-30 pointer-events-none"
+                    style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.25) 0%, transparent 65%)' }}
+                  />
+
+                  {/* Avatar */}
+                  <div className="relative z-10 w-20 h-20 rounded-2xl ring-2 ring-indigo-500/40 shadow-[0_0_30px_rgba(99,102,241,0.3)] overflow-hidden bg-theme-surface-2 flex items-center justify-center">
+                    {profile.avatar_url ? (
+                      <img src={profile.avatar_url} alt={profile.username} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-9 h-9 text-theme-muted" />
+                    )}
+                  </div>
+
+                  {/* Name + plan */}
+                  <div className="relative z-10 text-center">
+                    <h2 className="text-xl font-black text-white leading-tight">{profile.username}</h2>
+                    <span className={`inline-block mt-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-gradient-to-r border ${planStyle}`}>
+                      {profile.plan || 'Free'}
+                    </span>
+                  </div>
+
+                  {/* Global rank badge */}
+                  <div className="relative z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/25">
+                    <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-xs font-black text-amber-300">Rank #{profile.rank}</span>
+                    <span className="text-[10px] text-amber-400/60 font-bold">Global</span>
+                  </div>
+                </div>
+
+                {/* Stats grid */}
+                <div className="p-5 grid grid-cols-2 gap-3">
+                  {[
+                    { icon: <BarChart3 className="w-3.5 h-3.5" />, label: 'Total Points', value: profile.points.toLocaleString(), color: 'indigo' },
+                    { icon: <Target className="w-3.5 h-3.5" />, label: 'Accuracy', value: `${profile.accuracy}%`, color: 'emerald' },
+                    { icon: <CheckCircle2 className="w-3.5 h-3.5" />, label: 'Answered', value: `${profile.total_answered}`, color: 'violet' },
+                    { icon: <Flame className="w-3.5 h-3.5" />, label: 'Login Streak', value: `${profile.login_streak}d`, color: 'amber' },
+                  ].map((stat, i) => (
+                    <div
+                      key={i}
+                      className={clsx(
+                        'flex flex-col gap-2 p-4 rounded-2xl border',
+                        stat.color === 'indigo' && 'bg-indigo-500/5 border-indigo-500/15',
+                        stat.color === 'emerald' && 'bg-emerald-500/5 border-emerald-500/15',
+                        stat.color === 'violet' && 'bg-violet-500/5 border-violet-500/15',
+                        stat.color === 'amber' && 'bg-amber-500/5 border-amber-500/15',
+                      )}
+                    >
+                      <div className={clsx(
+                        'p-1.5 rounded-lg w-fit',
+                        stat.color === 'indigo' && 'bg-indigo-500/15 text-indigo-400',
+                        stat.color === 'emerald' && 'bg-emerald-500/15 text-emerald-400',
+                        stat.color === 'violet' && 'bg-violet-500/15 text-violet-400',
+                        stat.color === 'amber' && 'bg-amber-500/15 text-amber-400',
+                      )}>
+                        {stat.icon}
+                      </div>
+                      <div>
+                        <div className="text-xl font-black text-white">{stat.value}</div>
+                        <div className="text-[10px] font-bold text-theme-muted uppercase tracking-wider">{stat.label}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Badges section */}
+                {badges && badges.length > 0 && (
+                  <div className="px-5 pb-6 flex flex-col gap-3">
+                    <div className="flex items-center gap-2 border-t border-white/[0.06] pt-4">
+                      <Award className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                        Earned Badges ({badges.length})
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {badges.map((badge: any) => (
+                        <div
+                          key={badge.slug}
+                          className="flex items-center gap-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/8 to-orange-500/4 border border-amber-500/15"
+                        >
+                          <span className="text-xl shrink-0">{badge.icon || '🏅'}</span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-white truncate">{badge.name}</div>
+                            <div className="text-[9px] text-theme-muted truncate">{badge.description}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {badges && badges.length === 0 && (
+                  <div className="px-5 pb-6 text-center border-t border-white/[0.06] pt-4">
+                    <p className="text-xs text-theme-muted font-semibold">No badges earned yet — keep competing!</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </Modal>
     </div>

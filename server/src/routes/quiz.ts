@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { redis } from '../lib/redis';
 import { generateQuestion } from '../lib/question-generator';
 import { awardBadges, BADGE_REGISTRY } from '../lib/badges';
+import { getAiCompletion } from '../lib/ai-helper';
+const pdfParse = require('pdf-parse');
 
 const router = Router();
 
@@ -41,19 +43,29 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
   }
 
   try {
-    // Check for an active session of the selected subject (started in the last 2 hours)
+    // Check for an active standard session of the selected subject (started in the last 2 hours)
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const { data: activeSession, error: fetchErr } = await supabase
+    const { data: activeSessions, error: fetchErr } = await supabase
       .from('upsa_sessions')
       .select('*')
       .eq('user_id', userId)
       .eq('subject', subject)
       .gte('started_at', twoHoursAgo)
-      .order('started_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('started_at', { ascending: false });
 
     if (fetchErr) throw fetchErr;
+
+    const activeSession = (activeSessions || []).find((s: any) => {
+      let shownIds: string[] = [];
+      try {
+        shownIds = typeof s.questions_shown === 'string'
+          ? JSON.parse(s.questions_shown)
+          : s.questions_shown;
+      } catch {
+        shownIds = [];
+      }
+      return !shownIds.includes('is_custom:true');
+    });
 
     if (activeSession) {
       res.status(200).json({ session: activeSession });
@@ -115,22 +127,50 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
 // --- 2. GET CURRENT / NEXT QUESTION (Anti-Cheat: Excludes Correct Answer) ---
 router.get('/question', async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id;
+  const sessionId = req.query.session_id;
 
   try {
-    // 1. Fetch active session
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const { data: session, error: sessionErr } = await supabase
-      .from('upsa_sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('started_at', twoHoursAgo)
-      .order('started_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    let session;
+    if (sessionId) {
+      const { data, error } = await supabase
+        .from('upsa_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .eq('user_id', userId)
+        .single();
+      if (error || !data) {
+        res.status(404).json({ error: 'Session not found.' });
+        return;
+      }
+      session = data;
+    } else {
+      // 1. Fetch active standard session (excluding custom sessions)
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const { data: activeSessions, error: sessionErr } = await supabase
+        .from('upsa_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('started_at', twoHoursAgo)
+        .order('started_at', { ascending: false });
 
-    if (sessionErr || !session) {
-      res.status(400).json({ error: 'No active session found. Please start a session first.' });
-      return;
+      if (sessionErr) throw sessionErr;
+
+      session = (activeSessions || []).find((s: any) => {
+        let shownIds: string[] = [];
+        try {
+          shownIds = typeof s.questions_shown === 'string'
+            ? JSON.parse(s.questions_shown)
+            : s.questions_shown;
+        } catch {
+          shownIds = [];
+        }
+        return !shownIds.includes('is_custom:true');
+      });
+
+      if (!session) {
+        res.status(400).json({ error: 'No active session found. Please start a session first.' });
+        return;
+      }
     }
 
     let shownIds: string[] = [];
@@ -142,42 +182,52 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
       shownIds = [];
     }
 
-    // Check if user has an unanswered question from this session
-    if (shownIds.length > 0) {
-      const lastQuestionId = shownIds[shownIds.length - 1];
-      const { data: sub } = await supabase
+    const isCustom = shownIds.includes('is_custom:true');
+    const questionIds = shownIds.filter(id => id !== 'is_custom:true');
+    const totalQuestions = isCustom ? questionIds.length : 10;
+
+    // Fetch submissions for this session's questions
+    let answeredIds = new Set<string>();
+    if (questionIds.length > 0) {
+      const { data: subs } = await supabase
         .from('upsa_submissions')
-        .select('id')
+        .select('question_id')
         .eq('user_id', userId)
-        .eq('question_id', lastQuestionId)
-        .maybeSingle();
-
-      if (!sub) {
-        // Serve the unanswered question again
-        const { data: question } = await supabase
-          .from('upsa_questions')
-          .select('id, body, category, difficulty, options, time_limit_seconds')
-          .eq('id', lastQuestionId)
-          .single();
-
-        if (question) {
-          res.status(200).json({ question });
-          return;
-        }
-      } else {
-        // The last served question was already answered.
-        // If we've already served 10 questions, this session is completed!
-        if (shownIds.length >= 10) {
-          res.status(400).json({ error: 'This quiz session is already completed.', isCompleted: true });
-          return;
-        }
-      }
+        .in('question_id', questionIds);
+      answeredIds = new Set((subs || []).map((s: any) => s.question_id));
     }
 
-    // 2. Generate a new question dynamically
+    // Find the first unanswered question ID
+    const nextQuestionId = questionIds.find(id => !answeredIds.has(id));
+
+    if (nextQuestionId) {
+      // Serve the unanswered question
+      const { data: question, error: qErr } = await supabase
+        .from('upsa_questions')
+        .select('id, body, category, difficulty, options, time_limit_seconds')
+        .eq('id', nextQuestionId)
+        .single();
+
+      if (qErr || !question) {
+        res.status(404).json({ error: 'Question not found.' });
+        return;
+      }
+
+      res.status(200).json({ question, totalQuestions });
+      return;
+    }
+
+    // All questions in the current shownIds list are answered.
+    // If we've already reached the limit, this session is completed!
+    if (isCustom || questionIds.length >= 10) {
+      res.status(400).json({ error: 'This quiz session is already completed.', isCompleted: true });
+      return;
+    }
+
+    // Otherwise, generate a new question dynamically for standard session
     const qData = await generateQuestion(session.subject);
 
-    // 3. Save to questions table
+    // Save to questions table
     const { data: dbQuestion, error: qErr } = await supabase
       .from('upsa_questions')
       .insert(qData)
@@ -186,14 +236,14 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
 
     if (qErr || !dbQuestion) throw qErr;
 
-    // 4. Update session
-    shownIds.push(dbQuestion.id);
+    // Update session
+    const newShownIds = [...shownIds, dbQuestion.id];
     await supabase
       .from('upsa_sessions')
-      .update({ questions_shown: shownIds })
+      .update({ questions_shown: newShownIds })
       .eq('id', session.id);
 
-    // 5. Send to client, STRICTLY EXCLUDING correct_answer column
+    // Send to client, STRICTLY EXCLUDING correct_answer column
     const clientQuestion = {
       id: dbQuestion.id,
       body: dbQuestion.body,
@@ -203,7 +253,7 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
       time_limit_seconds: dbQuestion.time_limit_seconds
     };
 
-    res.status(200).json({ question: clientQuestion });
+    res.status(200).json({ question: clientQuestion, totalQuestions });
   } catch (err: any) {
     console.error('❌ [Quiz Question] Error:', err.message);
     res.status(500).json({ error: 'Failed to serve next question.' });
@@ -213,7 +263,7 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
 // --- 3. SUBMIT ANSWER ---
 router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id;
-  const { question_id, submitted_answer } = req.body;
+  const { question_id, submitted_answer, session_id } = req.body;
 
   if (!question_id || submitted_answer === undefined) {
     res.status(400).json({ error: 'Question ID and submitted answer are required.' });
@@ -249,17 +299,40 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
     }
 
     // 3. Find the user's active session to calculate server-side elapsed time
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const { data: session, error: sessionErr } = await supabase
-      .from('upsa_sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('started_at', twoHoursAgo)
-      .order('started_at', { ascending: false })
-      .limit(1)
-      .single();
+    let session;
+    if (session_id) {
+      const { data, error } = await supabase
+        .from('upsa_sessions')
+        .select('*')
+        .eq('id', session_id)
+        .eq('user_id', userId)
+        .single();
+      session = data;
+    } else {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const { data: activeSessions, error: sessionErr } = await supabase
+        .from('upsa_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('started_at', twoHoursAgo)
+        .order('started_at', { ascending: false });
 
-    if (sessionErr || !session) {
+      if (sessionErr) throw sessionErr;
+
+      session = (activeSessions || []).find((s: any) => {
+        let shownIds: string[] = [];
+        try {
+          shownIds = typeof s.questions_shown === 'string'
+            ? JSON.parse(s.questions_shown)
+            : s.questions_shown;
+        } catch {
+          shownIds = [];
+        }
+        return !shownIds.includes('is_custom:true');
+      });
+    }
+
+    if (!session) {
       res.status(400).json({ error: 'No active session found.' });
       return;
     }
@@ -273,7 +346,11 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
       shownIds = [];
     }
 
-    const questionIndex = shownIds.indexOf(question_id);
+    const isCustom = shownIds.includes('is_custom:true');
+    const questionIds = shownIds.filter(id => id !== 'is_custom:true');
+    const totalQs = isCustom ? questionIds.length : 10;
+
+    const questionIndex = questionIds.indexOf(question_id);
     if (questionIndex === -1) {
       res.status(400).json({ error: 'This question was not served in your current session.' });
       return;
@@ -282,7 +359,7 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
     // Calculate start time for the question
     let startTime = new Date(session.started_at).getTime();
     if (questionIndex > 0) {
-      const prevQuestionId = shownIds[questionIndex - 1];
+      const prevQuestionId = questionIds[questionIndex - 1];
       const { data: prevSub } = await supabase
         .from('upsa_submissions')
         .select('submitted_at')
@@ -351,7 +428,7 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
     if (insertErr) throw insertErr;
 
     // Calculate current session stats
-    const otherQuestionIds = shownIds.filter(id => id !== question_id);
+    const otherQuestionIds = questionIds.filter(id => id !== question_id);
     let totalSessionPoints = pointsAwarded;
     let correctCount = isCorrect ? 1 : 0;
 
@@ -370,7 +447,7 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
       }
     }
 
-    const isSessionComplete = shownIds.length === 10 && questionIndex === 9;
+    const isSessionComplete = questionIndex === totalQs - 1;
     let earnedBadges: string[] = [];
 
     if (isSessionComplete) {
@@ -401,7 +478,7 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
       is_completed: isSessionComplete,
       session_points: totalSessionPoints,
       session_correct: correctCount,
-      session_total: 10,
+      session_total: totalQs,
       earned_badges: earnedBadges
     });
   } catch (err: any) {
@@ -611,6 +688,259 @@ router.get('/stats', async (req: AuthRequest, res: Response): Promise<void> => {
   } catch (err: any) {
     console.error('❌ [Quiz Stats] Error:', err.message);
     res.status(500).json({ error: 'Failed to fetch user quiz stats.' });
+  }
+});
+
+// --- 6. CORTANA QUIZ EXPLAINER ---
+// POST /quiz/explain
+// Returns an explanation of why an answer is correct/incorrect for a quiz question.
+router.post('/explain', async (req: AuthRequest, res: Response): Promise<void> => {
+  const { question_id } = req.body;
+
+  if (!question_id) {
+    res.status(400).json({ error: 'question_id is required.' });
+    return;
+  }
+
+  try {
+    const { data: question, error: qErr } = await supabase
+      .from('upsa_questions')
+      .select('body, category, difficulty, options, correct_answer')
+      .eq('id', question_id)
+      .single();
+
+    if (qErr || !question) {
+      res.status(404).json({ error: 'Question not found.' });
+      return;
+    }
+
+    const optionsList = (question.options as string[])
+      .map((opt: string, i: number) => `${['A', 'B', 'C', 'D'][i]}. ${opt}`)
+      .join('\n');
+
+    const systemInstruction = `You are Cortana, an expert academic tutor on PastQ. Your task is to give a clear, educational explanation of a multiple choice question. Be concise, warm and encouraging. Use premium markdown formatting with bold key terms. Keep the total response under 250 words.`;
+
+    const userMessage =
+      `Explain the following multiple choice question to a student.\n\n` +
+      `**Question**: ${question.body}\n\n` +
+      `**Options**:\n${optionsList}\n\n` +
+      `**Correct Answer**: ${question.correct_answer}\n\n` +
+      `Explain clearly:\n1. Why the correct answer is right.\n2. Why each of the other options is wrong (briefly).\n3. A key concept to remember.`;
+
+    const explanation = await getAiCompletion(systemInstruction, [], userMessage);
+
+    res.status(200).json({ explanation });
+  } catch (err: any) {
+    console.error('❌ [Quiz Explain] Error:', err.message);
+    res.status(500).json({ error: 'Failed to get explanation from Cortana.' });
+  }
+});
+
+// --- 7. PUBLIC USER STATS (for Leaderboard Profile Modal) ---
+// GET /quiz/stats/:userId
+// Returns another user's public stats and earned badges.
+router.get('/stats/:userId', async (req: AuthRequest, res: Response): Promise<void> => {
+  const { userId } = req.params;
+
+  try {
+    // 1. Fetch user's public profile data
+    const { data: user, error: userErr } = await supabase
+      .from('upsa_users')
+      .select('id, username, full_name, avatar_url, plan, total_points, login_streak')
+      .eq('id', userId)
+      .single();
+
+    if (userErr || !user) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    // 2. Fetch submission stats
+    const { data: subs } = await supabase
+      .from('upsa_submissions')
+      .select('is_correct')
+      .eq('user_id', userId);
+
+    const totalAnswered = subs ? subs.length : 0;
+    const correctCount = subs ? subs.filter((s: any) => s.is_correct).length : 0;
+    const accuracy = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
+
+    // 3. Fetch earned badges
+    const { data: earnedRows } = await supabase
+      .from('upsa_user_badges')
+      .select('badge_slug, earned_at')
+      .eq('user_id', userId);
+
+    const earnedMap = new Map((earnedRows || []).map((r: any) => [r.badge_slug, r.earned_at]));
+
+    // 4. Calculate rank (count users with more total_points)
+    const { count: usersAhead } = await supabase
+      .from('upsa_users')
+      .select('id', { count: 'exact', head: true })
+      .gt('total_points', user.total_points || 0);
+
+    const rank = (usersAhead || 0) + 1;
+
+    // 5. Build badge collection (only earned badges for public profiles)
+    const badges = Object.keys(BADGE_REGISTRY)
+      .filter(slug => earnedMap.has(slug))
+      .map(slug => {
+        const meta = BADGE_REGISTRY[slug];
+        return {
+          slug,
+          name: meta.name,
+          description: meta.description,
+          icon: meta.icon,
+          earned_at: earnedMap.get(slug)
+        };
+      });
+
+    res.status(200).json({
+      profile: {
+        id: user.id,
+        username: user.username || user.full_name || 'Student',
+        avatar_url: user.avatar_url,
+        plan: user.plan,
+        points: user.total_points || 0,
+        login_streak: user.login_streak || 0,
+        total_answered: totalAnswered,
+        correct_answered: correctCount,
+        accuracy,
+        rank
+      },
+      badges
+    });
+  } catch (err: any) {
+    console.error('❌ [Quiz Public Stats] Error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch user profile.' });
+  }
+});
+
+// --- 8. AI CUSTOM PRACTICE QUIZ GENERATOR ---
+// POST /quiz/generate-from-paper
+// Generates a 5-question custom quiz from a given paper's PDF content.
+router.post('/generate-from-paper', async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.id;
+  const { paper_id } = req.body;
+
+  if (!paper_id) {
+    res.status(400).json({ error: 'paper_id is required.' });
+    return;
+  }
+
+  try {
+    // 1. Fetch paper metadata + file_url
+    const { data: paper, error: paperErr } = await supabase
+      .from('upsa_papers')
+      .select('id, title, file_url, upsa_subjects(name)')
+      .eq('id', paper_id)
+      .single();
+
+    if (paperErr || !paper || !(paper as any).file_url) {
+      res.status(404).json({ error: 'Paper not found or has no file.' });
+      return;
+    }
+
+    const subjectName = (paper as any).upsa_subjects?.name || 'General';
+
+    // 2. Download + parse PDF text
+    let extractedText = '';
+    try {
+      const pdfRes = await fetch((paper as any).file_url);
+      if (pdfRes.ok) {
+        const arrayBuffer = await pdfRes.arrayBuffer();
+        const pdfData = await pdfParse(Buffer.from(arrayBuffer));
+        extractedText = (pdfData.text || '').trim().substring(0, 12000); // cap for speed
+      }
+    } catch (parseErr: any) {
+      console.warn('[generate-from-paper] PDF parse failed:', parseErr.message);
+    }
+
+    if (extractedText.length < 100) {
+      res.status(422).json({ error: 'Could not extract enough text from this paper to generate questions.' });
+      return;
+    }
+
+    // 3. Ask Cortana to generate 5 MCQs as JSON
+    const systemInstruction = `You are an expert academic exam author. Generate ONLY a valid JSON array. No markdown fences, no explanations, just raw JSON.`;
+
+    const userMessage =
+      `Based on the following exam paper content, generate exactly 5 multiple-choice questions for a student to practice.\n\n` +
+      `PAPER CONTENT:\n${extractedText}\n\n` +
+      `Rules:\n` +
+      `- Each question must have exactly 4 options.\n` +
+      `- The correct_answer field must be an EXACT copy of one of the options strings.\n` +
+      `- difficulty must be one of: Easy, Medium, Hard\n` +
+      `- time_limit_seconds must be between 20 and 60\n` +
+      `- category must be: "${subjectName}"\n\n` +
+      `Return ONLY a valid JSON array like this (no extra text):\n` +
+      `[{"body":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"Medium","time_limit_seconds":30,"category":"${subjectName}"}]`;
+
+    const rawReply = await getAiCompletion(systemInstruction, [], userMessage);
+
+    // 4. Parse + validate the JSON output
+    let questions: any[];
+    try {
+      const jsonMatch = rawReply.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : rawReply.trim();
+      questions = JSON.parse(jsonStr);
+
+      if (!Array.isArray(questions) || questions.length === 0) throw new Error('Empty array returned');
+
+      // Validate each question
+      questions = questions.slice(0, 5).filter(q =>
+        q.body && Array.isArray(q.options) && q.options.length === 4 &&
+        q.correct_answer && q.options.includes(q.correct_answer)
+      );
+
+      if (questions.length < 3) {
+        res.status(422).json({ error: 'Could not generate enough valid questions from this paper. Please try another.' });
+        return;
+      }
+    } catch (parseErr: any) {
+      console.error('[generate-from-paper] JSON parse failed:', parseErr.message, '\nRaw:', rawReply.substring(0, 300));
+      res.status(422).json({ error: 'Cortana had trouble generating questions for this paper. Please try again.' });
+      return;
+    }
+
+    // 5. Insert questions into upsa_questions
+    const insertPayload = questions.map(q => ({
+      body: q.body,
+      category: q.category || subjectName,
+      difficulty: ['Easy', 'Medium', 'Hard'].includes(q.difficulty) ? q.difficulty : 'Medium',
+      correct_answer: q.correct_answer,
+      options: q.options,
+      time_limit_seconds: Math.min(Math.max(Number(q.time_limit_seconds) || 30, 15), 60)
+    }));
+
+    const { data: insertedQuestions, error: insertErr } = await supabase
+      .from('upsa_questions')
+      .insert(insertPayload)
+      .select('id');
+
+    if (insertErr || !insertedQuestions || insertedQuestions.length === 0) {
+      throw insertErr ?? new Error('No questions were inserted.');
+    }
+
+    const questionIds = insertedQuestions.map((q: any) => q.id);
+
+    // 6. Create a custom quiz session for this user
+    const { data: newSession, error: sessionErr } = await supabase
+      .from('upsa_sessions')
+      .insert({ user_id: userId, subject: subjectName, questions_shown: [...questionIds, 'is_custom:true'] })
+      .select('id')
+      .single();
+
+    if (sessionErr || !newSession) throw sessionErr ?? new Error('Failed to create session.');
+
+    res.status(201).json({
+      session_id: newSession.id,
+      question_count: questionIds.length,
+      subject: subjectName
+    });
+  } catch (err: any) {
+    console.error('❌ [Quiz Generate] Error:', err.message);
+    res.status(500).json({ error: 'Failed to generate custom practice quiz.' });
   }
 });
 
