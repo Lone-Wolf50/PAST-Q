@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { supabase } from '../lib/supabase';
 import { protect, adminOnly, AuthRequest } from '../middleware/auth';
 import { uploadToR2, deleteFromR2, keyFromUrl } from '../lib/r2';
@@ -1175,6 +1176,9 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
   }
 
   try {
+    // Generate a unique ID for this broadcast run (used for failure tracking / retry)
+    const broadcastId = crypto.randomUUID();
+
     let usersWithNames: { id?: string; email: string; full_name?: string }[] = [];
     const isIndividual = Array.isArray(recipients) && recipients.length > 0;
 
@@ -1213,7 +1217,7 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
 
       if (error) throw error;
       if (!users || users.length === 0) {
-        res.status(200).json({ message: 'No verified students found.', sent: 0, failed: 0 });
+        res.status(200).json({ message: 'No verified students found.', sent: 0, failed: 0, broadcastId });
         return;
       }
       usersWithNames = users.map((u: any) => ({
@@ -1237,6 +1241,7 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
     let sent = 0;
     let failed = 0;
     const errors: string[] = [];
+    const failureRows: { broadcast_id: string; email: string; error_reason: string }[] = [];
 
     // Send in batches of 10 with 1s delay between batches
     const BATCH_SIZE = 10;
@@ -1255,19 +1260,24 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
           sent++;
         } else {
           failed++;
-          errors.push(`${batch[idx].email}: ${r.reason?.message || 'Unknown error'}`);
+          const reason = r.reason?.message || 'Unknown error';
+          errors.push(`${batch[idx].email}: ${reason}`);
+          failureRows.push({ broadcast_id: broadcastId, email: batch[idx].email, error_reason: reason });
         }
       });
-      // Delay between batches to avoid SMTP rate limiting
+      // Delay between batches to avoid rate limiting
       if (i + BATCH_SIZE < usersWithNames.length) {
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
 
+    // Persist failures so they can be retried later
+    if (failureRows.length > 0) {
+      await supabase.from('broadcast_failures').insert(failureRows);
+    }
+
     // In-app notifications
     if (sendInAppNotification) {
-      // Find all users who should receive the notification.
-      // In individual mode, only users with IDs can receive in-app notifications.
       const targetUsers = usersWithNames.filter(u => u.id);
 
       if (targetUsers.length > 0) {
@@ -1297,10 +1307,122 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
       type: 'info',
     });
 
-    res.status(200).json({ message: 'Broadcast complete.', total: usersWithNames.length, sent, failed, errors: errors.slice(0, 10) });
+    res.status(200).json({
+      message: 'Broadcast complete.',
+      total: usersWithNames.length,
+      sent,
+      failed,
+      broadcastId,
+      errors: errors.slice(0, 10)
+    });
   } catch (err: any) {
     console.error('Broadcast error:', err);
     res.status(500).json({ error: 'Failed to send broadcast.' });
+  }
+});
+
+// ── Broadcast Retry ───────────────────
+// Resend only the failed addresses from a previous broadcast run.
+router.post('/broadcast/retry', async (req: AuthRequest, res: Response) => {
+  const { broadcastId, subject, title, body: bodyText } = req.body;
+
+  if (!broadcastId || !subject || !title || !bodyText) {
+    res.status(400).json({ error: 'broadcastId, subject, title, and body are required.' });
+    return;
+  }
+
+  try {
+    // Fetch the failed addresses for this broadcast
+    const { data: failures, error: fetchErr } = await supabase
+      .from('broadcast_failures')
+      .select('email')
+      .eq('broadcast_id', broadcastId);
+
+    if (fetchErr) throw fetchErr;
+
+    if (!failures || failures.length === 0) {
+      res.status(200).json({ message: 'No failures found for this broadcast.', sent: 0, failed: 0 });
+      return;
+    }
+
+    // Fetch names from DB for failed emails
+    const failedEmails = failures.map((f: any) => f.email);
+    const { data: dbUsers } = await supabase
+      .from('upsa_users')
+      .select('id, email, full_name')
+      .in('email', failedEmails);
+
+    const userMap = new Map<string, string | undefined>();
+    if (dbUsers) {
+      dbUsers.forEach((u: any) => {
+        if (u.email) userMap.set(u.email.toLowerCase(), u.full_name);
+      });
+    }
+
+    const personalizeText = (text: string, fullName?: string) => {
+      const name = fullName?.trim() || 'PastQ Student';
+      const firstName = fullName?.trim().split(/\s+/)[0] || 'Student';
+      return text
+        .replace(/\{\{name\}\}/gi, name)
+        .replace(/\{\{first_name\}\}/gi, firstName)
+        .replace(/Hello PastQ Student/gi, `Hello ${firstName}`)
+        .replace(/dear student/gi, firstName);
+    };
+
+    let sent = 0;
+    let stillFailed = 0;
+    const newFailureRows: { broadcast_id: string; email: string; error_reason: string }[] = [];
+    const newBroadcastId = crypto.randomUUID();
+
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < failedEmails.length; i += BATCH_SIZE) {
+      const batch = failedEmails.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((email: string) => {
+          const fullName = userMap.get(email.toLowerCase());
+          return sendGeneralEmail(
+            email,
+            personalizeText(subject, fullName),
+            personalizeText(title, fullName),
+            personalizeText(bodyText, fullName)
+          );
+        })
+      );
+      results.forEach((r, idx) => {
+        if (r.status === 'fulfilled') {
+          sent++;
+        } else {
+          stillFailed++;
+          newFailureRows.push({
+            broadcast_id: newBroadcastId,
+            email: batch[idx],
+            error_reason: r.reason?.message || 'Unknown error'
+          });
+        }
+      });
+      if (i + BATCH_SIZE < failedEmails.length) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+
+    // Remove old failures that were resolved
+    await supabase.from('broadcast_failures').delete().eq('broadcast_id', broadcastId);
+
+    // Persist any new failures under the new broadcast_id
+    if (newFailureRows.length > 0) {
+      await supabase.from('broadcast_failures').insert(newFailureRows);
+    }
+
+    res.status(200).json({
+      message: 'Retry complete.',
+      total: failedEmails.length,
+      sent,
+      failed: stillFailed,
+      broadcastId: stillFailed > 0 ? newBroadcastId : null,
+    });
+  } catch (err: any) {
+    console.error('Broadcast retry error:', err);
+    res.status(500).json({ error: 'Failed to retry broadcast.' });
   }
 });
 

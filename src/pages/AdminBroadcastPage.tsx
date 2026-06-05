@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useBlocker } from 'react-router-dom';
-import { Send, Mail, AlertTriangle, CheckCircle2, Loader2, Users, FileText, Type, AlignLeft, User, X, Plus, Save, Trash2, Bell } from 'lucide-react';
+import { Send, Mail, AlertTriangle, CheckCircle2, Loader2, Users, FileText, Type, AlignLeft, User, X, Plus, Save, Trash2, Bell, RotateCw } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import { apiFetch } from '../lib/api';
 
@@ -18,10 +18,16 @@ const AdminBroadcastPage = () => {
   const [individualBody, setIndividualBody] = useState(() => localStorage.getItem('individual_draft_body') || '');
 
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ total: number; sent: number; failed: number; errors?: string[] } | null>(null);
+  const [result, setResult] = useState<{ total: number; sent: number; failed: number; errors?: string[]; broadcastId?: string } | null>(null);
   const [error, setError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendInAppNotification, setSendInAppNotification] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+
+  // Preserve the last sent message fields for retry
+  const [lastSentSubject, setLastSentSubject] = useState('');
+  const [lastSentTitle, setLastSentTitle] = useState('');
+  const [lastSentBody, setLastSentBody] = useState('');
 
   // Individual mode
   const [mode, setMode] = useState<'broadcast' | 'individual'>(() => 
@@ -187,7 +193,11 @@ const AdminBroadcastPage = () => {
         token,
         body: payload,
       });
-      setResult({ total: data.total, sent: data.sent, failed: data.failed, errors: data.errors });
+      setResult({ total: data.total, sent: data.sent, failed: data.failed, errors: data.errors, broadcastId: data.broadcastId });
+      // Save the last sent message fields so retry can re-use them
+      setLastSentSubject(activeSubject);
+      setLastSentTitle(activeTitle);
+      setLastSentBody(activeBody);
       if (mode === 'broadcast') {
         setBroadcastSubject('');
         setBroadcastTitle('');
@@ -203,6 +213,35 @@ const AdminBroadcastPage = () => {
       setError(err.message || 'Failed to send broadcast.');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    if (!result?.broadcastId) return;
+    setRetrying(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('admin_token')!;
+      const data = await apiFetch('/hq-management/broadcast/retry', {
+        method: 'POST',
+        token,
+        body: {
+          broadcastId: result.broadcastId,
+          subject: lastSentSubject,
+          title: lastSentTitle,
+          body: lastSentBody,
+        },
+      });
+      setResult({
+        total: data.total,
+        sent: data.sent,
+        failed: data.failed,
+        broadcastId: data.broadcastId || undefined,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to retry broadcast.');
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -595,6 +634,26 @@ const AdminBroadcastPage = () => {
                       <p key={i} className="text-[11px] text-theme-muted font-mono">{e}</p>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {result.failed > 0 && result.broadcastId && (
+                <div className="mt-4 flex items-center justify-between bg-amber-500/5 border border-amber-500/10 rounded-xl p-4">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <p className="text-xs font-semibold text-amber-300">{result.failed} email(s) failed to deliver</p>
+                  </div>
+                  <button
+                    onClick={handleRetry}
+                    disabled={retrying}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 rounded-xl font-semibold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {retrying ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Retrying...</>
+                    ) : (
+                      <><RotateCw className="w-3.5 h-3.5" /> Retry Failed</>
+                    )}
+                  </button>
                 </div>
               )}
             </div>

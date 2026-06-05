@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import validator from 'validator';
 
 const router = Router();
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 router.post('/contact', async (req, res) => {
   try {
@@ -17,28 +18,11 @@ router.post('/contact', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email address.' });
     }
 
-    // 2. Transporter creation
-    // We check for SMTP_USER/PASS first, then fall back to EMAIL_USER/PASS which exists in the .env
-    const userEmail = process.env.SMTP_USER || process.env.EMAIL_USER || 'sayonaraa340@gmail.com';
-    const userPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
-
-    if (!userPass) {
-
-      return res.status(500).json({ error: 'Email configuration error.' });
-    }
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: userEmail,
-        pass: userPass, 
-      },
-    });
-
-    // 3. Email Options
-    const mailOptions = {
-      from: userEmail,
+    // 2. Send via Resend
+    const { error } = await resend.emails.send({
+      from: 'PastQ Support <noreply@pastqhub.com>',
       to: 'sayonaraa340@gmail.com', // Always send TO this address
+      replyTo: email, // Student's email for easy reply
       subject: `[PastQ Support] ${subject}: ${name || 'Student'}`,
       text: `
 Name: ${name || 'Not provided'}
@@ -48,16 +32,16 @@ Subject: ${subject}
 Message:
 ${message}
       `,
-      replyTo: email // Student's email for easy reply
-    };
+    });
 
-    // 4. Send
-    await transporter.sendMail(mailOptions);
+    if (error) {
+      throw new Error(error.message);
+    }
 
     res.status(200).json({ message: 'Your message has been sent successfully!' });
   } catch (error: any) {
 
-    res.status(500).json({ error: `Email Error: ${error.message || 'Check SMTP settings'}` });
+    res.status(500).json({ error: `Email Error: ${error.message || 'Check email settings'}` });
   }
 });
 

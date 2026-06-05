@@ -1,9 +1,14 @@
 import cron from 'node-cron';
 import { supabase } from './supabase';
-import { transporter } from './mailer';
+import { Resend } from 'resend';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM = 'PastQ <noreply@pastqhub.com>';
+
+
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
@@ -205,12 +210,13 @@ export async function runWeeklyDigestJob() {
           </html>
         `;
 
-        await transporter.sendMail({
-          from: `"PastQ" <${process.env.EMAIL_USER}>`,
+        const { error: digestErr } = await resend.emails.send({
+          from: FROM,
           to: student.email,
           subject,
           html
         });
+        if (digestErr) console.error(`[Weekly Digest] Failed for ${student.email}:`, digestErr.message);
       } else {
         // --- INACTIVE STUDENT EMAIL (7+ Days Inactive) ---
         // Check if student signed up at least 7 days ago
@@ -254,12 +260,13 @@ export async function runWeeklyDigestJob() {
             </html>
           `;
 
-          await transporter.sendMail({
-            from: `"PastQ" <${process.env.EMAIL_USER}>`,
+          const { error: inactiveErr } = await resend.emails.send({
+            from: FROM,
             to: student.email,
             subject,
             html
           });
+          if (inactiveErr) console.error(`[Weekly Digest] Inactive email failed for ${student.email}:`, inactiveErr.message);
         }
       }
     }

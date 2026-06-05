@@ -1,22 +1,11 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT) || 587,
-  secure: Number(process.env.EMAIL_PORT) === 465, // true only for 465
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  // Force IPv4 to avoid ENETUNREACH errors on environments with limited IPv6 support
-  family: 4,
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-} as any);
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const FROM = 'PastQ <noreply@pastqhub.com>';
 
 /**
  * Send an OTP email for email verification or password reset.
@@ -46,19 +35,23 @@ export const sendOtpEmail = async (to: string, otp: string, type: 'verify' | 're
           <p style="color:#64748b;font-size:13px;margin:0;">If you didn't request this, you can safely ignore this email.</p>
         </div>
         <div style="padding:20px 40px;border-top:1px solid rgba(255,255,255,0.05);">
-          <p style="color:#475569;font-size:12px;margin:0;">© 2024 PastQ. All rights reserved.</p>
+          <p style="color:#475569;font-size:12px;margin:0;">© ${new Date().getFullYear()} PastQ. All rights reserved.</p>
         </div>
       </div>
     </body>
     </html>
   `;
 
-  await transporter.sendMail({
-    from: `"PastQ" <${process.env.EMAIL_USER}>`,
+  const { error } = await resend.emails.send({
+    from: FROM,
     to,
     subject,
     html,
   });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 };
 
 /**
@@ -86,10 +79,14 @@ export const sendGeneralEmail = async (to: string, subject: string, title: strin
     </html>
   `;
 
-  await transporter.sendMail({
-    from: `"PastQ" <${process.env.EMAIL_USER}>`,
+  const { error } = await resend.emails.send({
+    from: FROM,
     to,
     subject,
     html,
   });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 };
