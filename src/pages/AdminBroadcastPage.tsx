@@ -391,6 +391,25 @@ const AdminBroadcastPage = () => {
                   className="w-full px-4 py-3 bg-theme-base/60 border border-theme-border rounded-xl text-theme-primary font-medium placeholder:text-theme-muted/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all text-sm resize-none leading-relaxed"
                 />
               </div>
+              <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-3 text-xs text-theme-secondary space-y-1">
+                <span className="font-bold text-indigo-400 flex items-center gap-1.5">
+                  ✨ Personalization Available
+                </span>
+                <p className="leading-relaxed">
+                  You can personalize the Subject, Title, and Message Body using these dynamic placeholder tags:
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <span className="px-2 py-1 bg-theme-base border border-theme-border rounded-lg text-theme-primary font-mono text-[10px]">
+                    <strong className="text-indigo-400">{"{{name}}"}</strong> - Full Name (e.g., Jazz Max)
+                  </span>
+                  <span className="px-2 py-1 bg-theme-base border border-theme-border rounded-lg text-theme-primary font-mono text-[10px]">
+                    <strong className="text-indigo-400">{"{{first_name}}"}</strong> - First Name (e.g., Jazz)
+                  </span>
+                </div>
+                <p className="text-[10px] text-theme-muted pt-1 leading-relaxed">
+                  Note: Existing greetings like <code className="text-indigo-400 font-mono">Hello PastQ Student</code> or <code className="text-indigo-400 font-mono">dear student</code> will also be automatically personalized with the student's first name.
+                </p>
+              </div>
 
               {/* Send In-App Notification Option */}
               <div className="flex items-center gap-3 pt-4 border-t border-theme-border/30">

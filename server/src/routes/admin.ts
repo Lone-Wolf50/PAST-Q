@@ -1175,16 +1175,39 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    let emails: string[] = [];
+    let usersWithNames: { id?: string; email: string; full_name?: string }[] = [];
+    const isIndividual = Array.isArray(recipients) && recipients.length > 0;
 
-    if (Array.isArray(recipients) && recipients.length > 0) {
+    if (isIndividual) {
       // Individual mode — use provided email list
-      emails = recipients.map((e: string) => e.trim().toLowerCase()).filter(Boolean);
+      const emailsList = recipients.map((e: string) => e.trim().toLowerCase()).filter(Boolean);
+      // Fetch names and IDs for these emails from DB if they exist
+      const { data: dbUsers } = await supabase
+        .from('upsa_users')
+        .select('id, email, full_name')
+        .in('email', emailsList);
+      
+      const userMap = new Map<string, { id: string; full_name?: string }>();
+      if (dbUsers) {
+        dbUsers.forEach((u: any) => {
+          if (u.email) {
+            userMap.set(u.email.toLowerCase(), { id: u.id, full_name: u.full_name });
+          }
+        });
+      }
+      usersWithNames = emailsList.map((email: string) => {
+        const dbInfo = userMap.get(email);
+        return {
+          id: dbInfo?.id,
+          email,
+          full_name: dbInfo?.full_name
+        };
+      });
     } else {
-      // Broadcast mode — fetch all verified student emails
+      // Broadcast mode — fetch all verified student emails and names
       const { data: users, error } = await supabase
         .from('upsa_users')
-        .select('email')
+        .select('id, email, full_name')
         .eq('role', 'student')
         .eq('is_verified', true);
 
@@ -1193,8 +1216,23 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
         res.status(200).json({ message: 'No verified students found.', sent: 0, failed: 0 });
         return;
       }
-      emails = users.map((u: any) => u.email).filter(Boolean);
+      usersWithNames = users.map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name
+      })).filter(u => u.email);
     }
+
+    const personalizeText = (text: string, fullName?: string) => {
+      const name = fullName?.trim() || 'PastQ Student';
+      const firstName = fullName?.trim().split(/\s+/)[0] || 'Student';
+
+      return text
+        .replace(/\{\{name\}\}/gi, name)
+        .replace(/\{\{first_name\}\}/gi, firstName)
+        .replace(/Hello PastQ Student/gi, `Hello ${firstName}`)
+        .replace(/dear student/gi, firstName);
+    };
 
     let sent = 0;
     let failed = 0;
@@ -1202,57 +1240,48 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
 
     // Send in batches of 10 with 1s delay between batches
     const BATCH_SIZE = 10;
-    for (let i = 0; i < emails.length; i += BATCH_SIZE) {
-      const batch = emails.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < usersWithNames.length; i += BATCH_SIZE) {
+      const batch = usersWithNames.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map((email: string) => sendGeneralEmail(email, subject, title, bodyText))
+        batch.map((userObj) => {
+          const personalizedSubject = personalizeText(subject, userObj.full_name);
+          const personalizedTitle = personalizeText(title, userObj.full_name);
+          const personalizedBody = personalizeText(bodyText, userObj.full_name);
+          return sendGeneralEmail(userObj.email, personalizedSubject, personalizedTitle, personalizedBody);
+        })
       );
       results.forEach((r, idx) => {
         if (r.status === 'fulfilled') {
           sent++;
         } else {
           failed++;
-          errors.push(`${batch[idx]}: ${r.reason?.message || 'Unknown error'}`);
+          errors.push(`${batch[idx].email}: ${r.reason?.message || 'Unknown error'}`);
         }
       });
       // Delay between batches to avoid SMTP rate limiting
-      if (i + BATCH_SIZE < emails.length) {
+      if (i + BATCH_SIZE < usersWithNames.length) {
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
 
-    // Log the broadcast as an admin notification
-    const isIndividual = Array.isArray(recipients) && recipients.length > 0;
-
     // In-app notifications
     if (sendInAppNotification) {
-      let targetUserIds: string[] = [];
-      if (isIndividual) {
-        const { data: usersData } = await supabase
-          .from('upsa_users')
-          .select('id')
-          .in('email', emails);
-        if (usersData) {
-          targetUserIds = usersData.map((u: any) => u.id);
-        }
-      } else {
-        const { data: usersData } = await supabase
-          .from('upsa_users')
-          .select('id')
-          .eq('role', 'student');
-        if (usersData) {
-          targetUserIds = usersData.map((u: any) => u.id);
-        }
-      }
+      // Find all users who should receive the notification.
+      // In individual mode, only users with IDs can receive in-app notifications.
+      const targetUsers = usersWithNames.filter(u => u.id);
 
-      if (targetUserIds.length > 0) {
-        const notifications = targetUserIds.map((userId) => ({
-          user_id: userId,
-          title: title,
-          message: bodyText,
-          type: 'info',
-          is_read: false
-        }));
+      if (targetUsers.length > 0) {
+        const notifications = targetUsers.map((u) => {
+          const personalizedTitle = personalizeText(title, u.full_name);
+          const personalizedBody = personalizeText(bodyText, u.full_name);
+          return {
+            user_id: u.id!,
+            title: personalizedTitle,
+            message: personalizedBody,
+            type: 'info',
+            is_read: false
+          };
+        });
 
         const NOTIF_BATCH = 500;
         for (let i = 0; i < notifications.length; i += NOTIF_BATCH) {
@@ -1264,11 +1293,11 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
 
     await supabase.from('upsa_admin_notifications').insert({
       title: isIndividual ? '📧 Individual Email Sent' : '📧 Broadcast Email Sent',
-      message: `Subject: "${subject}" — Sent to ${sent}/${emails.length} ${isIndividual ? 'recipient(s)' : 'students'}. ${failed > 0 ? `${failed} failed.` : ''}`,
+      message: `Subject: "${subject}" — Sent to ${sent}/${usersWithNames.length} ${isIndividual ? 'recipient(s)' : 'students'}. ${failed > 0 ? `${failed} failed.` : ''}`,
       type: 'info',
     });
 
-    res.status(200).json({ message: 'Broadcast complete.', total: emails.length, sent, failed, errors: errors.slice(0, 10) });
+    res.status(200).json({ message: 'Broadcast complete.', total: usersWithNames.length, sent, failed, errors: errors.slice(0, 10) });
   } catch (err: any) {
     console.error('Broadcast error:', err);
     res.status(500).json({ error: 'Failed to send broadcast.' });
