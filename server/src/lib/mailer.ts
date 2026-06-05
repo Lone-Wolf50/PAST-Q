@@ -1,11 +1,97 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM_BREVO = process.env.EMAIL_FROM || 'PastQ <noreply@pastqhub.com>';
+const FROM_GMAIL = `PastQ <${process.env.EMAIL_USER || process.env.SMTP_USER || 'sayonaraa340@gmail.com'}>`;
 
-const FROM = 'PastQ <noreply@pastqhub.com>';
+/**
+ * Helper to send email with Brevo SMTP as primary and Gmail SMTP as fallback.
+ * If both fail, it throws an error.
+ */
+export const sendMailWithFallback = async (options: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  replyTo?: string;
+}) => {
+  const brevoUser = process.env.BREVO_SMTP_USER?.trim();
+  const brevoPass = process.env.BREVO_SMTP_PASS?.trim();
+
+  let sentViaBrevo = false;
+  let brevoError: any = null;
+
+  if (brevoUser && brevoPass) {
+    try {
+      const brevoTransporter = nodemailer.createTransport({
+        host: process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com',
+        port: Number(process.env.BREVO_SMTP_PORT) || 587,
+        secure: Number(process.env.BREVO_SMTP_PORT) === 465,
+        auth: {
+          user: brevoUser,
+          pass: brevoPass,
+        },
+      });
+
+      await brevoTransporter.sendMail({
+        from: FROM_BREVO,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo,
+      });
+
+      sentViaBrevo = true;
+      console.log(`Email to ${options.to} sent successfully via Brevo SMTP.`);
+    } catch (err: any) {
+      brevoError = err;
+      console.warn(`Failed to send email via Brevo SMTP to ${options.to}. Error: ${err.message || err}. Falling back to Gmail SMTP...`);
+    }
+  } else {
+    console.warn(`Brevo SMTP credentials not fully configured. Skipping Brevo and falling back to Gmail SMTP...`);
+  }
+
+  if (!sentViaBrevo) {
+    // Try Gmail fallback
+    const gmailUser = process.env.EMAIL_USER || process.env.SMTP_USER || 'sayonaraa340@gmail.com';
+    const gmailPass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+
+    if (!gmailPass) {
+      const configError = new Error('Gmail SMTP password not configured for fallback.');
+      console.error(configError.message);
+      throw brevoError || configError;
+    }
+
+    const gmailTransporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+      port: Number(process.env.EMAIL_PORT) || 465,
+      secure: Number(process.env.EMAIL_PORT) === 465,
+      auth: {
+        user: gmailUser,
+        pass: gmailPass,
+      },
+    });
+
+    try {
+      await gmailTransporter.sendMail({
+        from: FROM_GMAIL,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo,
+      });
+      console.log(`Email to ${options.to} sent successfully via Gmail SMTP.`);
+    } catch (gmailErr: any) {
+      console.error(`Failed to send email via Gmail SMTP fallback to ${options.to}. Error: ${gmailErr.message || gmailErr}`);
+      // Throw combined or final error
+      throw new Error(`Email delivery failed. Brevo error: ${brevoError?.message || 'not configured'}. Gmail error: ${gmailErr.message || gmailErr}`);
+    }
+  }
+};
 
 /**
  * Send an OTP email for email verification or password reset.
@@ -42,16 +128,11 @@ export const sendOtpEmail = async (to: string, otp: string, type: 'verify' | 're
     </html>
   `;
 
-  const { error } = await resend.emails.send({
-    from: FROM,
+  await sendMailWithFallback({
     to,
     subject,
     html,
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
 };
 
 /**
@@ -79,14 +160,9 @@ export const sendGeneralEmail = async (to: string, subject: string, title: strin
     </html>
   `;
 
-  const { error } = await resend.emails.send({
-    from: FROM,
+  await sendMailWithFallback({
     to,
     subject,
     html,
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
 };

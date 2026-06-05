@@ -1,12 +1,9 @@
 import cron from 'node-cron';
 import { supabase } from './supabase';
-import { Resend } from 'resend';
+import { sendMailWithFallback } from './mailer';
 import dotenv from 'dotenv';
 
 dotenv.config();
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = 'PastQ <noreply@pastqhub.com>';
 
 
 
@@ -210,13 +207,15 @@ export async function runWeeklyDigestJob() {
           </html>
         `;
 
-        const { error: digestErr } = await resend.emails.send({
-          from: FROM,
-          to: student.email,
-          subject,
-          html
-        });
-        if (digestErr) console.error(`[Weekly Digest] Failed for ${student.email}:`, digestErr.message);
+        try {
+          await sendMailWithFallback({
+            to: student.email,
+            subject,
+            html
+          });
+        } catch (digestErr: any) {
+          console.error(`[Weekly Digest] Failed for ${student.email}:`, digestErr.message || digestErr);
+        }
       } else {
         // --- INACTIVE STUDENT EMAIL (7+ Days Inactive) ---
         // Check if student signed up at least 7 days ago
@@ -260,13 +259,15 @@ export async function runWeeklyDigestJob() {
             </html>
           `;
 
-          const { error: inactiveErr } = await resend.emails.send({
-            from: FROM,
-            to: student.email,
-            subject,
-            html
-          });
-          if (inactiveErr) console.error(`[Weekly Digest] Inactive email failed for ${student.email}:`, inactiveErr.message);
+          try {
+            await sendMailWithFallback({
+              to: student.email,
+              subject,
+              html
+            });
+          } catch (inactiveErr: any) {
+            console.error(`[Weekly Digest] Inactive email failed for ${student.email}:`, inactiveErr.message || inactiveErr);
+          }
         }
       }
     }

@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import { Resend } from 'resend';
+import { sendMailWithFallback } from '../lib/mailer';
 import validator from 'validator';
 
 const router = Router();
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 router.post('/contact', async (req, res) => {
   try {
@@ -18,29 +17,40 @@ router.post('/contact', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email address.' });
     }
 
-    // 2. Send via Resend
-    const { error } = await resend.emails.send({
-      from: 'PastQ Support <noreply@pastqhub.com>',
-      to: 'sayonaraa340@gmail.com', // Always send TO this address
-      replyTo: email, // Student's email for easy reply
-      subject: `[PastQ Support] ${subject}: ${name || 'Student'}`,
-      text: `
+    const text = `
 Name: ${name || 'Not provided'}
 Email: ${email}
 Subject: ${subject}
 
 Message:
 ${message}
-      `,
-    });
+    `;
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2>New Support Request</h2>
+        <p><strong>Name:</strong> ${name || 'Not provided'}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Subject:</strong> ${subject}</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p><strong>Message:</strong></p>
+        <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; white-space: pre-wrap;">
+          ${message}
+        </div>
+      </div>
+    `;
+
+    // 2. Send via fallback system
+    await sendMailWithFallback({
+      to: 'sayonaraa340@gmail.com', // Always send TO this address
+      replyTo: email, // Student's email for easy reply
+      subject: `[PastQ Support] ${subject}: ${name || 'Student'}`,
+      text,
+      html,
+    });
 
     res.status(200).json({ message: 'Your message has been sent successfully!' });
   } catch (error: any) {
-
     res.status(500).json({ error: `Email Error: ${error.message || 'Check email settings'}` });
   }
 });

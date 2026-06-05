@@ -37,7 +37,6 @@
     "nodemailer": "^8.0.7",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^5.7.284",
-    "resend": "^6.12.4",
     "tesseract.js": "^7.0.0",
     "unpdf": "^1.6.2",
     "validator": "^13.15.35"
