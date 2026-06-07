@@ -45,7 +45,7 @@ const isApp = () => {
  * No-op in regular browser sessions (they rely on httpOnly cookies).
  */
 const savePwaRefreshToken = (refreshToken: string | undefined | null) => {
-  if (!isApp() || !refreshToken) return;
+  if (!refreshToken) return;
   localStorage.setItem(PWA_REFRESH_KEY, refreshToken);
 };
 
@@ -62,6 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setToken(customEvent.detail.token);
         setUser(customEvent.detail.user);
         savePwaRefreshToken(customEvent.detail.refreshToken);
+        localStorage.setItem('last_visit', Date.now().toString());
       }
     };
 
@@ -112,9 +113,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setToken(data.token);
             setUser(data.user);
             savePwaRefreshToken(data.refreshToken);
-            if (isApp()) {
-              localStorage.setItem('last_visit', Date.now().toString());
-            }
+            localStorage.setItem('last_visit', Date.now().toString());
             setLoading(false);
             return;
           }
@@ -122,29 +121,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         // Attempt 2: PWA localStorage fallback — cookies may have been lost
         // when the OS killed the standalone WebView process.
-        if (isApp()) {
-          const storedRefresh = localStorage.getItem(PWA_REFRESH_KEY);
-          if (storedRefresh) {
-            const fallbackRes = await fetch(`${BASE_URL}/auth/refresh`, {
-              method: 'POST',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ refreshToken: storedRefresh }),
-            });
-            if (fallbackRes.ok) {
-              const data = await fallbackRes.json();
-              if (data && data.token && data.user) {
-                setToken(data.token);
-                setUser(data.user);
-                savePwaRefreshToken(data.refreshToken);
-                localStorage.setItem('last_visit', Date.now().toString());
-                setLoading(false);
-                return;
-              }
+        const storedRefresh = localStorage.getItem(PWA_REFRESH_KEY);
+        if (storedRefresh) {
+          const fallbackRes = await fetch(`${BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: storedRefresh }),
+          });
+          if (fallbackRes.ok) {
+            const data = await fallbackRes.json();
+            if (data && data.token && data.user) {
+              setToken(data.token);
+              setUser(data.user);
+              savePwaRefreshToken(data.refreshToken);
+              localStorage.setItem('last_visit', Date.now().toString());
+              setLoading(false);
+              return;
             }
-            // Stored token was rejected (expired/invalidated) — clean up
-            localStorage.removeItem(PWA_REFRESH_KEY);
           }
+          // Stored token was rejected (expired/invalidated) — clean up
+          localStorage.removeItem(PWA_REFRESH_KEY);
         }
       } catch (err) {
         console.error('Silent refresh failed on startup:', err);
@@ -180,9 +177,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     sessionStorage.removeItem('streak_pinged');
     sessionStorage.removeItem('streak_count');
 
-    if (isApp()) {
-      storage.setItem('last_visit', Date.now().toString());
-    }
+    storage.setItem('last_visit', Date.now().toString());
     savePwaRefreshToken(refreshToken);
     
     setToken(newToken);
