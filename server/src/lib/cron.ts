@@ -5,9 +5,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-
-
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
 
 export async function runWeeklyDigestJob() {
   console.log('[Weekly Digest Cron] Starting weekly activity digest and inactive email job...');
@@ -15,10 +15,10 @@ export async function runWeeklyDigestJob() {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString();
 
-    // 1. Fetch verified student users
+    // 1. Fetch verified student users (added last_inactive_email_sent)
     const { data: students, error: userError } = await supabase
       .from('upsa_users')
-      .select('id, email, username, full_name, total_points, streak_count, created_at')
+      .select('id, email, username, full_name, total_points, streak_count, created_at, last_inactive_email_sent')
       .eq('role', 'student')
       .eq('is_verified', true);
 
@@ -63,7 +63,6 @@ export async function runWeeklyDigestJob() {
     });
 
     // 4. Calculate Leaderboard Rankings (Now and 7 days ago)
-    // Map recent points earned in last 7 days per user
     const recentPointsMap = new Map<string, number>();
     recentSubsMap.forEach((subs, uid) => {
       const pts = subs.reduce((sum, s) => sum + (Number(s.points_awarded) || 0), 0);
@@ -85,10 +84,7 @@ export async function runWeeklyDigestJob() {
     const sortedThen = [...students].map(s => {
       const recentPts = recentPointsMap.get(s.id) || 0;
       const pointsThen = Math.max(0, (s.total_points || 0) - recentPts);
-      return {
-        ...s,
-        points_then: pointsThen
-      };
+      return { ...s, points_then: pointsThen };
     }).sort((a, b) => {
       const pointsA = a.points_then;
       const pointsB = b.points_then;
@@ -100,14 +96,10 @@ export async function runWeeklyDigestJob() {
     });
 
     const rankNowMap = new Map<string, number>();
-    sortedNow.forEach((u, idx) => {
-      rankNowMap.set(u.id, idx + 1);
-    });
+    sortedNow.forEach((u, idx) => rankNowMap.set(u.id, idx + 1));
 
     const rankThenMap = new Map<string, number>();
-    sortedThen.forEach((u, idx) => {
-      rankThenMap.set(u.id, idx + 1);
-    });
+    sortedThen.forEach((u, idx) => rankThenMap.set(u.id, idx + 1));
 
     // Process each student
     for (const student of students) {
@@ -122,9 +114,8 @@ export async function runWeeklyDigestJob() {
         const xpEarned = userSubs.reduce((sum, s) => sum + (Number(s.points_awarded) || 0), 0);
         const rankNow = rankNowMap.get(student.id) || sortedNow.length;
         const rankThen = rankThenMap.get(student.id) || sortedThen.length;
-        const rankChange = rankThen - rankNow; // Positive is improvement
+        const rankChange = rankThen - rankNow;
 
-        // Find closest competitor on sortedNow
         const myIdx = sortedNow.findIndex(u => u.id === student.id);
         let competitorHtml = '';
         if (myIdx > 0) {
@@ -137,7 +128,6 @@ export async function runWeeklyDigestJob() {
             </div>
           `;
         } else if (sortedNow.length > 1) {
-          // If rank 1, closest competitor is rank 2 (index 1)
           const competitor = sortedNow[1];
           const diff = (student.total_points || 0) - (competitor.total_points || 0);
           competitorHtml = `
@@ -157,31 +147,30 @@ export async function runWeeklyDigestJob() {
             <div style="background-color: #0f0c1b; padding: 40px 20px; text-align: center;">
               <div style="max-width: 500px; margin: 0 auto; background-color: #1c1a2e; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.08); overflow: hidden; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                 <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 35px 40px; text-align: center;">
-                  <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; tracking-tight: -0.025em;">Past<span style="color: #a5b4fc;">Q</span></h1>
+                  <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 800;">Past<span style="color: #a5b4fc;">Q</span></h1>
                   <p style="color: #c7d2fe; margin: 8px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Your Weekly Study Digest</p>
                 </div>
                 <div style="padding: 35px 30px 40px 30px;">
                   <p style="font-size: 16px; color: #ffffff; font-weight: 700; margin: 0 0 10px 0;">Hello ${student.username || student.full_name || 'Student'},</p>
                   <p style="font-size: 14px; line-height: 1.6; color: #94a3b8; margin: 0 0 30px 0;">Here is a summary of your academic achievements on PastQ for the past week. Keep up the amazing momentum!</p>
                   
-                  <!-- Stats Grid -->
                   <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
                     <tr>
-                      <td style="width: 50%; padding: 15px; text-align: center; background-color: #0f0c1b; border: 1px solid rgba(255,255,255,0.05); border-top-left-radius: 12px; border-bottom-left-radius: 0;">
+                      <td style="width: 50%; padding: 15px; text-align: center; background-color: #0f0c1b; border: 1px solid rgba(255,255,255,0.05); border-top-left-radius: 12px;">
                         <div style="font-size: 24px; font-weight: 800; color: #6366f1;">${quizzesCompleted}</div>
                         <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.05em;">Quizzes Started</div>
                       </td>
-                      <td style="width: 50%; padding: 15px; text-align: center; background-color: #0f0c1b; border: 1px solid rgba(255,255,255,0.05); border-top-right-radius: 12px; border-bottom-right-radius: 0;">
+                      <td style="width: 50%; padding: 15px; text-align: center; background-color: #0f0c1b; border: 1px solid rgba(255,255,255,0.05); border-top-right-radius: 12px;">
                         <div style="font-size: 24px; font-weight: 800; color: #f59e0b;">+${xpEarned}</div>
                         <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.05em;">XP Earned</div>
                       </td>
                     </tr>
                     <tr>
-                      <td style="width: 50%; padding: 15px; text-align: center; background-color: #0f0c1b; border: 1px solid rgba(255,255,255,0.05); border-bottom-left-radius: 12px; border-top-left-radius: 0;">
+                      <td style="width: 50%; padding: 15px; text-align: center; background-color: #0f0c1b; border: 1px solid rgba(255,255,255,0.05); border-bottom-left-radius: 12px;">
                         <div style="font-size: 24px; font-weight: 800; color: #ffffff;">#${rankNow}</div>
                         <div style="font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.05em;">Leaderboard Rank</div>
                       </td>
-                      <td style="width: 50%; padding: 15px; text-align: center; background-color: #0f0c1b; border: 1px solid rgba(255,255,255,0.05); border-bottom-right-radius: 12px; border-top-right-radius: 0;">
+                      <td style="width: 50%; padding: 15px; text-align: center; background-color: #0f0c1b; border: 1px solid rgba(255,255,255,0.05); border-bottom-right-radius: 12px;">
                         <div style="font-size: 24px; font-weight: 800; color: ${rankChange > 0 ? '#10b981' : rankChange < 0 ? '#ef4444' : '#cbd5e1'};">
                           ${rankChange > 0 ? `▲ ${rankChange}` : rankChange < 0 ? `▼ ${Math.abs(rankChange)}` : '—'}
                         </div>
@@ -190,10 +179,8 @@ export async function runWeeklyDigestJob() {
                     </tr>
                   </table>
 
-                  <!-- Competitor block -->
                   ${competitorHtml}
 
-                  <!-- CTA -->
                   <div style="text-align: center; margin-top: 35px;">
                     <a href="${FRONTEND_URL}/quiz" style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #ffffff; font-weight: 700; font-size: 14px; text-decoration: none; padding: 14px 28px; border-radius: 12px; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); text-transform: uppercase; letter-spacing: 0.05em;">Enter Quiz Arena</a>
                   </div>
@@ -208,77 +195,115 @@ export async function runWeeklyDigestJob() {
         `;
 
         try {
-          await sendMailWithFallback({
-            to: student.email,
-            subject,
-            html
-          });
+          await sendMailWithFallback({ to: student.email, subject, html });
         } catch (digestErr: any) {
           console.error(`[Weekly Digest] Failed for ${student.email}:`, digestErr.message || digestErr);
         }
+
       } else {
-        // --- INACTIVE STUDENT EMAIL (7+ Days Inactive) ---
-        // Check if student signed up at least 7 days ago
-        const dateCreated = new Date(student.created_at).getTime();
+        // --- INACTIVE STUDENT EMAIL ---
+
         const nowTime = Date.now();
-        const isSevenDaysOld = (nowTime - dateCreated) >= 7 * 24 * 60 * 60 * 1000;
+        const dateCreated = new Date(student.created_at).getTime();
 
-        if (isSevenDaysOld) {
-          const subject = `We miss you at PastQ! 📚`;
-          const html = `
-            <!DOCTYPE html>
-            <html lang="en">
-            <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-            <body style="margin: 0; padding: 0; background-color: #0f0c1b; font-family: 'Segoe UI', Helvetica, Arial, sans-serif; color: #cbd5e1; -webkit-font-smoothing: antialiased;">
-              <div style="background-color: #0f0c1b; padding: 40px 20px; text-align: center;">
-                <div style="max-width: 500px; margin: 0 auto; background-color: #1c1a2e; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.08); overflow: hidden; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                  <div style="background: linear-gradient(135deg, #ec4899, #8b5cf6); padding: 35px 40px; text-align: center;">
-                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; tracking-tight: -0.025em;">Past<span style="color: #fbcfe8;">Q</span></h1>
-                    <p style="color: #fce7f3; margin: 8px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">We miss you!</p>
-                  </div>
-                  <div style="padding: 35px 30px 40px 30px;">
-                    <p style="font-size: 16px; color: #ffffff; font-weight: 700; margin: 0 0 10px 0;">Hello ${student.username || student.full_name || 'Student'},</p>
-                    <p style="font-size: 14px; line-height: 1.6; color: #94a3b8; margin: 0 0 30px 0;">It's been a while since your last quiz on PastQ. Consistent practice is the key to exam success! Don't let your streak expire and don't let others take your spot on the leaderboard.</p>
-                    
-                    <div style="background-color: #0f0c1b; border: 1px solid rgba(236, 72, 153, 0.2); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 30px;">
-                      <p style="font-size: 14px; color: #fbcfe8; font-weight: 700; margin: 0 0 8px 0;">🔥 Ready to climb back up?</p>
-                      <p style="font-size: 12px; color: #64748b; margin: 0; line-height: 1.5;">New papers and quiz questions have been added since you last logged in. Log in today to claim your daily streaks!</p>
-                    </div>
+        // Only email students who signed up at least 14 days ago
+        const isFourteenDaysOld = (nowTime - dateCreated) >= FOURTEEN_DAYS_MS;
+        if (!isFourteenDaysOld) continue;
 
-                    <!-- CTA -->
-                    <div style="text-align: center; margin-top: 30px;">
-                      <a href="${FRONTEND_URL}/quiz" style="display: inline-block; background: linear-gradient(135deg, #ec4899, #8b5cf6); color: #ffffff; font-weight: 700; font-size: 14px; text-decoration: none; padding: 14px 28px; border-radius: 12px; box-shadow: 0 4px 15px rgba(236, 72, 153, 0.4); text-transform: uppercase; letter-spacing: 0.05em;">Resume Learning Now</a>
-                    </div>
+        // Skip if we already sent an inactive email within the last 14 days
+        if (student.last_inactive_email_sent) {
+          const lastSent = new Date(student.last_inactive_email_sent).getTime();
+          if ((nowTime - lastSent) < FOURTEEN_DAYS_MS) {
+            console.log(`[Weekly Digest] Skipping inactive email for ${student.email} — sent recently`);
+            continue;
+          }
+        }
+
+        // Check if this student has EVER had any session (not just last 7 days)
+        const { count: everSessionCount } = await supabase
+          .from('upsa_sessions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', student.id);
+
+        const neverUsed = !everSessionCount || everSessionCount === 0;
+
+        // Pick copy based on whether they ever engaged
+        const subject = neverUsed
+          ? `You haven't tried the AI tutor yet 👀`
+          : `We miss you at PastQ! 📚`;
+
+        const headerSubtitle = neverUsed ? `You're missing out!` : `We miss you`;
+
+        const bodyText = neverUsed
+          ? `You signed up but haven't explored PastQ yet. Our AI tutor can explain any past paper question instantly — most students are surprised how useful it is. Try asking it one question today.`
+          : `It's been a while since your last quiz on PastQ. Consistent practice is the key to exam success! Don't let others take your spot on the leaderboard.`;
+
+        const highlightEmoji = neverUsed ? `🤖` : `🔥`;
+        const highlightTitle = neverUsed ? `See what the AI tutor can do` : `Ready to climb back up?`;
+        const highlightBody = neverUsed
+          ? `Pick any past paper from your department and ask the AI to explain a question. It takes 30 seconds and could change how you study.`
+          : `New papers and quiz questions have been added since you last logged in. Log in today to claim your daily streaks!`;
+
+        const buttonText = neverUsed ? `Try the AI Tutor` : `Resume Learning Now`;
+        const buttonLink = neverUsed ? `${FRONTEND_URL}/papers` : `${FRONTEND_URL}/quiz`;
+
+        const html = `
+          <!DOCTYPE html>
+          <html lang="en">
+          <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+          <body style="margin: 0; padding: 0; background-color: #0f0c1b; font-family: 'Segoe UI', Helvetica, Arial, sans-serif; color: #cbd5e1; -webkit-font-smoothing: antialiased;">
+            <div style="background-color: #0f0c1b; padding: 40px 20px; text-align: center;">
+              <div style="max-width: 500px; margin: 0 auto; background-color: #1c1a2e; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.08); overflow: hidden; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 35px 40px; text-align: center;">
+                  <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 800;">Past<span style="color: #a5b4fc;">Q</span></h1>
+                  <p style="color: #c7d2fe; margin: 8px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">${headerSubtitle}</p>
+                </div>
+                <div style="padding: 35px 30px 40px 30px;">
+                  <p style="font-size: 16px; color: #ffffff; font-weight: 700; margin: 0 0 10px 0;">Hello ${student.username || student.full_name || 'Student'},</p>
+                  <p style="font-size: 14px; line-height: 1.6; color: #94a3b8; margin: 0 0 30px 0;">${bodyText}</p>
+                  
+                  <div style="background-color: #0f0c1b; border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 30px;">
+                    <p style="font-size: 14px; color: #a5b4fc; font-weight: 700; margin: 0 0 8px 0;">${highlightEmoji} ${highlightTitle}</p>
+                    <p style="font-size: 12px; color: #64748b; margin: 0; line-height: 1.5;">${highlightBody}</p>
                   </div>
-                  <div style="padding: 20px 30px; border-top: 1px solid rgba(255,255,255,0.05); background-color: #121023; text-align: center;">
-                    <p style="color: #475569; font-size: 11px; margin: 0; line-height: 1.5;">You are receiving this reminder because you haven't taken a quiz in 7+ days.</p>
+
+                  <div style="text-align: center; margin-top: 30px;">
+                    <a href="${buttonLink}" style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #ffffff; font-weight: 700; font-size: 14px; text-decoration: none; padding: 14px 28px; border-radius: 12px; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); text-transform: uppercase; letter-spacing: 0.05em;">${buttonText}</a>
                   </div>
                 </div>
+                <div style="padding: 20px 30px; border-top: 1px solid rgba(255,255,255,0.05); background-color: #121023; text-align: center;">
+                  <p style="color: #475569; font-size: 11px; margin: 0; line-height: 1.5;">You are receiving this reminder because you haven't been active on PastQ recently.</p>
+                </div>
               </div>
-            </body>
-            </html>
-          `;
+            </div>
+          </body>
+          </html>
+        `;
 
-          try {
-            await sendMailWithFallback({
-              to: student.email,
-              subject,
-              html
-            });
-          } catch (inactiveErr: any) {
-            console.error(`[Weekly Digest] Inactive email failed for ${student.email}:`, inactiveErr.message || inactiveErr);
-          }
+        try {
+          await sendMailWithFallback({ to: student.email, subject, html });
+
+          // Update last_inactive_email_sent so we don't spam them next Monday
+          await supabase
+            .from('upsa_users')
+            .update({ last_inactive_email_sent: new Date().toISOString() })
+            .eq('id', student.id);
+
+        } catch (inactiveErr: any) {
+          console.error(`[Weekly Digest] Inactive email failed for ${student.email}:`, inactiveErr.message || inactiveErr);
         }
       }
     }
+
     console.log('[Weekly Digest Cron] Completed Weekly Digest successfully.');
   } catch (err: any) {
     console.error('[Weekly Digest Cron] Critical Error running weekly digest job:', err);
   }
 }
 
-// Schedule the cron job to run every Monday at 8:00 AM
-// Expression: 0 8 * * 1 (Minute 0, Hour 8, Day of month *, Month *, Day of week 1 for Monday)
+// Run every Monday at 8:00 AM Ghana time (Africa/Accra = GMT+0)
 cron.schedule('0 8 * * 1', () => {
   runWeeklyDigestJob();
+}, {
+  timezone: 'Africa/Accra'
 });
