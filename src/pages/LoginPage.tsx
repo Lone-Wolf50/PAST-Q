@@ -144,7 +144,7 @@ const LoginPage = () => {
         body: { email, password },
       });
 
-      login(data.token, data.user);
+      login(data.token, data.user, data.refreshToken);
       navigate('/papers');
     } catch (err: any) {
       setError(err.message);

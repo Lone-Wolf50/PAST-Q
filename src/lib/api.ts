@@ -7,23 +7,51 @@ interface ApiOptions {
   token?: string;
 }
 
+const PWA_REFRESH_KEY = 'pastq_pwa_rt';
+
+const isApp = () => {
+  return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+};
+
 let refreshPromise: Promise<string | null> | null = null;
 
 async function performRefresh(): Promise<string | null> {
   try {
+    // Attempt 1: Cookie-based refresh
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
-    if (!res.ok) {
-      return null;
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.token) {
+        window.dispatchEvent(new CustomEvent('token_refreshed', { detail: { token: data.token, user: data.user, refreshToken: data.refreshToken } }));
+        return data.token;
+      }
     }
-    const data = await res.json();
-    if (data && data.token) {
-      // Sync React state in memory by dispatching custom event
-      window.dispatchEvent(new CustomEvent('token_refreshed', { detail: { token: data.token, user: data.user } }));
-      return data.token;
+
+    // Attempt 2: PWA localStorage fallback
+    if (isApp()) {
+      const storedRefresh = localStorage.getItem(PWA_REFRESH_KEY);
+      if (storedRefresh) {
+        const fallbackRes = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: storedRefresh }),
+        });
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          if (data && data.token) {
+            window.dispatchEvent(new CustomEvent('token_refreshed', { detail: { token: data.token, user: data.user, refreshToken: data.refreshToken } }));
+            return data.token;
+          }
+        }
+        // Token was invalid — clean up
+        localStorage.removeItem(PWA_REFRESH_KEY);
+      }
     }
+
     return null;
   } catch (e) {
     return null;

@@ -402,6 +402,7 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
     res.status(200).json({
       message: 'Email verified successfully.',
       token,
+      refreshToken,
       user: {
         id: fullUser.id,
         full_name: fullUser.full_name,
@@ -516,6 +517,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
 
     res.status(200).json({
       token,
+      refreshToken,
       user: {
         id: user.id,
         full_name: user.full_name,
@@ -830,6 +832,7 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
 
     res.status(200).json({
       token: jwtToken,
+      refreshToken,
       user: {
         id: dbUser.id,
         full_name: dbUser.full_name,
@@ -846,9 +849,12 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
 });
 
 // ─── REFRESH TOKEN ───────────────────────────────────────────
+// Accepts the refresh token from:
+//   1. httpOnly cookie (primary — browser sessions)
+//   2. Request body (fallback — PWA/standalone mode where cookies may not persist)
 router.post('/refresh', authLimiter, async (req: Request, res: Response) => {
   const cookies = parseCookies(req.headers.cookie);
-  const refreshToken = cookies.refreshToken;
+  const refreshToken = cookies.refreshToken || (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : null);
 
   if (!refreshToken) {
     res.status(401).json({ error: 'Refresh token missing.' });
@@ -921,6 +927,7 @@ router.post('/refresh', authLimiter, async (req: Request, res: Response) => {
 
     res.status(200).json({
       token: newAccessToken,
+      refreshToken: newRefreshToken,
       user: {
         id: dbUser.id,
         full_name: dbUser.full_name,

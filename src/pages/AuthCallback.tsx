@@ -67,7 +67,7 @@ const AuthCallback = () => {
         if (isMounted) setStatus('All done! Redirecting...');
 
         // Log into the AuthContext (stores token in session/localStorage)
-        login(data.token, data.user);
+        login(data.token, data.user, data.refreshToken);
 
         // Small delay so the success state is visible
         setTimeout(() => {

@@ -75,7 +75,7 @@ const VerifyEmailPage = () => {
         body: { email, otp },
       });
       if (res.token && res.user) {
-        login(res.token, res.user);
+        login(res.token, res.user, res.refreshToken);
         navigate('/papers', { replace: true });
       } else {
         navigate('/login', { state: { verified: true } });
