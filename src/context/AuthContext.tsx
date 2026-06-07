@@ -94,6 +94,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (data && data.token && data.user) {
             setToken(data.token);
             setUser(data.user);
+            // Reset the 7-day inactivity timer on every successful refresh
+            if (isApp()) {
+              localStorage.setItem('last_visit', Date.now().toString());
+            }
           }
         }
       } catch (err) {

@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   X, CloudUpload, Plus, Trash2, AlertTriangle, CheckCircle2,
-  Loader2, ChevronDown, BookOpen, ShieldAlert, Eye, Edit2
+  Loader2, ChevronDown, BookOpen, ShieldAlert, Eye, Edit2,
+  RefreshCw, ArrowLeftRight
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { apiFetch, apiFetchMultipart } from '../lib/api';
@@ -224,6 +225,8 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
   const [deleteConfirmRow, setDeleteConfirmRow] = useState<BulkRow | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
+  const [replaceTargetRowId, setReplaceTargetRowId] = useState<string | null>(null);
 
   const isLoadedRef = useRef(false);
 
@@ -308,7 +311,6 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   };
 
   // ── Row updates ────────────────────────────────────────────────────────────
-
   const updateRow = (id: string, patch: Partial<BulkRow>) => {
     setRows((prev) => prev.map((r) => {
       if (r.id === id) {
@@ -338,7 +340,37 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
     setCreateSubjectForRow(null);
   };
 
-  // ── Upload ─────────────────────────────────────────────────────────────────
+  // ── Replace file handler ────────────────────────────────────────
+
+  const handleReplaceFile = (rowId: string) => {
+    setReplaceTargetRowId(rowId);
+    replaceFileInputRef.current?.click();
+  };
+
+  const onReplaceFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf' && replaceTargetRowId) {
+      updateRow(replaceTargetRowId, { file, title: stripPdf(file.name).toUpperCase(), status: 'idle', errorMsg: undefined });
+    }
+    setReplaceTargetRowId(null);
+    // Reset the input so the same file can be re-selected if needed
+    if (replaceFileInputRef.current) replaceFileInputRef.current.value = '';
+  };
+
+  // ── Upload ─────────────────────────────────────────────────────
+
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 1500;
+
+  const isRetryableError = (err: any): boolean => {
+    // Network failures (e.g. offline)
+    if (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) return true;
+    // Server errors (5xx)
+    if (err.status && err.status >= 500) return true;
+    return false;
+  };
+
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const handleUploadAll = async () => {
     const token = localStorage.getItem('admin_token');
@@ -381,28 +413,47 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
         continue;
       }
 
-      try {
-        const payload = new FormData();
-        payload.append('title', row.title.trim().toUpperCase());
-        payload.append('subject_id', row.subjectId);
-        payload.append('year', row.year);
-        payload.append('semester', row.semester);
-        payload.append('has_answers', 'false');
-        payload.append('file', row.file, row.file.name);
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const payload = new FormData();
+          payload.append('title', row.title.trim().toUpperCase());
+          payload.append('subject_id', row.subjectId);
+          payload.append('year', row.year);
+          payload.append('semester', row.semester);
+          payload.append('has_answers', 'false');
+          payload.append('file', row.file, row.file.name);
 
-        await apiFetchMultipart('/hq-management/papers', payload, { token });
-        updateRow(row.id, { status: 'done' });
-        done++;
-        setDoneCount(done);
-      } catch (err: any) {
-        updateRow(row.id, { status: 'error', errorMsg: err.message || 'Upload failed.' });
+          await apiFetchMultipart('/hq-management/papers', payload, { token });
+          updateRow(row.id, { status: 'done' });
+          done++;
+          setDoneCount(done);
+          break; // success, exit retry loop
+        } catch (err: any) {
+          if (isRetryableError(err) && attempt < MAX_RETRIES) {
+            // Wait before retrying
+            await delay(RETRY_DELAY_MS);
+            continue;
+          }
+          // Final attempt failed or non-retryable error
+          updateRow(row.id, { status: 'error', errorMsg: err.message || 'Upload failed.' });
+        }
       }
     }
 
     setIsUploading(false);
     fetchPapers();
 
-    if (done > 0) setAllDone(true);
+    // After batch: remove successful rows, keep failed ones visible
+    setRows(prev => {
+      const remaining = prev.filter(r => r.status !== 'done');
+      if (remaining.length === 0 && done > 0) {
+        // All files succeeded — show the All Done screen
+        setAllDone(true);
+      }
+      return remaining;
+    });
+
+    setDoneCount(done);
   };
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -501,6 +552,13 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                     accept=".pdf"
                     className="hidden"
                     onChange={(e) => addFiles(e.target.files || [])}
+                  />
+                  <input
+                    ref={replaceFileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={onReplaceFileSelected}
                   />
                 </div>
 
@@ -647,6 +705,24 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                                   >
                                     <Eye className="w-3.5 h-3.5" />
                                   </button>
+                                  {row.status === 'error' && (
+                                    <>
+                                      <button
+                                        onClick={() => updateRow(row.id, { status: 'idle', errorMsg: undefined })}
+                                        className="p-1.5 rounded-lg text-theme-muted hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                        title="Retry upload"
+                                      >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleReplaceFile(row.id)}
+                                        className="p-1.5 rounded-lg text-theme-muted hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                                        title="Replace file"
+                                      >
+                                        <ArrowLeftRight className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
                                   {(row.status === 'idle' || row.status === 'error') && (
                                     <button
                                       onClick={() => setDeleteConfirmRow(row)}

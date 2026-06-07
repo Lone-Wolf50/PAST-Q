@@ -163,7 +163,7 @@ const setRefreshTokenCookie = (res: Response, token: string, maxAgeSeconds: numb
   res.cookie('refreshToken', token, {
     httpOnly: true,
     secure: true,
-    sameSite: 'strict',
+    sameSite: 'lax',
     path: '/',
     maxAge: maxAgeSeconds * 1000,
   });
@@ -941,7 +941,7 @@ router.post('/logout', async (req: Request, res: Response) => {
   res.cookie('refreshToken', '', {
     httpOnly: true,
     secure: true,
-    sameSite: 'strict',
+    sameSite: 'lax',
     path: '/',
     maxAge: 0,
   });

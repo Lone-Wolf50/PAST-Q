@@ -34,14 +34,14 @@ export const GlobalBanner = () => {
   return (
     <>
       <style>{`
-        @keyframes marquee-ltr {
-          0%   { transform: translateX(-100%); }
-          100% { transform: translateX(100vw); }
+        @keyframes marquee-rtl {
+          0%   { transform: translateX(100%); }
+          100% { transform: translateX(-100%); }
         }
         .banner-marquee {
           display: inline-block;
           white-space: nowrap;
-          animation: marquee-ltr 18s linear infinite;
+          animation: marquee-rtl 18s linear infinite;
         }
       `}</style>
 
