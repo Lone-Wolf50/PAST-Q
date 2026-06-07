@@ -30,21 +30,27 @@ PastQ is a premium, state-of-the-art educational platform designed to help stude
 - **Installable**: Users can install the platform directly to their device home screens for a native app-like experience.
 - **Smart Prompts**: Intelligent installation prompts that gracefully hide themselves once the app is installed or dismissed.
 - **Adaptive Icons**: Fully optimized maskable icons for Android and iOS.
+- **Standalone Session Persistence**: Uses `SameSite: 'lax'` cookie settings to allow the refresh token cookie to be sent during the top-level launch navigation when opening the PWA from a device home screen, maintaining the user session.
+- **Rolling Inactivity Window**: Refreshes a 7-day inactivity timer (`last_visit` in `localStorage`) on every successful token refresh, automatically logging users out only if they do not launch the PWA for 7 consecutive days.
 
 ### 💎 Premium User Experience (UX)
 - **Cohesive Custom Modals**: Removed all archaic, blocking browser `window.alert` dialogs, replacing them with a non-blocking `AlertModal` matching the platform's custom dark-theme styling.
 - **State-Adaptive Landing Page**: CTA blocks conditionally hide redundant pathing once authenticated, keeping the home screen clean with a single "Browse Papers" button for logged-in users while retaining standard sign-up flows for visitors.
 - **True Account Isolation**: Comprehensive session and local database teardown on logout to ensure zero data bleeding (streaks, study stats, bookmarks) when switching profiles on shared computers.
+- **Right-to-Left Ticker**: Configured the global text banner to scroll naturally from right-to-left (RTL), creating an intuitive announcement ticker animation.
 
 ### 🔒 Advanced Security & Session Management
 - **Single-Device Login**: Strict concurrent session control. If a user logs into a new device, any older active sessions are instantly invalidated and the user is presented with a professional expiry notification.
 - **Smart Storage**:
-  - *Browser Users*: Temporary session storage that automatically logs out on exit for shared computers.
-  - *App/PWA Users*: Persistent local storage featuring a rolling 7-day authentication window for uninterrupted daily study sessions.
+-   *Browser Users*: Temporary session storage that automatically logs out on exit for shared computers.
+-   *App/PWA Users*: Persistent local storage featuring a rolling 7-day authentication window for uninterrupted daily study sessions.
 
 ### 🛡️ Admin HQ Portal
 - **Centralized Management**: Full control over papers, subjects, and student records.
 - **Bulk Upload Workflow**: High-efficiency spreadsheet-style interface for uploading hundreds of papers simultaneously with real-time duplicate detection.
+  - **Auto-Retry Pipeline**: Automatically retries failed document uploads up to 5 times with a 1.5-second delay to handle transient network issues or API timeouts.
+  - **Selective Row Retention**: Automatically clears successfully uploaded rows from the spreadsheet queue, while preserving failed rows in place so the administrator can inspect errors.
+  - **Action Row Controls**: Adds inline "Retry" and "Replace File" options for each failed row, letting the admin swap the PDF file using a native picker without losing already entered metadata (year, semester, subject, title).
 - **Form Draft Persistence**: Admin upload/add forms (Papers & Subjects) automatically save to `localStorage` as you type. If the page refreshes accidentally, the modal re-opens with all fields restored — only the file picker must be re-selected (browser security restriction). A clear notice is shown to remind the admin.
 - **Payment Report Export**: The Revenue & Transactions page features a fully functional **Export Report** button that generates and downloads a UTF-8 CSV file (`payment_report_YYYY-MM-DD.csv`) covering all transaction records (Transaction ID, Student Name, Email, Plan, Amount, Status, Date) with proper comma and quote escaping for Excel compatibility.
 - **Failed Join Attempts Monitor**: Comprehensive logging and real-time dashboard monitoring of registration failures (validation errors, blocked domains, database issues, email dispatch failures) with live admin notifications.
