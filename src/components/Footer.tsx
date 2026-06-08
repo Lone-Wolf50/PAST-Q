@@ -93,7 +93,7 @@ function LinkRow({ link }: { link: FooterLink }) {
   };
 
   const label = (
-    <span className="text-[13px] font-medium text-theme-muted hover:text-indigo-400 transition-colors cursor-pointer underline-offset-2 hover:underline decoration-indigo-400/40">
+    <span className="text-[13px] font-medium text-theme-secondary hover:text-indigo-400 transition-colors cursor-pointer underline-offset-2 hover:underline decoration-indigo-400/40">
       {link.label}
     </span>
   );

@@ -32,35 +32,35 @@
 /* ── CSS Variables for Dark/Light Theme ───────────────────────────────────── */
 :root {
   color-scheme: dark;
-  --bg-base: #000000;
-  --bg-surface: rgba(255, 255, 255, 0.02);
-  --bg-surface-2: rgba(255, 255, 255, 0.04);
-  --border: rgba(255, 255, 255, 0.07);
-  --border-hover: rgba(0, 102, 255, 0.25);
-  --text-primary: #ffffff;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --glow-a: rgba(0, 102, 255, 0.16);
-  --glow-b: rgba(56, 189, 248, 0.10);
+  --bg-base: #09090b;
+  --bg-surface: #18181b;
+  --bg-surface-2: #27272a;
+  --border: #27272a;
+  --border-hover: #3f3f46;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --glow-a: rgba(255, 255, 255, 0.03);
+  --glow-b: rgba(255, 255, 255, 0.02);
 
   /* Premium Glassmorphic Design Variables */
-  --glass-bg: rgba(255, 255, 255, 0.02);
-  --glass-bg-hover: rgba(255, 255, 255, 0.04);
-  --glass-border: rgba(255, 255, 255, 0.07);
-  --glass-border-hover: rgba(0, 102, 255, 0.25);
-  --glass-inner-shadow: rgba(255, 255, 255, 0.03);
+  --glass-bg: rgba(24, 24, 27, 0.8);
+  --glass-bg-hover: rgba(39, 39, 42, 0.8);
+  --glass-border: #27272a;
+  --glass-border-hover: #3f3f46;
+  --glass-inner-shadow: rgba(255, 255, 255, 0.04);
   
-  --glass-user-bg: linear-gradient(135deg, rgba(0, 102, 255, 0.18) 0%, rgba(56, 189, 248, 0.10) 100%);
-  --glass-user-border: rgba(0, 102, 255, 0.25);
-  --glass-user-text: #ffffff;
+  --glass-user-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
+  --glass-user-border: rgba(99, 102, 241, 0.25);
+  --glass-user-text: #fafafa;
   
-  --glass-ai-bg: rgba(255, 255, 255, 0.015);
-  --glass-ai-border: rgba(255, 255, 255, 0.04);
-  --glass-ai-text: #e2e8f0;
+  --glass-ai-bg: rgba(24, 24, 27, 0.6);
+  --glass-ai-border: #27272a;
+  --glass-ai-text: #e4e4e7;
   
-  --glass-sidebar-bg: rgba(0, 0, 0, 0.7);
-  --glass-header-bg: rgba(0, 0, 0, 0.55);
-  --glass-footer-bg: rgba(0, 0, 0, 0.4);
+  --glass-sidebar-bg: rgba(9, 9, 11, 0.85);
+  --glass-header-bg: rgba(9, 9, 11, 0.75);
+  --glass-footer-bg: rgba(9, 9, 11, 0.6);
 }
 
 :root.light {
@@ -154,7 +154,7 @@
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255,255,255,0.07);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.03);
     border-radius: 1rem;
     transition: background 0.3s ease, border-color 0.3s ease;
   }
@@ -296,8 +296,8 @@
 
   /* Ensure select options have a solid background */
   select option {
-    background-color: #0f172a;
-    color: #ffffff;
+    background-color: #18181b;
+    color: #fafafa;
   }
 
   :root.light select option {
@@ -752,14 +752,14 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: #27272a;
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  border: 1px solid #3f3f46;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.25);
-  border-color: rgba(99, 102, 241, 0.15);
+  background: #3f3f46;
+  border-color: #52525b;
 }
 
 :root.light ::-webkit-scrollbar-thumb {

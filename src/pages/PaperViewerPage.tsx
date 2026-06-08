@@ -7,7 +7,7 @@ import {
   Trophy
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../lib/api';
+import { apiFetch, apiDownload } from '../lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import ReportModal from '../components/ReportModal';
@@ -95,28 +95,35 @@ const PaperViewerPage = () => {
     if (downloading) return;
     setDownloading(true);
     try {
-      const res = await apiFetch(`/papers/${id}/download`, { method: 'POST', token: token! });
-      // Fetch as blob to force a real download (cross-origin URLs ignore the download attr)
-      const blob = await fetch(res.file_url).then(r => r.blob());
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      // Derive a filename from the paper title or fall back to a generic name
       const fileName = paper?.title
         ? `${paper.title.replace(/[^a-zA-Z0-9_\- ]/g, '').trim()}.pdf`
         : 'past-question.pdf';
+      const blob = await apiDownload(`/papers/${id}/download`, token!);
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch (err: any) {
-      setAlert({
-        show: true,
-        title: 'Download Failed',
-        message: err.message || 'Download failed.',
-        variant: 'error'
-      });
+      const body = err?.body || err?.response;
+      if (body?.error === 'limit_reached') {
+        setAlert({
+          show: true,
+          title: 'Limit Reached',
+          message: body.message,
+          variant: 'info'
+        });
+      } else {
+        setAlert({
+          show: true,
+          title: 'Download Failed',
+          message: err.message || 'Download failed.',
+          variant: 'error'
+        });
+      }
     } finally {
       setDownloading(false);
     }

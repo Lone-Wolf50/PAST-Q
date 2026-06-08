@@ -135,8 +135,9 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
     }
 
     const { plan, pdf_downloads_count, pdf_downloads_blocked_until } = userData;
-    const isUnlimited = ['plus', 'pro'].includes(plan.toLowerCase());
-    const limit = plan.toLowerCase() === 'basic' ? 20 : 4;
+    const safePlan = (plan || 'free').toLowerCase();
+    const isUnlimited = ['plus', 'pro'].includes(safePlan);
+    const limit = safePlan === 'basic' ? 20 : 4;
     
     // 2. Check if blocked
     if (!isUnlimited && pdf_downloads_blocked_until) {
@@ -192,7 +193,19 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
         .eq('id', user.id);
     }
 
-    res.status(200).json({ file_url: paper.file_url });
+    // 5. Fetch file from storage
+    const fileResponse = await fetch(paper.file_url);
+    if (!fileResponse.ok) {
+      res.status(500).json({ error: 'Failed to retrieve the file from storage.' });
+      return;
+    }
+
+    const arrayBuffer = await fileResponse.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${id}.pdf"`);
+    res.send(buffer);
   } catch (err) {
 
     res.status(500).json({ error: 'Failed to process download request.' });
@@ -218,8 +231,9 @@ router.post('/:id/view', protect, async (req: AuthRequest, res: Response) => {
     }
 
     const { plan, pdf_views_count, pdf_views_blocked_until } = userData;
-    const isUnlimited = ['plus', 'pro'].includes(plan.toLowerCase());
-    const limit = plan.toLowerCase() === 'basic' ? 20 : 4;
+    const safePlan = (plan || 'free').toLowerCase();
+    const isUnlimited = ['plus', 'pro'].includes(safePlan);
+    const limit = safePlan === 'basic' ? 20 : 4;
     
     // 2. Check if blocked
     if (!isUnlimited && pdf_views_blocked_until) {

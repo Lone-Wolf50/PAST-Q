@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Search, BookOpen, Download, Eye, Star, Flame, FileCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, BookOpen, Download, Eye, Star, Flame, FileCheck, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Link } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
+import { apiFetch, apiDownload } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { AlertModal } from '../components/ui/AlertModal';
 
@@ -96,6 +96,7 @@ const PapersPage = () => {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [bookmarkLoading, setBookmarkLoading] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [streak, setStreak] = useState<number>(0);
 
@@ -184,42 +185,44 @@ const PapersPage = () => {
   };
 
   const handleDownload = async (paperId: string, action: 'view' | 'download') => {
+    if (action === 'download') {
+      setDownloadingId(paperId);
+    }
     try {
-      const endpoint = action === 'view' ? `/papers/${paperId}/view` : `/papers/${paperId}/download`;
-      const res = await apiFetch(endpoint, {
-        method: 'POST',
-        token: token!
-      });
+      const matchedPaper = papers.find(p => p.id === paperId);
+      const fileName = matchedPaper?.title
+        ? `${matchedPaper.title.replace(/[^a-zA-Z0-9_\- ]/g, '').trim()}.pdf`
+        : 'past-question.pdf';
 
-      if (res.error) {
-        setAlert({
-          show: true,
-          title: action === 'view' ? 'View Error' : 'Download Error',
-          message: res.message || 'Unable to access the document. Please try again later.',
-          variant: 'error'
+      if (action === 'view') {
+        const res = await apiFetch(`/papers/${paperId}/view`, {
+          method: 'POST',
+          token: token!
         });
-        return;
-      }
 
-      if (res.file_url) {
-        if (action === 'view') {
-          window.open(res.file_url.split('?')[0], '_blank');
-        } else {
-          // Fetch as blob to force a real download (cross-origin URLs ignore the download attr)
-          const blob = await fetch(res.file_url).then(r => r.blob());
-          const blobUrl = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          const matchedPaper = papers.find(p => p.id === paperId);
-          const fileName = matchedPaper?.title
-            ? `${matchedPaper.title.replace(/[^a-zA-Z0-9_\- ]/g, '').trim()}.pdf`
-            : 'past-question.pdf';
-          link.download = fileName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(blobUrl);
+        if (res.error) {
+          setAlert({
+            show: true,
+            title: 'View Error',
+            message: res.message || 'Unable to access the document. Please try again later.',
+            variant: 'error'
+          });
+          return;
         }
+
+        if (res.file_url) {
+          window.open(res.file_url.split('?')[0], '_blank');
+        }
+      } else {
+        const blob = await apiDownload(`/papers/${paperId}/download`, token!);
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
       }
     } catch (err: any) {
       const body = err?.body || err?.response;
@@ -233,10 +236,14 @@ const PapersPage = () => {
       } else {
         setAlert({
           show: true,
-          title: 'Error',
-          message: 'An error occurred while requesting the document.',
+          title: action === 'view' ? 'View Error' : 'Download Error',
+          message: err.message || 'An error occurred while requesting the document.',
           variant: 'error'
         });
+      }
+    } finally {
+      if (action === 'download') {
+        setDownloadingId(null);
       }
     }
   };
@@ -536,10 +543,15 @@ const PapersPage = () => {
                       </Link>
                       <button
                         onClick={() => handleDownload(paper.id, 'download')}
-                        className={`w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white transition-all shadow-lg hover:shadow-xl hover:scale-105`}
+                        disabled={downloadingId !== null}
+                        className={`w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white transition-all shadow-lg hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed`}
                         title="Download PDF"
                       >
-                        <Download className="w-5 h-5" />
+                        {downloadingId === paper.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Download className="w-5 h-5" />
+                        )}
                       </button>
                     </div>
 

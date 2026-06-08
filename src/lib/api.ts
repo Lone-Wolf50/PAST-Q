@@ -177,3 +177,28 @@ export async function apiFetchMultipart(
 ) {
   return executeRequest(path, method, undefined, formData, token);
 }
+
+export async function apiDownload(path: string, token: string): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    let errData: any = null;
+    try {
+      errData = await response.json();
+    } catch {}
+    const err = new Error(errData?.message || errData?.error || 'Download failed.') as any;
+    err.status = response.status;
+    err.body = errData;
+    throw err;
+  }
+
+  return response.blob();
+}

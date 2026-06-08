@@ -100,13 +100,13 @@ const ContactModal = ({ isOpen, onClose, initialSubject = 'General Support' }: C
                 <select
                   value={formData.subject}
                   onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                  className="w-full bg-theme-surface border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-primary outline-none focus:border-indigo-500/50"
+                  className="theme-select text-sm"
                 >
-                  <option value="General Support" className="bg-theme-surface text-theme-primary">General Support</option>
-                  <option value="Technical Issue" className="bg-theme-surface text-theme-primary">Technical Issue</option>
-                  <option value="Billing / Pricing" className="bg-theme-surface text-theme-primary">Billing / Pricing</option>
-                  <option value="Paper Content Issue" className="bg-theme-surface text-theme-primary">Paper Content Issue</option>
-                  <option value="Feature Request" className="bg-theme-surface text-theme-primary">Feature Request</option>
+                  <option value="General Support">General Support</option>
+                  <option value="Technical Issue">Technical Issue</option>
+                  <option value="Billing / Pricing">Billing / Pricing</option>
+                  <option value="Paper Content Issue">Paper Content Issue</option>
+                  <option value="Feature Request">Feature Request</option>
                 </select>
               </div>
 
