@@ -185,7 +185,7 @@ const Navbar = () => {
         <div className="md:hidden fixed bottom-0 left-0 w-full z-50 px-3 pb-4 pt-2">
           <div className="relative flex items-center justify-between px-2 py-2 rounded-2xl glass-nav-mobile">
             {/* Left two links */}
-            <div className="flex items-center justify-around w-[38%]">
+            <div className="flex items-center justify-around w-[40%] min-w-0">
               {mobileNavLinks.slice(0, 2).map((link) => {
                 const isActive = location.pathname === link.path;
                 const Icon = link.icon;
@@ -194,21 +194,21 @@ const Navbar = () => {
                     key={link.name}
                     to={link.path}
                     className={clsx(
-                      'flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all',
+                      'flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-all min-w-0',
                       isActive
                         ? 'text-indigo-400'
                         : 'text-theme-muted hover:text-theme-secondary'
                     )}
                   >
-                    <Icon className={clsx('w-5 h-5', isActive && 'drop-shadow-[0_0_6px_rgba(99,102,241,0.7)]')} />
-                    <span className={clsx('text-[10px] font-semibold', isActive && 'text-indigo-300')}>{link.name}</span>
+                    <Icon className={clsx('w-5 h-5 shrink-0', isActive && 'drop-shadow-[0_0_6px_rgba(99,102,241,0.7)]')} />
+                    <span className={clsx('text-[9px] min-[360px]:text-[10px] font-semibold tracking-tight whitespace-nowrap', isActive ? 'text-indigo-300' : 'text-theme-muted')}>{link.name}</span>
                   </Link>
                 );
               })}
             </div>
 
             {/* Centre — Ask AI button */}
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex flex-col items-center gap-0.5 shrink-0">
               <Link
                 to="/ask-ai"
                 className="relative flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 hover:scale-105 active:scale-95 transition-transform"
@@ -224,7 +224,7 @@ const Navbar = () => {
                 <BrainCircuit className="w-7 h-7 text-white relative z-10 drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]" />
               </Link>
               <span
-                className="text-[10px] font-bold"
+                className="text-[9px] min-[360px]:text-[10px] font-bold tracking-tight whitespace-nowrap"
                 style={{ color: '#c4b5fd', textShadow: '0 0 8px rgba(139,92,246,0.8)' }}
               >
                 Cortana
@@ -232,7 +232,7 @@ const Navbar = () => {
             </div>
 
             {/* Right two links */}
-            <div className="flex items-center justify-around w-[38%]">
+            <div className="flex items-center justify-around w-[40%] min-w-0">
               {mobileNavLinks.slice(2, 4).map((link) => {
                 const isActive = location.pathname === link.path;
                 const Icon = link.icon;
@@ -241,7 +241,7 @@ const Navbar = () => {
                     key={link.name}
                     to={link.path}
                     className={clsx(
-                      'flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all',
+                      'flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-all min-w-0',
                       isActive
                         ? 'text-indigo-400'
                         : 'text-theme-muted hover:text-theme-secondary'
@@ -249,7 +249,7 @@ const Navbar = () => {
                   >
                     {link.name === 'Account' && user?.avatar_url ? (
                       <div className={clsx(
-                        "w-5 h-5 rounded-full overflow-hidden border relative",
+                        "w-5 h-5 rounded-full overflow-hidden border relative shrink-0",
                         isActive ? "border-indigo-400" : "border-theme-border"
                       )}>
                         <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
@@ -258,14 +258,14 @@ const Navbar = () => {
                         )}
                       </div>
                     ) : (
-                      <div className="relative">
+                      <div className="relative shrink-0">
                         <Icon className={clsx('w-5 h-5', isActive && 'drop-shadow-[0_0_6px_rgba(99,102,241,0.7)]')} />
                         {link.name === 'Account' && unreadCount > 0 && (
                           <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-theme-surface animate-pulse" />
                         )}
                       </div>
                     )}
-                    <span className={clsx('text-[10px] font-semibold', isActive && 'text-indigo-300')}>{link.name}</span>
+                    <span className={clsx('text-[9px] min-[360px]:text-[10px] font-semibold tracking-tight whitespace-nowrap', isActive ? 'text-indigo-300' : 'text-theme-muted')}>{link.name}</span>
                   </Link>
                 );
               })}
