@@ -155,10 +155,10 @@ router.get('/verify/:reference', protect, async (req: AuthRequest, res: Response
           status: 'success',
         });
 
-        // Update user plan
+        // Update user plan and clear any temporary plan data
         await supabase
           .from('upsa_users')
-          .update({ plan, plan_expires: planExpiresAt.toISOString() })
+          .update({ plan, plan_expires: planExpiresAt.toISOString(), original_plan: null, temp_plan_expires_at: null })
           .eq('id', user_id);
 
         // Notify admin
@@ -238,7 +238,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
         await supabase
           .from('upsa_users')
-          .update({ plan, plan_expires: planExpiresAt.toISOString() })
+          .update({ plan, plan_expires: planExpiresAt.toISOString(), original_plan: null, temp_plan_expires_at: null })
           .eq('id', user_id);
 
         await supabase.from('upsa_admin_notifications').insert({

@@ -957,6 +957,21 @@ const AdminPapersPage = () => {
                                 {pdfFiles.length > 0 ? `${pdfFiles.length} file(s) selected` : 'Choose PDF file(s)'}
                               </span>
                             </label>
+                            {pdfFiles.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPdfFiles([]);
+                                  const fileInput = document.getElementById('pdf-upload') as HTMLInputElement;
+                                  if (fileInput) fileInput.value = '';
+                                }}
+                                className="absolute top-2 right-2 p-1.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-colors z-10"
+                                title="Clear files"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
                             {isDraftRestored && pdfFiles.length === 0 && (
                               <p className="text-[10px] text-amber-400 font-bold mt-1 text-center animate-pulse">
                                 ⚠️ Draft restored! Please re-select the local PDF file(s) to upload.
@@ -1045,6 +1060,26 @@ const AdminPapersPage = () => {
                     <div className="lg:col-span-2 flex justify-end gap-3 pt-6 border-t border-theme-border mt-2">
                       <button
                         type="button"
+                        onClick={() => {
+                          setPdfFiles([]);
+                          setDraftTitle('');
+                          setDraftSubjectId('');
+                          setDraftYear('');
+                          setDraftSemester('First');
+                          setExternalUrl('');
+                          setDraftAnswerUrl('');
+                          setHasAnswers(false);
+                          const fileInput = document.getElementById('pdf-upload') as HTMLInputElement;
+                          if (fileInput) fileInput.value = '';
+                          const ansInput = document.getElementById('answer-pdf-upload') as HTMLInputElement;
+                          if (ansInput) ansInput.value = '';
+                        }}
+                        className="px-6 py-3 rounded-xl text-amber-400 border border-amber-500/20 bg-amber-500/10 font-bold hover:bg-amber-500/20 transition-all text-sm"
+                      >
+                        Clear Form
+                      </button>
+                      <button
+                        type="button"
                         onClick={resetModal}
                         className="px-6 py-3 rounded-xl text-theme-secondary font-bold hover:bg-theme-surface transition-all text-sm"
                       >
@@ -1109,12 +1144,12 @@ const AdminPapersPage = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-theme-primary">Possible Duplicate Found</h3>
-                  <p className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Is This a New Paper or a Copy?</p>
+                  <p className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Are These Papers The Same?</p>
                 </div>
               </div>
 
               <p className="text-sm text-theme-secondary mb-5 leading-relaxed">
-                A paper with the <span className="font-bold text-theme-primary">same title, subject, year, and semester</span> already exists. Are you uploading a genuinely different paper, or did you mean to update the existing one?
+                A paper with the <span className="font-bold text-theme-primary">same title, subject, year, and semester</span> already exists in the database. Please compare the existing paper with your new upload to confirm if they are identical or different.
               </p>
 
               <div className="bg-theme-surface/50 border border-amber-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
@@ -1140,6 +1175,20 @@ const AdminPapersPage = () => {
               </div>
 
               <div className="flex flex-col gap-3">
+                {pdfFiles.length > 0 && (
+                  <button
+                    onClick={() => {
+                      window.open(URL.createObjectURL(pdfFiles[0]), '_blank');
+                    }}
+                    className="w-full py-3.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
+                  >
+                    <Eye className="w-4 h-4" />
+                    Preview New Uploaded PDF
+                  </button>
+                )}
+
+                <p className="text-xs text-theme-muted text-center font-bold uppercase tracking-wider pt-2 border-t border-theme-border/50">Are they the same?</p>
+
                 <button
                   onClick={() => {
                     const cb = duplicatePrompt.continueUpload;
@@ -1149,7 +1198,7 @@ const AdminPapersPage = () => {
                   className="w-full py-3.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] flex justify-center items-center gap-2 text-sm"
                 >
                   <CloudUpload className="w-4 h-4" />
-                  No, they're different — Upload It
+                  No, They're Different — Proceed to Upload
                 </button>
                 <button
                   onClick={() => {
@@ -1158,17 +1207,16 @@ const AdminPapersPage = () => {
                     resetModal();
                     handleOpenEdit(paper);
                   }}
-                  className="w-full py-3.5 rounded-xl bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary font-bold transition-all flex justify-center items-center gap-2 text-sm"
+                  className="w-full py-3.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
                 >
                   <Edit2 className="w-4 h-4" />
-                  Edit the Existing One Instead
+                  Yes, Same Paper — Edit Existing
                 </button>
                 <button
                   onClick={() => setDuplicatePrompt({ show: false, paper: null, continueUpload: null })}
                   className="w-full py-2.5 rounded-xl text-theme-muted hover:text-theme-primary font-semibold transition-all text-sm flex justify-center items-center gap-2"
                 >
-                  <X className="w-4 h-4" />
-                  Cancel Upload
+                  Cancel
                 </button>
               </div>
             </div>

@@ -642,6 +642,84 @@ router.patch('/users/:id/plan', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.patch('/users/temp-plan', async (req: AuthRequest, res: Response) => {
+  const { userIds, selectAll, plan, days } = req.body;
+  
+  const validPlans = ['basic', 'pro', 'plus'];
+  if (!validPlans.includes(plan)) {
+    res.status(400).json({ error: 'Invalid plan.' });
+    return;
+  }
+  
+  if (typeof days !== 'number' || days < 1 || days > 5) {
+    res.status(400).json({ error: 'Days must be between 1 and 5.' });
+    return;
+  }
+  
+  try {
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    let targetUsers: any[] = [];
+    
+    if (selectAll) {
+      const { data, error } = await supabase
+        .from('upsa_users')
+        .select('id, plan, original_plan')
+        .eq('status', 'active');
+        
+      if (error) throw error;
+      targetUsers = data || [];
+    } else if (Array.isArray(userIds) && userIds.length > 0) {
+      const { data, error } = await supabase
+        .from('upsa_users')
+        .select('id, plan, original_plan')
+        .in('id', userIds);
+        
+      if (error) throw error;
+      targetUsers = data || [];
+    } else {
+      res.status(400).json({ error: 'No users selected.' });
+      return;
+    }
+    
+    // Filter out users who are already on pro or plus natively
+    // We only grant temporary plans to free or basic users
+    const validUsers = targetUsers.filter(u => {
+      const currentNativePlan = u.original_plan || u.plan;
+      return currentNativePlan === 'free' || currentNativePlan === 'basic';
+    });
+    
+    if (validUsers.length === 0) {
+      res.status(400).json({ error: 'No eligible users found. (Pro and Plus users are skipped)' });
+      return;
+    }
+    
+    // Update each valid user
+    const updates = validUsers.map(u => ({
+      id: u.id,
+      plan: plan,
+      original_plan: u.original_plan || u.plan,
+      temp_plan_expires_at: expiresAt
+    }));
+    
+    // Upsert or bulk update
+    for (const update of updates) {
+      await supabase.from('upsa_users').update({
+        plan: update.plan,
+        original_plan: update.original_plan,
+        temp_plan_expires_at: update.temp_plan_expires_at
+      }).eq('id', update.id);
+      invalidateCachedSession(update.id).catch(() => {});
+    }
+    
+    res.status(200).json({ 
+      message: `Granted temporary ${plan} plan to ${validUsers.length} user(s) for ${days} days.` 
+    });
+  } catch (err: any) {
+    console.error('Failed to grant temporary plan:', err);
+    res.status(500).json({ error: 'Failed to grant temporary plan.' });
+  }
+});
+
 router.patch('/users/:id/status', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const { status } = req.body;

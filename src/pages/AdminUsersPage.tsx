@@ -30,6 +30,13 @@ const AdminUsersPage = () => {
     show: false, id: null, action: null
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Temp Plan States
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [selectAllForTempPlan, setSelectAllForTempPlan] = useState(false);
+  const [showTempPlanModal, setShowTempPlanModal] = useState(false);
+  const [tempPlanConfig, setTempPlanConfig] = useState({ plan: 'basic', days: 5 });
+  const [isGranting, setIsGranting] = useState(false);
 
   // Debounce search input
   useEffect(() => {
@@ -96,6 +103,55 @@ const AdminUsersPage = () => {
         message: `Failed to update user status: ${err.message || 'Unknown error'}`,
         variant: 'error'
       });
+    }
+  };
+
+  const toggleUserSelection = (id: string) => {
+    setSelectedUserIds(prev => 
+      prev.includes(id) ? prev.filter(userId => userId !== id) : [...prev, id]
+    );
+  };
+
+  const handleGrantTempPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectAllForTempPlan && selectedUserIds.length === 0) {
+      setAlert({ show: true, title: 'No Users Selected', message: 'Please select at least one user.', variant: 'error' });
+      return;
+    }
+    
+    setIsGranting(true);
+    try {
+      const res = await apiFetch('/hq-management/users/temp-plan', {
+        method: 'PATCH',
+        body: {
+          userIds: selectedUserIds,
+          selectAll: selectAllForTempPlan,
+          plan: tempPlanConfig.plan,
+          days: tempPlanConfig.days
+        },
+        token: localStorage.getItem('admin_token')!
+      });
+      
+      setShowTempPlanModal(false);
+      setSelectedUserIds([]);
+      setSelectAllForTempPlan(false);
+      fetchUsers();
+      
+      setAlert({
+        show: true,
+        title: 'Temporary Plan Granted',
+        message: res.message || 'Users updated successfully.',
+        variant: 'success'
+      });
+    } catch (err: any) {
+      setAlert({
+        show: true,
+        title: 'Grant Failed',
+        message: err.message || 'Failed to grant temporary plan.',
+        variant: 'error'
+      });
+    } finally {
+      setIsGranting(false);
     }
   };
 
@@ -467,44 +523,55 @@ const AdminUsersPage = () => {
           </div>
 
           {/* Filters Bar */}
-          <div className="glass-card p-4 md:p-6 mb-8 border-theme-border flex flex-col lg:flex-row gap-4 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
-              <input 
-                type="text" 
-                placeholder={activeTab === 'deleted' ? "Search deleted accounts..." : "Search name or email..."} 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-theme-surface-2 border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary focus:outline-none focus:border-blue-500/50"
-              />
-            </div>
-            
-            <div className="flex items-center gap-3 w-full lg:w-auto">
-              <Filter className="w-4 h-4 text-theme-muted" />
-              <select 
-                value={selectedPlan} 
-                onChange={(e) => setSelectedPlan(e.target.value)} 
-                className="theme-select text-sm py-2 px-3"
-              >
-                <option value="">All Plans</option>
-                <option value="free">Free</option>
-                <option value="basic">Basic</option>
-                <option value="plus">Plus</option>
-                <option value="pro">Pro</option>
-              </select>
-              {activeTab !== 'deleted' && activeTab !== 'failed' && (
+          <div className="glass-card p-4 md:p-6 mb-8 border-theme-border flex flex-col lg:flex-row gap-4 items-center justify-between">
+            <div className="flex flex-col lg:flex-row gap-4 w-full lg:w-auto flex-1">
+              <div className="relative flex-1 w-full max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-muted" />
+                <input 
+                  type="text" 
+                  placeholder={activeTab === 'deleted' ? "Search deleted accounts..." : "Search name or email..."} 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-theme-surface-2 border border-theme-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-theme-primary focus:outline-none focus:border-blue-500/50"
+                />
+              </div>
+              
+              <div className="flex items-center gap-3 w-full lg:w-auto">
+                <Filter className="w-4 h-4 text-theme-muted" />
                 <select 
-                  value={selectedStatus} 
-                  onChange={(e) => setSelectedStatus(e.target.value)} 
+                  value={selectedPlan} 
+                  onChange={(e) => setSelectedPlan(e.target.value)} 
                   className="theme-select text-sm py-2 px-3"
                 >
-                  <option value="">All Statuses</option>
-                  <option value="active">Active</option>
-                  <option value="suspended">Suspended</option>
-                  <option value="deactivated">Deactivated</option>
+                  <option value="">All Plans</option>
+                  <option value="free">Free</option>
+                  <option value="basic">Basic</option>
+                  <option value="plus">Plus</option>
+                  <option value="pro">Pro</option>
                 </select>
-              )}
+                {activeTab !== 'deleted' && activeTab !== 'failed' && (
+                  <select 
+                    value={selectedStatus} 
+                    onChange={(e) => setSelectedStatus(e.target.value)} 
+                    className="theme-select text-sm py-2 px-3"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="deactivated">Deactivated</option>
+                  </select>
+                )}
+              </div>
             </div>
+            
+            {activeTab === 'active' && (
+              <button
+                onClick={() => setShowTempPlanModal(true)}
+                className="px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl text-sm transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] whitespace-nowrap w-full lg:w-auto flex justify-center items-center"
+              >
+                Grant Temp Plan
+              </button>
+            )}
           </div>
 
           {/* Mobile Cards View */}
@@ -739,6 +806,21 @@ const AdminUsersPage = () => {
                 <table key="active-table" className="w-full text-left border-collapse min-w-[900px] animate-fade-in">
                   <thead>
                     <tr className="border-b border-theme-border text-[11px] text-theme-muted uppercase tracking-widest bg-theme-surface/30 font-bold whitespace-nowrap">
+                      <th className="px-6 py-4 w-12">
+                        <input 
+                          type="checkbox" 
+                          checked={selectAllForTempPlan}
+                          onChange={(e) => {
+                            setSelectAllForTempPlan(e.target.checked);
+                            if (e.target.checked) {
+                              setSelectedUserIds(displayUsers.map(u => u.id));
+                            } else {
+                              setSelectedUserIds([]);
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-theme-surface-2"
+                        />
+                      </th>
                       <th className="px-6 py-4">User Details</th>
                       <th className="px-6 py-4">Subscription</th>
                       <th className="px-6 py-4">Status</th>
@@ -755,6 +837,14 @@ const AdminUsersPage = () => {
                     ) : (
                       displayUsers.map((user) => (
                         <tr key={user.id} className="hover:bg-theme-surface/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <input 
+                              type="checkbox" 
+                              checked={selectAllForTempPlan || selectedUserIds.includes(user.id)}
+                              onChange={() => toggleUserSelection(user.id)}
+                              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-theme-surface-2"
+                            />
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
@@ -1123,12 +1213,80 @@ const AdminUsersPage = () => {
       />
 
       <AlertModal 
-        isOpen={alert.show}
-        onClose={() => setAlert({ ...alert, show: false })}
-        title={alert.title}
-        message={alert.message}
-        variant={alert.variant}
+        isOpen={alert.show} 
+        onClose={() => setAlert({ ...alert, show: false })} 
+        title={alert.title} 
+        message={alert.message} 
+        variant={alert.variant} 
       />
+
+      {/* Grant Temporary Plan Modal */}
+      {showTempPlanModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-md border-theme-border p-6 flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-xl font-bold text-theme-primary">Grant Temporary Plan</h3>
+              <p className="text-sm text-theme-muted">
+                {selectAllForTempPlan 
+                  ? `This will grant the selected plan to ALL active Free/Basic users.`
+                  : `You have selected ${selectedUserIds.length} user(s).`}
+              </p>
+            </div>
+
+            <form onSubmit={handleGrantTempPlan} className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-theme-muted uppercase tracking-wider">Select Target Plan</label>
+                <select 
+                  value={tempPlanConfig.plan}
+                  onChange={(e) => setTempPlanConfig({ ...tempPlanConfig, plan: e.target.value })}
+                  className="theme-select py-3 px-4"
+                  required
+                >
+                  <option value="basic">Basic Plan</option>
+                  <option value="pro">Pro Plan</option>
+                  <option value="plus">Plus Plan</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-theme-muted uppercase tracking-wider">Duration (Days)</label>
+                <input 
+                  type="number" 
+                  min="1" 
+                  max="5"
+                  value={tempPlanConfig.days}
+                  onChange={(e) => setTempPlanConfig({ ...tempPlanConfig, days: parseInt(e.target.value) || 1 })}
+                  className="bg-theme-surface border border-theme-border rounded-xl px-4 py-3 text-theme-primary focus:border-indigo-500/50 outline-none w-full"
+                  required
+                />
+                <p className="text-[10px] text-theme-muted">Max 5 days. Expires precisely at the same time after N days.</p>
+              </div>
+
+              <div className="flex items-center gap-3 pt-4 border-t border-theme-border">
+                <button
+                  type="button"
+                  onClick={() => setShowTempPlanModal(false)}
+                  className="flex-1 py-3 bg-theme-surface hover:bg-theme-surface-2 text-theme-secondary font-bold rounded-xl transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isGranting || (!selectAllForTempPlan && selectedUserIds.length === 0)}
+                  className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] disabled:opacity-50 text-sm flex justify-center items-center"
+                >
+                  {isGranting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin mr-2"></div>
+                      Granting...
+                    </>
+                  ) : 'Confirm Grant'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

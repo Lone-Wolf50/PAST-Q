@@ -377,10 +377,27 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
     // Evict user session cache on verification
     invalidateCachedSession(user.id).catch(() => {});
 
-    // Notify Admin of Successful Verification
+    // Notify Admin of Successful Verification (consolidated — remove any duplicate "New User Registration" notification)
+    try {
+      // Delete any recent "New User Registration" notification for this email to prevent doubles
+      const { data: recentDupes } = await supabase
+        .from('upsa_admin_notifications')
+        .select('id')
+        .ilike('message', `%${email}%`)
+        .ilike('title', '%New User%')
+        .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+      
+      if (recentDupes && recentDupes.length > 0) {
+        await supabase
+          .from('upsa_admin_notifications')
+          .delete()
+          .in('id', recentDupes.map(n => n.id));
+      }
+    } catch {}
+
     await supabase.from('upsa_admin_notifications').insert({
-      title: '🎓 Student Signed In/Verified',
-      message: `User ${email} (${fullUser.full_name || 'No Name'}) has successfully verified their email and signed in.`,
+      title: '🎓 New Student Verified',
+      message: `${fullUser.full_name || 'No Name'} (${email}) has created an account and verified their email.`,
       type: 'info',
     });
 
@@ -800,10 +817,26 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
       dbUser = newUser;
       console.log(`🆕 New Google user registered: ${email}`);
 
-      // Notify Admin of Successful Google Signup
+      // Notify Admin of Successful Google Signup (consolidated — remove any database trigger duplicate)
+      try {
+        const { data: recentDupes } = await supabase
+          .from('upsa_admin_notifications')
+          .select('id')
+          .ilike('message', `%${email}%`)
+          .ilike('title', '%New User%')
+          .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+        
+        if (recentDupes && recentDupes.length > 0) {
+          await supabase
+            .from('upsa_admin_notifications')
+            .delete()
+            .in('id', recentDupes.map(n => n.id));
+        }
+      } catch {}
+
       await supabase.from('upsa_admin_notifications').insert({
-        title: '🎓 Student Signed In/Verified',
-        message: `User ${email} (${full_name || 'No Name'}) has successfully registered and signed in via Google OAuth.`,
+        title: '🎓 New Student Verified',
+        message: `${full_name || 'No Name'} (${email}) has registered and signed in via Google.`,
         type: 'info',
       });
     }

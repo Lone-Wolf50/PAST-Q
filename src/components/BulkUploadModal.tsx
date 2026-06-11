@@ -820,12 +820,12 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-theme-primary">Possible Duplicate Found</h3>
-                  <p className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Is This a New Paper or a Copy?</p>
+                  <p className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Are These Papers The Same?</p>
                 </div>
               </div>
 
               <p className="text-sm text-theme-secondary mb-5 leading-relaxed">
-                A paper with the <span className="font-bold text-theme-primary">same title, subject, year, and semester</span> already exists. Are you uploading a genuinely different paper, or did you mean to update the existing one?
+                A paper with the <span className="font-bold text-theme-primary">same title, subject, year, and semester</span> already exists in the database. Please compare both papers below to confirm if they are identical or different.
               </p>
 
               <div className="bg-theme-surface/50 border border-amber-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
@@ -854,6 +854,20 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                 <button
                   onClick={() => {
                     if (duplicatePrompt.row) {
+                      window.open(URL.createObjectURL(duplicatePrompt.row.file), '_blank');
+                    }
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
+                >
+                  <Eye className="w-4 h-4" />
+                  Preview New Uploaded PDF
+                </button>
+
+                <p className="text-xs text-theme-muted text-center font-bold uppercase tracking-wider pt-2 border-t border-theme-border/50">Are they the same?</p>
+
+                <button
+                  onClick={() => {
+                    if (duplicatePrompt.row) {
                       updateRow(duplicatePrompt.row.id, { forceUpload: true, status: 'idle' });
                     }
                     setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null });
@@ -861,7 +875,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                   className="w-full py-3.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] flex justify-center items-center gap-2 text-sm"
                 >
                   <CloudUpload className="w-4 h-4" />
-                  No, they're different — Upload It
+                  No, They're Different — Proceed to Upload
                 </button>
                 <button
                   onClick={() => {
@@ -871,10 +885,22 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                       onEditPaper(paper);
                     }
                   }}
-                  className="w-full py-3.5 rounded-xl bg-theme-surface hover:bg-theme-surface-2 border border-theme-border text-theme-primary font-bold transition-all flex justify-center items-center gap-2 text-sm"
+                  className="w-full py-3.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
                 >
                   <Edit2 className="w-4 h-4" />
-                  Edit the Existing One Instead
+                  Yes, Same Paper — Edit Existing
+                </button>
+                <button
+                  onClick={() => {
+                    if (duplicatePrompt.row) {
+                      updateRow(duplicatePrompt.row.id, { status: 'error', errorMsg: 'Removed as duplicate.' });
+                    }
+                    setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null });
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
+                >
+                  <X className="w-4 h-4" />
+                  Yes, Same Paper — Remove from Queue
                 </button>
                 <button
                   onClick={() => {
@@ -885,8 +911,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                   }}
                   className="w-full py-2.5 rounded-xl text-theme-muted hover:text-theme-primary font-semibold transition-all text-sm flex justify-center items-center gap-2"
                 >
-                  <X className="w-4 h-4" />
-                  Cancel Upload
+                  Cancel
                 </button>
               </div>
             </div>

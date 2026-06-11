@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { supabase } from './supabase';
 import { sendMailWithFallback } from './mailer';
+import { invalidateCachedSession } from './redis';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -301,9 +302,74 @@ export async function runWeeklyDigestJob() {
   }
 }
 
+
+
+// ── Auto-Revert Expired Temporary Plans ──────────────────────────
+async function revertExpiredTempPlans() {
+  console.log('[Temp Plan Cron] Checking for expired temporary plans...');
+  try {
+    const now = new Date().toISOString();
+    
+    const { data: expiredUsers, error } = await supabase
+      .from('upsa_users')
+      .select('id, email, full_name, plan, original_plan, temp_plan_expires_at')
+      .not('temp_plan_expires_at', 'is', null)
+      .lt('temp_plan_expires_at', now);
+    
+    if (error) throw error;
+    
+    if (!expiredUsers || expiredUsers.length === 0) {
+      console.log('[Temp Plan Cron] No expired temporary plans found.');
+      return;
+    }
+    
+    console.log(`[Temp Plan Cron] Found ${expiredUsers.length} expired temp plan(s). Reverting...`);
+    
+    for (const user of expiredUsers) {
+      const revertPlan = user.original_plan || 'free';
+      
+      const { error: updateError } = await supabase
+        .from('upsa_users')
+        .update({
+          plan: revertPlan,
+          original_plan: null,
+          temp_plan_expires_at: null
+        })
+        .eq('id', user.id);
+      
+      if (updateError) {
+        console.error(`[Temp Plan Cron] Failed to revert user ${user.email}:`, updateError);
+        continue;
+      }
+      
+      invalidateCachedSession(user.id).catch(() => {});
+      
+      console.log(`[Temp Plan Cron] Reverted ${user.email} from ${user.plan} back to ${revertPlan}`);
+    }
+    
+    // Send a single admin notification summarizing all reversions
+    await supabase.from('upsa_admin_notifications').insert({
+      title: '⏳ Temporary Plans Expired',
+      message: `${expiredUsers.length} user(s) had their temporary plan reverted back to their original plan.`,
+      type: 'info',
+    });
+    
+    console.log('[Temp Plan Cron] Completed reverting expired temporary plans.');
+  } catch (err: any) {
+    console.error('[Temp Plan Cron] Critical Error:', err);
+  }
+}
+
 // Run every Monday at 8:00 AM Ghana time (Africa/Accra = GMT+0)
 cron.schedule('0 8 * * 1', () => {
   runWeeklyDigestJob();
+}, {
+  timezone: 'Africa/Accra'
+});
+
+// Run every hour to check for expired temporary plans
+cron.schedule('0 * * * *', () => {
+  revertExpiredTempPlans();
 }, {
   timezone: 'Africa/Accra'
 });
