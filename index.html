@@ -6,7 +6,7 @@
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-7T4ETDQPMM"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
+    function gtag() { dataLayer.push(arguments); }
     gtag('js', new Date());
 
     gtag('config', 'G-7T4ETDQPMM');
@@ -18,8 +18,10 @@
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" href="/pwa-icon-512.png" />
   <title>PastQ | AI-Powered Tutoring for UPSA Students</title>
-  <meta name="description" content="The ultimate AI-powered academic tutoring platform for UPSA students. Master past papers with instant insights and AI-driven explanations at ease." />
-  <meta name="keywords" content="UPSA past questions, UPSA past papers, AI tutoring, Ghana university past papers, past exam papers, academic AI, exam prep Ghana, UPSA students" />
+  <meta name="description"
+    content="The ultimate AI-powered academic tutoring platform for UPSA students. Master past papers with instant insights and AI-driven explanations at ease." />
+  <meta name="keywords"
+    content="UPSA past questions, UPSA past papers, AI tutoring, Ghana university past papers, past exam papers, academic AI, exam prep Ghana, UPSA students" />
   <meta name="robots" content="index, follow" />
   <meta name="author" content="PastQ" />
 
@@ -31,7 +33,8 @@
   <meta property="og:url" content="https://pastqhub.com/" />
   <meta property="og:site_name" content="PastQ" />
   <meta property="og:title" content="PastQ | AI-Powered Tutoring for UPSA Students" />
-  <meta property="og:description" content="The ultimate AI-powered academic tutoring platform for UPSA students. Master past papers with instant insights and AI-driven explanations at ease." />
+  <meta property="og:description"
+    content="The ultimate AI-powered academic tutoring platform for UPSA students. Master past papers with instant insights and AI-driven explanations at ease." />
   <meta property="og:image" content="https://pastqhub.com/pwa-icon-512.png" />
   <meta property="og:image:width" content="512" />
   <meta property="og:image:height" content="512" />
@@ -40,8 +43,19 @@
   <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="PastQ | AI-Powered Tutoring for UPSA Students" />
-  <meta name="twitter:description" content="The ultimate AI-powered academic tutoring platform for UPSA students. Master past papers with instant insights and AI-driven explanations at ease." />
+  <meta name="twitter:description"
+    content="The ultimate AI-powered academic tutoring platform for UPSA students. Master past papers with instant insights and AI-driven explanations at ease." />
   <meta name="twitter:image" content="https://pastqhub.com/pwa-icon-512.png" />
+
+  <!-- WebSite Schema — helps Google recognize the correct brand name -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "PastQ",
+    "url": "https://pastqhub.com"
+  }
+  </script>
 </head>
 
 <body>
@@ -51,6 +65,7 @@
       margin: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
+
     #custom-loader {
       position: fixed;
       top: 0;
@@ -65,6 +80,7 @@
       justify-content: center;
       transition: opacity 0.8s ease-out;
     }
+
     .loader-logo {
       width: 80px;
       height: 80px;
@@ -73,6 +89,7 @@
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
       animation: dropIn 1s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     }
+
     .quote-main {
       font-size: 0.95rem;
       font-weight: 500;
@@ -87,6 +104,7 @@
       align-items: center;
       height: 24px;
     }
+
     .quote-highlight {
       background: linear-gradient(135deg, #fcd34d, #d97706);
       -webkit-background-clip: text;
@@ -96,21 +114,37 @@
       transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
       display: inline-block;
     }
+
     .fade-out {
       opacity: 0;
       transform: translateY(-5px);
     }
+
     .fade-in {
       opacity: 1;
       transform: translateY(0);
     }
+
     @keyframes dropIn {
-      0% { opacity: 0; transform: translateY(-20px) scale(0.9); }
-      100% { opacity: 1; transform: translateY(0) scale(1); }
+      0% {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.9);
+      }
+
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
+
     @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
     }
   </style>
 
@@ -127,7 +161,7 @@
       sessionStorage.setItem('loaderShown', 'true');
       const loader = document.getElementById('custom-loader');
       loader.style.display = 'flex';
-      
+
       const words = ["EXCELLENCE", "POTENTIAL", "GREATNESS"];
       let wordIndex = 0;
       const dynamicWord = document.getElementById('dynamic-word');
@@ -144,11 +178,11 @@
           }, 1200);
           return;
         }
-        
+
         // Fade out the word
         dynamicWord.classList.remove('fade-in');
         dynamicWord.classList.add('fade-out');
-        
+
         // Change text and fade back in
         setTimeout(() => {
           dynamicWord.textContent = words[wordIndex];
