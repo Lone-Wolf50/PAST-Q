@@ -58,9 +58,9 @@ function isTitleMatch(row: BulkRow, papers: Paper[]) {
 }
 
 // Fires once all fields are filled — exact 4-field match against DB
-function isExactDuplicate(row: BulkRow, papers: Paper[]) {
-  if (!row.subjectId || !row.year || !row.semester || !row.title.trim()) return false;
-  return papers.some(
+function findExactDuplicate(row: BulkRow, papers: Paper[]) {
+  if (!row.subjectId || !row.year || !row.semester || !row.title.trim()) return undefined;
+  return papers.find(
     (p) =>
       p.title.toLowerCase().trim() === row.title.toLowerCase().trim() &&
       p.subject_id === row.subjectId &&
@@ -68,6 +68,11 @@ function isExactDuplicate(row: BulkRow, papers: Paper[]) {
       p.semester === row.semester
   );
 }
+
+function isExactDuplicate(row: BulkRow, papers: Paper[]) {
+  return !!findExactDuplicate(row, papers);
+}
+
 
 // Fires immediately — checks for duplicate title within the current batch
 function isBatchDuplicate(row: BulkRow, allRows: BulkRow[]) {
@@ -381,19 +386,23 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
     if (validRows.length === 0) return;
 
     // Pre-pass: check for unapproved system duplicates
-    const unapprovedDuplicateRow = validRows.find(row => !row.forceUpload && isExactDuplicate(row, papers));
-    if (unapprovedDuplicateRow) {
-      const exactDup = papers.find(
-        (p) =>
-          p.title.toLowerCase().trim() === unapprovedDuplicateRow.title.toLowerCase().trim() &&
-          p.subject_id === unapprovedDuplicateRow.subjectId &&
-          String(p.year) === String(unapprovedDuplicateRow.year) &&
-          p.semester === unapprovedDuplicateRow.semester
-      );
-      if (exactDup) {
-        setDuplicatePrompt({ show: true, row: unapprovedDuplicateRow, duplicateInSystem: exactDup });
-        return; // Pause the upload entirely
+    let unapprovedDuplicateRow: BulkRow | undefined;
+    let exactDup: Paper | undefined;
+
+    for (const row of validRows) {
+      if (!row.forceUpload) {
+        const dup = findExactDuplicate(row, papers);
+        if (dup) {
+          unapprovedDuplicateRow = row;
+          exactDup = dup;
+          break;
+        }
       }
+    }
+
+    if (unapprovedDuplicateRow && exactDup) {
+      setDuplicatePrompt({ show: true, row: unapprovedDuplicateRow, duplicateInSystem: exactDup });
+      return; // Pause the upload entirely
     }
 
     setIsUploading(true);
