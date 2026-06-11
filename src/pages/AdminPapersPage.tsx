@@ -1213,6 +1213,16 @@ const AdminPapersPage = () => {
                   Yes, Same Paper — Edit Existing
                 </button>
                 <button
+                  onClick={() => {
+                    setDuplicatePrompt({ show: false, paper: null, continueUpload: null });
+                    resetModal();
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
+                >
+                  <X className="w-4 h-4" />
+                  Yes, Same Paper — Cancel Upload
+                </button>
+                <button
                   onClick={() => setDuplicatePrompt({ show: false, paper: null, continueUpload: null })}
                   className="w-full py-2.5 rounded-xl text-theme-muted hover:text-theme-primary font-semibold transition-all text-sm flex justify-center items-center gap-2"
                 >

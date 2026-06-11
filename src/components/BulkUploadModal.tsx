@@ -74,11 +74,18 @@ function isExactDuplicate(row: BulkRow, papers: Paper[]) {
 }
 
 
-// Fires immediately — checks for duplicate title within the current batch
+// Checks for exact 4-field duplicate within the current batch
 function isBatchDuplicate(row: BulkRow, allRows: BulkRow[]) {
-  if (!row.title.trim()) return false;
+  if (!row.subjectId || !row.year || !row.semester || !row.title.trim()) return false;
   return allRows.some(
-    (r) => r.id !== row.id && r.title.toLowerCase().trim() === row.title.toLowerCase().trim()
+    (r) =>
+      r.id !== row.id &&
+      r.status !== 'error' &&
+      r.status !== 'done' &&
+      r.title.toLowerCase().trim() === row.title.toLowerCase().trim() &&
+      r.subjectId === row.subjectId &&
+      String(r.year) === String(row.year) &&
+      r.semester === row.semester
   );
 }
 
@@ -225,7 +232,12 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
   const [createSubjectForRow, setCreateSubjectForRow] = useState<string | null>(null); // row id
   const [doneCount, setDoneCount] = useState(0);
   const [allDone, setAllDone] = useState(false);
-  const [duplicatePrompt, setDuplicatePrompt] = useState<{ show: boolean, row: BulkRow | null, duplicateInSystem: any | null }>({ show: false, row: null, duplicateInSystem: null });
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    show: boolean;
+    row: BulkRow | null;
+    duplicateInSystem: any | null;
+    duplicateInBatch: BulkRow | null;
+  }>({ show: false, row: null, duplicateInSystem: null, duplicateInBatch: null });
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
   const [deleteConfirmRow, setDeleteConfirmRow] = useState<BulkRow | null>(null);
@@ -385,23 +397,62 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
     const validRows = rows.filter((r) => r.title.trim() && r.subjectId && r.year && r.semester && r.status === 'idle');
     if (validRows.length === 0) return;
 
-    // Pre-pass: check for unapproved system duplicates
+    // Pre-pass: check for unapproved system duplicates or batch duplicates
     let unapprovedDuplicateRow: BulkRow | undefined;
     let exactDup: Paper | undefined;
+    let batchDup: BulkRow | undefined;
+
+    console.log('[BulkUpload] validRows count:', validRows.length);
+    console.log('[BulkUpload] papers count:', papers.length);
 
     for (const row of validRows) {
+      console.log('[BulkUpload] Checking row:', {
+        title: row.title,
+        subjectId: row.subjectId,
+        year: row.year,
+        semester: row.semester,
+        forceUpload: row.forceUpload,
+      });
       if (!row.forceUpload) {
         const dup = findExactDuplicate(row, papers);
+        console.log('[BulkUpload] findExactDuplicate result:', dup);
         if (dup) {
           unapprovedDuplicateRow = row;
           exactDup = dup;
           break;
         }
+
+        // Check for batch duplicate
+        const otherRow = rows.find(
+          (r) =>
+            r.id !== row.id &&
+            r.status !== 'error' &&
+            r.status !== 'done' &&
+            r.title.toLowerCase().trim() === row.title.toLowerCase().trim() &&
+            r.subjectId === row.subjectId &&
+            String(r.year) === String(row.year) &&
+            r.semester === row.semester &&
+            !r.forceUpload
+        );
+        console.log('[BulkUpload] findBatchDuplicate result:', otherRow);
+        if (otherRow) {
+          unapprovedDuplicateRow = row;
+          batchDup = otherRow;
+          break;
+        }
       }
     }
 
-    if (unapprovedDuplicateRow && exactDup) {
-      setDuplicatePrompt({ show: true, row: unapprovedDuplicateRow, duplicateInSystem: exactDup });
+    console.log('[BulkUpload] unapprovedDuplicateRow:', !!unapprovedDuplicateRow, 'exactDup:', !!exactDup, 'batchDup:', !!batchDup);
+
+    if (unapprovedDuplicateRow && (exactDup || batchDup)) {
+      console.log('[BulkUpload] SHOWING DUPLICATE PROMPT for exactDup:', exactDup, 'batchDup:', batchDup);
+      setDuplicatePrompt({
+        show: true,
+        row: unapprovedDuplicateRow,
+        duplicateInSystem: exactDup || null,
+        duplicateInBatch: batchDup || null
+      });
       return; // Pause the upload entirely
     }
 
@@ -588,9 +639,9 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                       </thead>
                       <tbody className="divide-y divide-theme-border">
                         {sortedRows.map((row, idx) => {
-                          const titleMatch = isTitleMatch(row, papers);
-                          const exactDup = isExactDuplicate(row, papers);
-                          const batchDup = isBatchDuplicate(row, rows);
+                          const titleMatch = !row.forceUpload && isTitleMatch(row, papers);
+                          const exactDup = !row.forceUpload && isExactDuplicate(row, papers);
+                          const batchDup = !row.forceUpload && isBatchDuplicate(row, rows);
                           const dup = titleMatch || exactDup || batchDup;
                           const oversized = row.file.size > MAX_BYTES;
                           const hasWarning = dup || oversized;
@@ -701,7 +752,8 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                                 {row.status === 'done' && <CheckCircle2 className="w-4 h-4 text-emerald-400 mx-auto" />}
                                 {row.status === 'error' && <AlertTriangle className="w-4 h-4 text-red-400 mx-auto" />}
                                 {row.status === 'idle' && exactDup && <AlertTriangle className="w-4 h-4 text-amber-400 mx-auto" />}
-                                {row.status === 'idle' && titleMatch && !exactDup && <AlertTriangle className="w-4 h-4 text-yellow-500 mx-auto" />}
+                                {row.status === 'idle' && batchDup && <AlertTriangle className="w-4 h-4 text-orange-400 mx-auto" />}
+                                {row.status === 'idle' && titleMatch && !exactDup && !batchDup && <AlertTriangle className="w-4 h-4 text-yellow-500 mx-auto" />}
                               </td>
 
                               {/* Actions */}
@@ -813,11 +865,11 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
       )}
 
       {/* ── Duplicate Prompt Modal ── */}
-      {duplicatePrompt.show && duplicatePrompt.duplicateInSystem && (
+      {duplicatePrompt.show && (duplicatePrompt.duplicateInSystem || duplicatePrompt.duplicateInBatch) && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[60] flex items-center justify-center p-4">
           <div className="glass-card w-full max-w-md border-theme-border relative flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <button
-              onClick={() => setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null })}
+              onClick={() => setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null, duplicateInBatch: null })}
               className="absolute top-4 right-4 p-2 text-theme-muted hover:text-theme-primary transition-colors z-10"
             >
               <X className="w-5 h-5" />
@@ -834,29 +886,60 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
               </div>
 
               <p className="text-sm text-theme-secondary mb-5 leading-relaxed">
-                A paper with the <span className="font-bold text-theme-primary">same title, subject, year, and semester</span> already exists in the database. Please compare both papers below to confirm if they are identical or different.
+                {duplicatePrompt.duplicateInSystem ? (
+                  <>A paper with the <span className="font-bold text-theme-primary">same title, subject, year, and semester</span> already exists in the database. Please compare both papers below to confirm if they are identical or different.</>
+                ) : (
+                  <>Another paper with the <span className="font-bold text-theme-primary">same title, subject, year, and semester</span> exists in this upload batch. Please compare both papers below to confirm if they are identical or different.</>
+                )}
               </p>
 
               <div className="bg-theme-surface/50 border border-amber-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
                 <div className="flex flex-col gap-1 pr-4">
-                  <p className="text-sm font-bold text-theme-primary line-clamp-1">{duplicatePrompt.duplicateInSystem.title}</p>
+                  <p className="text-sm font-bold text-theme-primary line-clamp-1">
+                    {duplicatePrompt.duplicateInSystem
+                      ? duplicatePrompt.duplicateInSystem.title
+                      : duplicatePrompt.duplicateInBatch?.title}
+                  </p>
                   <div className="flex items-center gap-2 text-xs font-bold text-theme-muted uppercase">
-                    <span className="text-indigo-400">{duplicatePrompt.duplicateInSystem.year}</span>
+                    <span className="text-indigo-400">
+                      {duplicatePrompt.duplicateInSystem
+                        ? duplicatePrompt.duplicateInSystem.year
+                        : duplicatePrompt.duplicateInBatch?.year}
+                    </span>
                     <span>•</span>
-                    <span>{duplicatePrompt.duplicateInSystem.semester} Sem</span>
+                    <span>
+                      {duplicatePrompt.duplicateInSystem
+                        ? duplicatePrompt.duplicateInSystem.semester
+                        : duplicatePrompt.duplicateInBatch?.semester} Sem
+                    </span>
                     <span>•</span>
-                    <span>{duplicatePrompt.duplicateInSystem.upsa_subjects?.name || subjects.find(s => s.id === duplicatePrompt.duplicateInSystem?.subject_id)?.name || 'Unknown Subject'}</span>
+                    <span>
+                      {duplicatePrompt.duplicateInSystem
+                        ? (duplicatePrompt.duplicateInSystem.upsa_subjects?.name || subjects.find(s => s.id === duplicatePrompt.duplicateInSystem?.subject_id)?.name)
+                        : (subjects.find(s => s.id === duplicatePrompt.duplicateInBatch?.subjectId)?.name || 'Unknown Subject')}
+                    </span>
                   </div>
+                  {duplicatePrompt.duplicateInBatch && (
+                    <span className="text-[10px] text-theme-muted font-mono mt-1 block truncate">
+                      File: {duplicatePrompt.duplicateInBatch.file.name}
+                    </span>
+                  )}
                 </div>
-                <a
-                  href={duplicatePrompt.duplicateInSystem.file_url}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = duplicatePrompt.duplicateInSystem
+                      ? duplicatePrompt.duplicateInSystem.file_url
+                      : duplicatePrompt.duplicateInBatch
+                        ? URL.createObjectURL(duplicatePrompt.duplicateInBatch.file)
+                        : '#';
+                    window.open(url, '_blank');
+                  }}
                   className="p-2.5 shrink-0 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all"
-                  title="View Existing Paper"
+                  title="View Other Paper"
                 >
                   <Eye className="w-5 h-5" />
-                </a>
+                </button>
               </div>
 
               <div className="flex flex-col gap-3">
@@ -878,33 +961,38 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                   onClick={() => {
                     if (duplicatePrompt.row) {
                       updateRow(duplicatePrompt.row.id, { forceUpload: true, status: 'idle' });
+                      if (duplicatePrompt.duplicateInBatch) {
+                        updateRow(duplicatePrompt.duplicateInBatch.id, { forceUpload: true, status: 'idle' });
+                      }
                     }
-                    setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null });
+                    setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null, duplicateInBatch: null });
                   }}
                   className="w-full py-3.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] flex justify-center items-center gap-2 text-sm"
                 >
                   <CloudUpload className="w-4 h-4" />
                   No, They're Different — Proceed to Upload
                 </button>
-                <button
-                  onClick={() => {
-                    const paper = duplicatePrompt.duplicateInSystem;
-                    setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null });
-                    if (onEditPaper) {
-                      onEditPaper(paper);
-                    }
-                  }}
-                  className="w-full py-3.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  Yes, Same Paper — Edit Existing
-                </button>
+                {duplicatePrompt.duplicateInSystem && (
+                  <button
+                    onClick={() => {
+                      const paper = duplicatePrompt.duplicateInSystem;
+                      setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null, duplicateInBatch: null });
+                      if (onEditPaper) {
+                        onEditPaper(paper);
+                      }
+                    }}
+                    className="w-full py-3.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Yes, Same Paper — Edit Existing
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     if (duplicatePrompt.row) {
                       updateRow(duplicatePrompt.row.id, { status: 'error', errorMsg: 'Removed as duplicate.' });
                     }
-                    setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null });
+                    setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null, duplicateInBatch: null });
                   }}
                   className="w-full py-3.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-bold transition-all flex justify-center items-center gap-2 text-sm"
                 >
@@ -916,7 +1004,7 @@ const BulkUploadModal = ({ subjects: initialSubjects, papers, onClose, fetchPape
                     if (duplicatePrompt.row) {
                       updateRow(duplicatePrompt.row.id, { status: 'error', errorMsg: 'Upload cancelled by user.' });
                     }
-                    setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null });
+                    setDuplicatePrompt({ show: false, row: null, duplicateInSystem: null, duplicateInBatch: null });
                   }}
                   className="w-full py-2.5 rounded-xl text-theme-muted hover:text-theme-primary font-semibold transition-all text-sm flex justify-center items-center gap-2"
                 >
