@@ -325,34 +325,44 @@ async function revertExpiredTempPlans() {
     
     console.log(`[Temp Plan Cron] Found ${expiredUsers.length} expired temp plan(s). Reverting...`);
     
+    const actualRevertedUsers = [];
+    
     for (const user of expiredUsers) {
       const revertPlan = user.original_plan || 'free';
       
-      const { error: updateError } = await supabase
+      const { data: updatedData, error: updateError } = await supabase
         .from('upsa_users')
         .update({
           plan: revertPlan,
           original_plan: null,
           temp_plan_expires_at: null
         })
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .not('temp_plan_expires_at', 'is', null)
+        .select('id, email');
       
       if (updateError) {
         console.error(`[Temp Plan Cron] Failed to revert user ${user.email}:`, updateError);
         continue;
       }
       
-      invalidateCachedSession(user.id).catch(() => {});
-      
-      console.log(`[Temp Plan Cron] Reverted ${user.email} from ${user.plan} back to ${revertPlan}`);
+      if (updatedData && updatedData.length > 0) {
+        actualRevertedUsers.push(user);
+        invalidateCachedSession(user.id).catch(() => {});
+        console.log(`[Temp Plan Cron] Reverted ${user.email} from ${user.plan} back to ${revertPlan}`);
+      } else {
+        console.log(`[Temp Plan Cron] User ${user.email} was already reverted by another process.`);
+      }
     }
     
-    // Send a single admin notification summarizing all reversions
-    await supabase.from('upsa_admin_notifications').insert({
-      title: '⏳ Temporary Plans Expired',
-      message: `${expiredUsers.length} user(s) had their temporary plan reverted back to their original plan.`,
-      type: 'info',
-    });
+    if (actualRevertedUsers.length > 0) {
+      // Send a single admin notification summarizing all reversions
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '⏳ Temporary Plans Expired',
+        message: `${actualRevertedUsers.length} user(s) had their temporary plan reverted back to their original plan.`,
+        type: 'info',
+      });
+    }
     
     console.log('[Temp Plan Cron] Completed reverting expired temporary plans.');
   } catch (err: any) {
