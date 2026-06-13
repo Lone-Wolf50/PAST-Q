@@ -253,13 +253,13 @@ const QuizPage = () => {
       return;
     }
 
-    // Instant client-side validation: check if the subject exists in the loaded list
+    // Instant client-side validation: find exact matching subject from loaded list
     const trimmedSubject = selectedSubject.trim();
-    const isValidSubject = subjects.some(
+    const matchedSubject = subjects.find(
       (sub) => sub.name.toLowerCase() === trimmedSubject.toLowerCase()
     );
 
-    if (!isValidSubject && subjects.length > 0) {
+    if (!matchedSubject && subjects.length > 0) {
       setSubjectErrorConfig({
         title: '📚 Subject Not Found',
         message: `The subject "${trimmedSubject}" does not match any available subject. Please select a valid subject from the list.`
@@ -267,6 +267,9 @@ const QuizPage = () => {
       setShowSubjectErrorModal(true);
       return;
     }
+
+    // Use the exact DB name to avoid casing mismatches
+    const subjectToSend = matchedSubject ? matchedSubject.name : trimmedSubject;
 
     setLoading(true);
     setError('');
@@ -279,7 +282,7 @@ const QuizPage = () => {
       const res = await apiFetch('/quiz/session', {
         method: 'POST',
         token: token || undefined,
-        body: { subject: selectedSubject }
+        body: { subject: subjectToSend }
       });
       if (res.session) {
         setActiveSessionId(res.session.id);
@@ -465,10 +468,52 @@ const QuizPage = () => {
     navigate('/pricing');
   };
 
+  // Render Modals helper to ensure modals are mounted across all early return screen states
+  const renderModals = () => (
+    <>
+      {/* Confirm Quit Dialog */}
+      <ConfirmModal
+        isOpen={confirmQuitOpen}
+        onClose={handleCancelQuit}
+        onConfirm={handleConfirmQuit}
+        title="Abandon Quiz Arena?"
+        message="Are you sure you want to quit? All progress, streak, and points from this session will be permanently lost."
+        confirmText="Quit Arena"
+        cancelText="Stay & Complete"
+        variant="danger"
+      />
+
+      {/* Upgrade Modal */}
+      <ConfirmModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        onConfirm={handleConfirmUpgrade}
+        title={upgradeModalConfig.title}
+        message={upgradeModalConfig.message}
+        confirmText={upgradeModalConfig.confirmText}
+        cancelText={upgradeModalConfig.cancelText}
+        variant="info"
+      />
+
+      {/* Subject Error Modal */}
+      <ConfirmModal
+        isOpen={showSubjectErrorModal}
+        onClose={() => setShowSubjectErrorModal(false)}
+        onConfirm={() => setShowSubjectErrorModal(false)}
+        title={subjectErrorConfig.title}
+        message={subjectErrorConfig.message}
+        confirmText="Choose Another"
+        cancelText="Close"
+        variant="warning"
+      />
+    </>
+  );
+
   // Render Start Screen with Rules
   if (!isQuizActive) {
     return (
-      <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-8 animate-fade-in">
+      <>
+        <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-8 animate-fade-in">
         <div className="text-center">
           <div className="inline-flex p-3 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl mb-4">
             <HelpCircle className="w-8 h-8" />
@@ -566,6 +611,8 @@ const QuizPage = () => {
           )}
         </div>
       </div>
+      {renderModals()}
+    </>
     );
   }
 
@@ -609,7 +656,8 @@ const QuizPage = () => {
     const accuracy = Math.round((sessionStats.correct / sessionStats.total) * 100);
 
     return (
-      <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-8 animate-fade-in select-none">
+      <>
+        <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-8 animate-fade-in select-none">
         <div className="text-center">
           <div className="inline-flex p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-3xl mb-4 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
             <Trophy className="w-10 h-10 animate-bounce" />
@@ -706,6 +754,8 @@ const QuizPage = () => {
           </div>
         </div>
       </div>
+      {renderModals()}
+    </>
     );
   }
 
@@ -1029,41 +1079,7 @@ const QuizPage = () => {
         </div>
       </div>
 
-      {/* Confirm Quit Dialog */}
-      <ConfirmModal
-        isOpen={confirmQuitOpen}
-        onClose={handleCancelQuit}
-        onConfirm={handleConfirmQuit}
-        title="Abandon Quiz Arena?"
-        message="Are you sure you want to quit? All progress, streak, and points from this session will be permanently lost."
-        confirmText="Quit Arena"
-        cancelText="Stay & Complete"
-        variant="danger"
-      />
-
-      {/* Upgrade Modal */}
-      <ConfirmModal
-        isOpen={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        onConfirm={handleConfirmUpgrade}
-        title={upgradeModalConfig.title}
-        message={upgradeModalConfig.message}
-        confirmText={upgradeModalConfig.confirmText}
-        cancelText={upgradeModalConfig.cancelText}
-        variant="info"
-      />
-
-      {/* Subject Error Modal */}
-      <ConfirmModal
-        isOpen={showSubjectErrorModal}
-        onClose={() => setShowSubjectErrorModal(false)}
-        onConfirm={() => setShowSubjectErrorModal(false)}
-        title={subjectErrorConfig.title}
-        message={subjectErrorConfig.message}
-        confirmText="Choose Another"
-        cancelText="Close"
-        variant="warning"
-      />
+      {renderModals()}
     </div>
   );
 };
