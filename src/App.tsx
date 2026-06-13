@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -168,13 +168,11 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-function AppRoutes() {
+function Layout() {
   const { isLoggedIn, logout, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) {
-    return <PageLoader />;
-  }
+  // All hooks must be called before any conditional returns (Rules of Hooks)
   const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
   const [accountSuspendedOpen, setAccountSuspendedOpen] = useState(false);
   const [accountDeactivatedOpen, setAccountDeactivatedOpen] = useState(false);
@@ -199,80 +197,33 @@ function AppRoutes() {
     };
   }, [logout]);
 
+  if (loading) {
+    return <PageLoader />;
+  }
+
   const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/auth/callback'];
   const isAdminPath = location.pathname.startsWith('/hq-portal');
   const isLandingPage = location.pathname === '/';
   const shouldHideFooter = (isLoggedIn && !isLandingPage) || isAdminPath || hideFooterRoutes.includes(location.pathname);
+  const showNavbar = !isAdminPath && location.pathname !== '/auth/callback';
 
   return (
     <div className="min-h-screen flex flex-col font-sans relative">
-      {!isAdminPath && location.pathname !== '/auth/callback' && <GlobalBanner />}
+      <ScrollToTop />
+      {showNavbar && <GlobalBanner />}
       <InstallPrompt />
-      <Routes>
-        <Route path="/hq-portal/*" element={null} />
-        <Route path="/auth/callback" element={null} />
-        <Route path="*" element={<Navbar />} />
-      </Routes>
+
+      {showNavbar && <Navbar />}
+
       <main className={`flex-grow flex flex-col ${isLoggedIn && location.pathname !== '/ask-ai' ? 'pb-24 md:pb-0' : ''}`}>
         <ChunkErrorBoundary>
-        <React.Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-
-            {/* Guest-only Auth Routes */}
-            <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
-            <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
-            <Route path="/reset-password" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
-            <Route path="/pricing" element={<PricingPage />} />
-
-            {/* Admin Login - Public, Standalone */}
-            <Route path="/hq-portal/login" element={<AdminLoginPage />} />
-
-            {/* Protected Routes */}
-            <Route path="/papers" element={<ProtectedRoute><PapersPage /></ProtectedRoute>} />
-            <Route path="/papers/:id" element={<ProtectedRoute><PaperViewerPage /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-            <Route path="/quiz" element={<ProtectedRoute><QuizPage /></ProtectedRoute>} />
-            <Route path="/leaderboard" element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>} />
-            <Route path="/subscription" element={<ProtectedRoute><StudentSubscriptionPage /></ProtectedRoute>} />
-            <Route path="/notifications" element={<ProtectedRoute><StudentNotificationsPage /></ProtectedRoute>} />
-            <Route path="/ask-ai" element={<ProtectedRoute><AskAIPage /></ProtectedRoute>} />
-            <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
-            <Route path="/delete-account" element={<ProtectedRoute><DeleteAccountPage /></ProtectedRoute>} />
-
-            {/* Admin Routes (Standalone Layout) */}
-            <Route path="/hq-portal/*" element={
-              <ProtectedAdminRoute>
-                <ChunkErrorBoundary>
-                <React.Suspense fallback={<PageLoader />}>
-                  <Routes>
-                    <Route path="/" element={<AdminDashboard />} />
-                    <Route path="/subjects" element={<AdminSubjectsPage />} />
-                    <Route path="/papers" element={<AdminPapersPage />} />
-                    <Route path="/users" element={<AdminUsersPage />} />
-                    <Route path="/payments" element={<AdminPaymentsPage />} />
-                    <Route path="/notifications" element={<AdminNotificationsPage />} />
-                    <Route path="/fallbacks" element={<AdminFallbacksPage />} />
-                    <Route path="/broadcast" element={<AdminBroadcastPage />} />
-                    <Route path="*" element={<NotFoundPage />} />
-                  </Routes>
-                </React.Suspense>
-                </ChunkErrorBoundary>
-              </ProtectedAdminRoute>
-            } />
-
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </React.Suspense>
+          <React.Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </React.Suspense>
         </ChunkErrorBoundary>
       </main>
 
-      <Routes>
-        <Route path="*" element={!shouldHideFooter ? <Footer /> : null} />
-      </Routes>
+      {!shouldHideFooter && <Footer />}
 
       <AlertModal
         isOpen={sessionExpiredOpen}
@@ -303,14 +254,55 @@ function AppRoutes() {
 
 const router = createBrowserRouter([
   {
-    path: '*',
-    element: (
-      <>
-        <ScrollToTop />
-        <AppRoutes />
-      </>
-    )
-  }
+    path: '/',
+    element: <Layout />,
+    children: [
+      { index: true, element: <LandingPage /> },
+
+      // Guest-only Auth Routes
+      { path: 'login', element: <GuestRoute><LoginPage /></GuestRoute> },
+      { path: 'register', element: <GuestRoute><RegisterPage /></GuestRoute> },
+      { path: 'verify-email', element: <VerifyEmailPage /> },
+      { path: 'auth/callback', element: <AuthCallback /> },
+      { path: 'forgot-password', element: <GuestRoute><ForgotPasswordPage /></GuestRoute> },
+      { path: 'reset-password', element: <GuestRoute><ResetPasswordPage /></GuestRoute> },
+      { path: 'pricing', element: <PricingPage /> },
+
+      // Admin Login
+      { path: 'hq-portal/login', element: <AdminLoginPage /> },
+
+      // Protected Routes
+      { path: 'papers', element: <ProtectedRoute><PapersPage /></ProtectedRoute> },
+      { path: 'papers/:id', element: <ProtectedRoute><PaperViewerPage /></ProtectedRoute> },
+      { path: 'profile', element: <ProtectedRoute><ProfilePage /></ProtectedRoute> },
+      { path: 'quiz', element: <ProtectedRoute><QuizPage /></ProtectedRoute> },
+      { path: 'leaderboard', element: <ProtectedRoute><LeaderboardPage /></ProtectedRoute> },
+      { path: 'subscription', element: <ProtectedRoute><StudentSubscriptionPage /></ProtectedRoute> },
+      { path: 'notifications', element: <ProtectedRoute><StudentNotificationsPage /></ProtectedRoute> },
+      { path: 'ask-ai', element: <ProtectedRoute><AskAIPage /></ProtectedRoute> },
+      { path: 'upgrade', element: <ProtectedRoute><UpgradePage /></ProtectedRoute> },
+      { path: 'delete-account', element: <ProtectedRoute><DeleteAccountPage /></ProtectedRoute> },
+
+      // Admin Panel Nested Routes
+      {
+        path: 'hq-portal',
+        element: <ProtectedAdminRoute><Outlet /></ProtectedAdminRoute>,
+        children: [
+          { index: true, element: <AdminDashboard /> },
+          { path: 'subjects', element: <AdminSubjectsPage /> },
+          { path: 'papers', element: <AdminPapersPage /> },
+          { path: 'users', element: <AdminUsersPage /> },
+          { path: 'payments', element: <AdminPaymentsPage /> },
+          { path: 'notifications', element: <AdminNotificationsPage /> },
+          { path: 'fallbacks', element: <AdminFallbacksPage /> },
+          { path: 'broadcast', element: <AdminBroadcastPage /> },
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
+
+      { path: '*', element: <NotFoundPage /> },
+    ],
+  },
 ]);
 
 function App() {
