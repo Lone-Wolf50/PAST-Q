@@ -5,6 +5,18 @@ import './index.css'
 import App from './App.tsx'
 import { ThemeProvider } from './context/ThemeContext'
 
+// ── Unregister broken Service Workers ──────────────────────────────────────────
+// Clears any cached Service Workers from previous deploys that had a faulty
+// fetch handler (promise rejection causing blank screens). Once the new SW
+// (with a proper fallback) is installed, this block becomes a harmless no-op.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister();
+    }
+  });
+}
+
 // ── Google Translate & Browser Extension DOM Crash Patch ────────────────────────
 // Prevents React from crashing when external tools (like Google Translate or extensions)
 // modify, wrap, or remove DOM text/node structures outside React's Virtual DOM.
