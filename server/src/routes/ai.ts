@@ -16,6 +16,9 @@ const pdf = require('pdf-parse');
 const router = express.Router();
 const aiConfigPath = path.join(__dirname, '../../ai-config.json');
 
+// Maximum PDF size (in bytes) allowed for Gemini inline data uploads (~20MB)
+const MAX_INLINE_PDF_BYTES = 20 * 1024 * 1024;
+
 // Apply Clock Polyfill using class inheritance to correct system clock skew
 async function applyClockPolyfill() {
   console.log('[Clock Polyfill] Checking clock skew against Google...');
@@ -646,6 +649,106 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
             }
           }
         }
+
+        // ── Gemini Vision text extraction fallback (when OCR fails) ──────────
+        // This extracts the raw text from the PDF using Gemini's native vision,
+        // making the extracted text available to ALL downstream AI providers.
+        if (extractionFailed && activeFileData) {
+          const pdfSizeBytes = Buffer.byteLength(activeFileData, 'base64');
+          if (pdfSizeBytes <= MAX_INLINE_PDF_BYTES) {
+            // Try Gemini Vision first
+            if (process.env.GEMINI_API_KEY) {
+              try {
+                console.log(`[AI /chat] OCR failed. Attempting Gemini Vision text extraction (PDF size: ${(pdfSizeBytes / 1024 / 1024).toFixed(2)}MB)...`);
+                const geminiExtractAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
+                const extractModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+                for (const extractModel of extractModels) {
+                  try {
+                    const extractResult = await geminiExtractAI.models.generateContent({
+                      model: extractModel,
+                      contents: [{
+                        role: 'user',
+                        parts: [
+                          { inlineData: { mimeType: 'application/pdf', data: activeFileData } },
+                          { text: 'Extract ALL text from this PDF document exactly as it appears. Include every question, instruction, header, numbering, and sub-question. Output ONLY the raw text content, nothing else. Do not summarize or paraphrase.' }
+                        ]
+                      }]
+                    });
+                    const geminiText = extractResult.text?.trim();
+                    if (geminiText && geminiText.length > 100) {
+                      extractedText = geminiText;
+                      extractionFailed = false;
+                      console.log(`[AI /chat] Gemini Vision extraction succeeded with ${extractModel}! Length: ${geminiText.length}`);
+                      break;
+                    }
+                  } catch (geminiModelErr: any) {
+                    console.warn(`[AI /chat] Gemini Vision extraction failed with ${extractModel}:`, geminiModelErr.message);
+                  }
+                }
+              } catch (geminiExtractErr: any) {
+                console.warn('[AI /chat] Gemini Vision extraction initialization failed:', geminiExtractErr.message);
+              }
+            }
+
+            // Fallback: Try Puter for text extraction if Gemini failed
+            if (extractionFailed && isPuterAvailable()) {
+              try {
+                console.log('[AI /chat] Gemini Vision failed. Attempting Puter text extraction...');
+                const puterExtractText = await askPuter(
+                  'You are a document text extractor. Extract ALL text exactly as it appears.',
+                  [],
+                  'Extract ALL text from this exam paper. Include every question, instruction, header, numbering, and sub-question exactly as written. Output ONLY the raw text content, nothing else.\n\nPaper title: ' + (paperMeta.title || paperMeta.subject || 'Unknown')
+                );
+                if (puterExtractText && puterExtractText.length > 100) {
+                  extractedText = puterExtractText;
+                  extractionFailed = false;
+                  console.log('[AI /chat] Puter text extraction succeeded! Length:', puterExtractText.length);
+                }
+              } catch (puterExtErr: any) {
+                console.warn('[AI /chat] Puter text extraction failed:', puterExtErr.message);
+              }
+            }
+
+            // Fallback: Try HuggingFace for text extraction if both Gemini and Puter failed
+            if (extractionFailed) {
+              try {
+                const hfConfig = await getHFConfig();
+                if (hfConfig && hfConfig.apiKey) {
+                  console.log('[AI /chat] Gemini + Puter extraction failed. Attempting HuggingFace text extraction...');
+                  const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
+                  for (const rawModel of hfModels) {
+                    const modelId = getHFModelId(rawModel);
+                    try {
+                      const hfExtractText = await askHuggingFace(
+                        modelId,
+                        hfConfig.apiKey,
+                        'You are a document text extractor. Extract ALL text exactly as it appears.',
+                        [],
+                        'Extract ALL text from this exam paper. Include every question, instruction, header, numbering, and sub-question exactly as written. Output ONLY the raw text content, nothing else.\n\nPaper title: ' + (paperMeta.title || paperMeta.subject || 'Unknown')
+                      );
+                      if (hfExtractText && hfExtractText.length > 100) {
+                        extractedText = hfExtractText;
+                        extractionFailed = false;
+                        console.log(`[AI /chat] HuggingFace text extraction succeeded with ${modelId}! Length: ${hfExtractText.length}`);
+                        break;
+                      }
+                    } catch (hfExtErr: any) {
+                      console.warn(`[AI /chat] HuggingFace extraction with ${modelId} failed:`, hfExtErr.message);
+                    }
+                  }
+                }
+              } catch (hfOuterErr: any) {
+                console.warn('[AI /chat] HuggingFace extraction initialization failed:', hfOuterErr.message);
+              }
+            }
+
+            if (extractionFailed) {
+              console.warn('[AI /chat] All text extraction methods failed (pdf-parse, OCR, Gemini Vision, Puter, HuggingFace). Will use insights or raw PDF inline for Gemini.');
+            }
+          } else {
+            console.warn(`[AI /chat] PDF too large for inline extraction (${(pdfSizeBytes / 1024 / 1024).toFixed(2)}MB > ${MAX_INLINE_PDF_BYTES / 1024 / 1024}MB). Skipping Gemini Vision extraction.`);
+          }
+        }
         t_extract += performance.now() - parseStart;
       }
 
@@ -855,35 +958,55 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
                   `- Before answering any question, reproduce its exact wording as a beautifully formatted, structured blockquote (>) with proper line breaks and indentation for sub-questions (e.g., A, B, i, ii on new lines).\n`
               });
             } else {
-              const contextLines: string[] = [];
-              if (paperInsights) {
-                const metaLine = [
-                  paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
-                  paperMeta.year ? `Year: ${paperMeta.year}` : null,
-                  paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
-                ].filter(Boolean).join(' | ');
-                const topicsList = Array.isArray(paperInsights.topics)
-                  ? paperInsights.topics.join(', ')
-                  : (paperInsights.topics || 'N/A');
-                contextLines.push(
-                  `[Past Exam Paper — AI Analysis Context]\n${metaLine}\n\n` +
-                  `SUMMARY:\n${paperInsights.summary || 'N/A'}\n\n` +
-                  `KEY TOPICS:\n${topicsList}\n\n` +
-                  `DIFFICULTY: ${paperInsights.difficulty || 'N/A'}\n\n` +
-                  `HARDEST QUESTION:\n${paperInsights.hardest_question || 'N/A'}\n\n` +
-                  `EXAM TIPS:\n${paperInsights.exam_tips || 'N/A'}`
-                );
-              } else if (Object.keys(paperMeta).length > 0) {
-                const metaLines = [
-                  paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
-                  paperMeta.title ? `Title: ${paperMeta.title}` : null,
-                  paperMeta.year ? `Year: ${paperMeta.year}` : null,
-                  paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
-                ].filter(Boolean).join('\n');
-                contextLines.push(`[Past Exam Paper — Subject Context]\nThe student is studying the following exam:\n${metaLines}`);
-              }
-              if (contextLines.length > 0) {
-                userParts.push({ text: contextLines.join('\n\n') });
+              // Text extraction failed — try to send the raw PDF to Gemini as inline data
+              // so Gemini can read the paper directly using its native vision capability
+              const pdfSizeBytes = activeFileData ? Buffer.byteLength(activeFileData, 'base64') : 0;
+              if (activeFileData && pdfSizeBytes <= MAX_INLINE_PDF_BYTES) {
+                console.log(`[AI /chat] Sending raw PDF as inlineData to Gemini (${(pdfSizeBytes / 1024 / 1024).toFixed(2)}MB). OCR/extraction failed but Gemini can read it natively.`);
+                userParts.push({
+                  inlineData: {
+                    mimeType: activeMimeType || 'application/pdf',
+                    data: activeFileData
+                  }
+                });
+                userParts.push({
+                  text: 'The above is the exam paper PDF. Read ALL the questions from it carefully.\n' +
+                    'RULES:\n' +
+                    '- Answer ONLY from the actual questions in this document. Do NOT use general knowledge.\n' +
+                    '- Before answering any question, reproduce its exact wording as a beautifully formatted, structured blockquote (>) with proper line breaks and indentation for sub-questions (e.g., A, B, i, ii on new lines).\n'
+                });
+              } else {
+                // PDF too large for inline — fall back to insights/metadata context
+                const contextLines: string[] = [];
+                if (paperInsights) {
+                  const metaLine = [
+                    paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
+                    paperMeta.year ? `Year: ${paperMeta.year}` : null,
+                    paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
+                  ].filter(Boolean).join(' | ');
+                  const topicsList = Array.isArray(paperInsights.topics)
+                    ? paperInsights.topics.join(', ')
+                    : (paperInsights.topics || 'N/A');
+                  contextLines.push(
+                    `[Past Exam Paper — AI Analysis Context]\n${metaLine}\n\n` +
+                    `SUMMARY:\n${paperInsights.summary || 'N/A'}\n\n` +
+                    `KEY TOPICS:\n${topicsList}\n\n` +
+                    `DIFFICULTY: ${paperInsights.difficulty || 'N/A'}\n\n` +
+                    `HARDEST QUESTION:\n${paperInsights.hardest_question || 'N/A'}\n\n` +
+                    `EXAM TIPS:\n${paperInsights.exam_tips || 'N/A'}`
+                  );
+                } else if (Object.keys(paperMeta).length > 0) {
+                  const metaLines = [
+                    paperMeta.subject ? `Subject: ${paperMeta.subject}` : null,
+                    paperMeta.title ? `Title: ${paperMeta.title}` : null,
+                    paperMeta.year ? `Year: ${paperMeta.year}` : null,
+                    paperMeta.semester ? `Semester: ${paperMeta.semester}` : null,
+                  ].filter(Boolean).join('\n');
+                  contextLines.push(`[Past Exam Paper — Subject Context]\nThe student is studying the following exam:\n${metaLines}`);
+                }
+                if (contextLines.length > 0) {
+                  userParts.push({ text: contextLines.join('\n\n') });
+                }
               }
             }
           }

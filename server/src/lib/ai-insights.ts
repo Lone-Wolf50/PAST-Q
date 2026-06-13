@@ -115,6 +115,43 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       } catch (ocrErr: any) {
         console.error(`[AI Insights] OCR pipeline failed during insights generation:`, ocrErr.message);
       }
+
+      // Gemini Vision fallback for text extraction when OCR fails
+      if (!extractedText || extractedText.length < 50) {
+        const MAX_INLINE_PDF_BYTES = 20 * 1024 * 1024;
+        if (pdfBuffer.length <= MAX_INLINE_PDF_BYTES && process.env.GEMINI_API_KEY) {
+          try {
+            console.log(`[AI Insights] OCR failed. Attempting Gemini Vision text extraction for insights (${(pdfBuffer.length / 1024 / 1024).toFixed(2)}MB)...`);
+            const geminiExtractAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
+            const base64Pdf = pdfBuffer.toString('base64');
+            const extractModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+            for (const extractModel of extractModels) {
+              try {
+                const extractResult = await geminiExtractAI.models.generateContent({
+                  model: extractModel,
+                  contents: [{
+                    role: 'user',
+                    parts: [
+                      { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+                      { text: 'Extract ALL text from this PDF document exactly as it appears. Include every question, instruction, header, numbering, and sub-question. Output ONLY the raw text content, nothing else. Do not summarize or paraphrase.' }
+                    ]
+                  }]
+                });
+                const geminiText = extractResult.text?.trim();
+                if (geminiText && geminiText.length > 100) {
+                  extractedText = geminiText;
+                  console.log(`[AI Insights] Gemini Vision extraction succeeded with ${extractModel}! Length: ${geminiText.length}`);
+                  break;
+                }
+              } catch (geminiModelErr: any) {
+                console.warn(`[AI Insights] Gemini Vision extraction failed with ${extractModel}:`, geminiModelErr.message);
+              }
+            }
+          } catch (geminiExtractErr: any) {
+            console.warn('[AI Insights] Gemini Vision extraction initialization failed:', geminiExtractErr.message);
+          }
+        }
+      }
     }
 
     const geminiPrompt = extractedText

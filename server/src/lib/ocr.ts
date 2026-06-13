@@ -57,12 +57,27 @@ export async function performOcrPipeline(pdfBuffer: Buffer, numPages: number): P
 
   // Step 1: Google Cloud Vision API OCR
   const keyPath = path.join(__dirname, '../../past-q-vision-4522486be562.json');
-  if (fs.existsSync(keyPath)) {
+  const hasEnvCredentials = !!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  const hasFileCredentials = fs.existsSync(keyPath);
+
+  if (hasEnvCredentials || hasFileCredentials) {
     try {
       console.log('[OCR Pipeline] Attempting Google Cloud Vision OCR...');
-      const client = new vision.ImageAnnotatorClient({
-        keyFilename: keyPath
-      });
+      let clientOptions: any = {};
+      
+      if (hasEnvCredentials) {
+        try {
+          console.log('[OCR Pipeline] Using Google Cloud Vision credentials from environment variable...');
+          clientOptions.credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON!);
+        } catch (jsonErr: any) {
+          throw new Error(`Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable: ${jsonErr.message}`);
+        }
+      } else {
+        console.log('[OCR Pipeline] Using Google Cloud Vision credentials from local file...');
+        clientOptions.keyFilename = keyPath;
+      }
+
+      const client = new vision.ImageAnnotatorClient(clientOptions);
 
       const requests: any = images.map(imgBuffer => ({
         image: { content: imgBuffer.toString('base64') },
@@ -117,7 +132,7 @@ export async function performOcrPipeline(pdfBuffer: Buffer, numPages: number): P
       console.error('[OCR Pipeline] Google Cloud Vision OCR failed:', visionErr.message);
     }
   } else {
-    const errMsg = 'Google Cloud Vision credentials file not found.';
+    const errMsg = 'Google Cloud Vision credentials (env or file) not found.';
     const errInfo = getErrorMeaning('ENOENT', errMsg);
     attempts.push({
       model_or_service: 'Google Cloud Vision',
@@ -126,12 +141,13 @@ export async function performOcrPipeline(pdfBuffer: Buffer, numPages: number): P
       error_message: errMsg,
       error_meaning: errInfo.meaning
     });
-    console.warn('[OCR Pipeline] Google Cloud Vision credentials file not found. Skipping to Tesseract.js...');
+    console.warn('[OCR Pipeline] Google Cloud Vision credentials not found. Skipping to Tesseract.js...');
   }
 
   // Step 2: Tesseract.js OCR
   if (process.env.NODE_ENV === 'production' || process.env.DISABLE_LOCAL_OCR === 'true') {
-    const errMsg = 'Local Tesseract OCR fallback is disabled in production to guarantee server performance. Please configure a valid Google Cloud Vision key.';
+    console.error('[OCR Pipeline] ⚠️ BOTH OCR providers unavailable — Google Cloud Vision: credentials not configured | Tesseract.js: disabled in production to protect server performance.');
+    const errMsg = 'Local Tesseract OCR fallback is disabled in production to guarantee server performance. Google Cloud Vision credentials (env variable or file) are also missing. Please configure a valid Google Cloud Vision key or use Gemini Vision as a fallback.';
     const errInfo = getErrorMeaning('LOCAL_OCR_DISABLED', errMsg);
     attempts.push({
       model_or_service: 'Tesseract.js (Local)',

@@ -67,7 +67,7 @@ PastQ is a premium educational platform designed to help students master past ex
 - **AI Models**: Hugging Face Serverless APIs + Puter.js SDK + Google Gemini API.
 - **OCR Engine**: Google Cloud Vision + Tesseract.js.
 - **Payments**: Paystack Integration.
-- **Hosting**: Vercel (Frontend) + Render (Backend).
+- **Hosting**: Vercel (Frontend + Backend).
 
 ---
 
@@ -91,6 +91,7 @@ FRONTEND_URL=http://localhost:5173
 
 # AI Keys
 GEMINI_API_KEY=your_gemini_key
+GOOGLE_APPLICATION_CREDENTIALS_JSON=your_google_cloud_vision_json_string (optional for Google Vision OCR)
 PUTER_AUTH_TOKEN=your_puter_token (optional fallback)
 
 # Hugging Face Inference API
@@ -166,7 +167,6 @@ CHECK (type IN ('signup', 'payment', 'alert', 'warning', 'info', 'report'));
 │   ├── lib/            # API wrappers
 │   ├── pages/          # Layouts & routing configurations
 │   └── App.tsx         # Main entry component
-├── render.yaml         # Render Blueprint for Server deployment
 └── vercel.json         # Vercel Configuration for SPA Frontend deployment
 ```
 
