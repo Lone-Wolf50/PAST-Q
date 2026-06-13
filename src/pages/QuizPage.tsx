@@ -252,6 +252,22 @@ const QuizPage = () => {
       setError('Please select a subject to enter the Quiz Arena.');
       return;
     }
+
+    // Instant client-side validation: check if the subject exists in the loaded list
+    const trimmedSubject = selectedSubject.trim();
+    const isValidSubject = subjects.some(
+      (sub) => sub.name.toLowerCase() === trimmedSubject.toLowerCase()
+    );
+
+    if (!isValidSubject && subjects.length > 0) {
+      setSubjectErrorConfig({
+        title: '📚 Subject Not Found',
+        message: `The subject "${trimmedSubject}" does not match any available subject. Please select a valid subject from the list.`
+      });
+      setShowSubjectErrorModal(true);
+      return;
+    }
+
     setLoading(true);
     setError('');
     setQuestionNumber(0);
