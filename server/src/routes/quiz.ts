@@ -106,6 +106,23 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
   }
 
   try {
+    // Verify that the subject exists in the database
+    const { data: subjectExists, error: subjectErr } = await supabase
+      .from('upsa_subjects')
+      .select('id')
+      .eq('name', subject)
+      .maybeSingle();
+
+    if (subjectErr) throw subjectErr;
+
+    if (!subjectExists) {
+      res.status(404).json({
+        error: 'subject_not_available',
+        message: `The subject "${subject}" is currently not available or does not exist. Please choose a subject from the list.`
+      });
+      return;
+    }
+
     // Check for an active standard session of the selected subject (started in the last 2 hours)
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const { data: activeSessions, error: fetchErr } = await supabase

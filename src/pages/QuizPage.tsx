@@ -56,6 +56,11 @@ const QuizPage = () => {
     confirmText: 'View Plans',
     cancelText: 'Maybe Later'
   });
+  const [showSubjectErrorModal, setShowSubjectErrorModal] = useState(false);
+  const [subjectErrorConfig, setSubjectErrorConfig] = useState({
+    title: '',
+    message: ''
+  });
 
   // Blocker for client-side navigation warning
   const blocker = useBlocker(
@@ -277,8 +282,23 @@ const QuizPage = () => {
           cancelText: 'Maybe Later'
         });
         setShowUpgradeModal(true);
+      } else if (body?.error === 'subject_not_available') {
+        setSubjectErrorConfig({
+          title: '📚 Subject Unavailable',
+          message: body.message || `The subject "${selectedSubject}" is currently not available for practice quizzes. Please select a valid subject.`
+        });
+        setShowSubjectErrorModal(true);
       } else {
-        setError(err.message || 'Error starting session');
+        const errMsg = err.message || '';
+        if (errMsg.toLowerCase().includes('subject') || errMsg.toLowerCase().includes('foreign key')) {
+          setSubjectErrorConfig({
+            title: '📚 Subject Unavailable',
+            message: `The subject "${selectedSubject}" is currently not available or does not exist. Please check the spelling or select a subject from the list.`
+          });
+          setShowSubjectErrorModal(true);
+        } else {
+          setError(err.message || 'Error starting session');
+        }
       }
       setLoading(false);
     }
@@ -1015,6 +1035,18 @@ const QuizPage = () => {
         confirmText={upgradeModalConfig.confirmText}
         cancelText={upgradeModalConfig.cancelText}
         variant="info"
+      />
+
+      {/* Subject Error Modal */}
+      <ConfirmModal
+        isOpen={showSubjectErrorModal}
+        onClose={() => setShowSubjectErrorModal(false)}
+        onConfirm={() => setShowSubjectErrorModal(false)}
+        title={subjectErrorConfig.title}
+        message={subjectErrorConfig.message}
+        confirmText="Choose Another"
+        cancelText="Close"
+        variant="warning"
       />
     </div>
   );
