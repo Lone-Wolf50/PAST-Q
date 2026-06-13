@@ -182,7 +182,7 @@ const AdminPaymentsPage = () => {
                 </div>
                 <p className="text-sm font-bold text-theme-muted uppercase tracking-wider">Total Revenue</p>
               </div>
-              <h3 className="text-3xl font-bold text-theme-primary">GH₵{stats?.totalRevenue || 0}</h3>
+              <h3 className="text-3xl font-bold text-theme-primary">GH₵{Number(stats?.totalRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
               <div className="flex items-center gap-1.5 mt-4 text-[11px] font-bold text-emerald-400 uppercase">
                 <CheckCircle2 className="w-3 h-3" />
                 Updated Live
@@ -235,7 +235,7 @@ const AdminPaymentsPage = () => {
                       <span className="text-[10px] text-theme-muted font-mono tracking-tighter">{payment.reference}</span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-sm font-black text-theme-primary">GH₵{payment.amount}</span>
+                      <span className="text-sm font-black text-theme-primary">GH₵{Number(payment.amount || 0).toFixed(2)}</span>
                       <span className="text-[9px] font-bold uppercase text-indigo-400 tracking-wider">{payment.plan}</span>
                     </div>
                   </div>
@@ -328,7 +328,7 @@ const AdminPaymentsPage = () => {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
-                            <span className="text-sm font-bold text-theme-primary">GH₵{payment.amount}</span>
+                            <span className="text-sm font-bold text-theme-primary">GH₵{Number(payment.amount || 0).toFixed(2)}</span>
                             <span className="text-[10px] font-bold uppercase text-indigo-400">{payment.plan}</span>
                           </div>
                         </td>

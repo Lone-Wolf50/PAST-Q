@@ -305,7 +305,7 @@ const AdminDashboard = () => {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                 <div>
                   <h2 className="text-lg font-semibold text-theme-primary">Revenue Insights</h2>
-                  <p className="text-sm text-theme-muted font-medium">Total: GH₵ {stats?.totalRevenue?.toLocaleString() || '0'}</p>
+                  <p className="text-sm text-theme-muted font-medium">Total: GH₵ {Number(stats?.totalRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
                 
                 <div className="flex items-center p-1 bg-theme-surface-2 border border-theme-border rounded-xl">
@@ -367,6 +367,7 @@ const AdminDashboard = () => {
                       contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', fontSize: '11px', fontWeight: 'bold', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                       itemStyle={{ color: '#38bdf8' }}
                       labelFormatter={(val) => new Date(val).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                      formatter={(val: any) => [`GH₵${Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Revenue']}
                     />
                     <Bar 
                       dataKey="revenue" 
@@ -448,7 +449,7 @@ const AdminDashboard = () => {
                     </Pie>
                     <Tooltip 
                       contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', border: 'none' }}
-                      formatter={(val: any) => `GH₵${val.toLocaleString()}`}
+                      formatter={(val: any) => `GH₵${Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -457,7 +458,7 @@ const AdminDashboard = () => {
                 {revenueByPlanData.map((p, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: p.color }}></div>
-                    <span className="text-xs text-theme-secondary">{p.name} (GH₵{p.value.toLocaleString()})</span>
+                    <span className="text-xs text-theme-secondary">{p.name} (GH₵{Number(p.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
                   </div>
                 ))}
               </div>
