@@ -3,6 +3,38 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, CreditCard, ShieldCheck, CheckCircle2, Loader2, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
+interface PaystackTransaction {
+  reference: string;
+  status: string;
+}
+
+interface PaystackCallbacks {
+  onSuccess: (transaction: PaystackTransaction) => void;
+  onCancel?: () => void;
+}
+
+interface PaystackPopInstance {
+  resumeTransaction: (accessCode: string, callbacks: PaystackCallbacks) => void;
+}
+
+interface WindowWithPaystack extends Window {
+  PaystackPop?: new () => PaystackPopInstance;
+}
+
+const loadPaystackScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if ((window as unknown as WindowWithPaystack).PaystackPop) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://js.paystack.co/v2/inline.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 const UpgradePage = () => {
   const [searchParams] = useSearchParams();
@@ -25,58 +57,59 @@ const UpgradePage = () => {
     if (!emailToUse) {
       setError('Could not read your email address. Please log out and log back in.');
       setLoading(false);
+      isProcessing.current = false;
       return;
     }
 
     try {
-      const res = await apiFetch('/payments/initialize', {
-        method: 'POST',
-        body: { plan },
-        token: token || undefined
-      });
+      // Initialize transaction on backend and load Paystack script in parallel
+      const [res, scriptLoaded] = await Promise.all([
+        apiFetch('/payments/initialize', {
+          method: 'POST',
+          body: { plan },
+          token: token || undefined
+        }),
+        loadPaystackScript()
+      ]);
 
-      if ((window as any).PaystackPop) {
-        const handler = (window as any).PaystackPop.setup({
-          key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
-          email: res.email,
-          amount: res.totalInKobo,
-          currency: 'GHS',
-          ref: res.reference,
-          // No metadata here — prevents Paystack from using it for receipt display
-          callback: function (response: any) {
-            // Close the Paystack iframe immediately so their receipt screen never shows
-            try { handler.close(); } catch (_) { /* ignore */ }
+      const PaystackPopConstructor = (window as unknown as WindowWithPaystack).PaystackPop;
 
+      if (scriptLoaded && PaystackPopConstructor) {
+        const paystack = new PaystackPopConstructor();
+        paystack.resumeTransaction(res.access_code, {
+          onSuccess: (transaction) => {
             // Verify payment on the server
             (async () => {
               try {
-                const ref = response.reference || res.reference;
+                const ref = transaction.reference || res.reference;
                 await apiFetch(`/payments/verify/${ref}`, { token: token || undefined });
                 setSuccess(true);
                 setLoading(false);
                 isProcessing.current = false;
-              } catch (err: any) {
-
+              } catch {
                 isProcessing.current = false;
                 window.location.href = '/profile?error=verification_failed';
               }
             })();
           },
-          onClose: function () {
+          onCancel: () => {
             setLoading(false);
             isProcessing.current = false;
           }
         });
-        handler.openIframe();
       } else if (res.authorization_url) {
         // Fallback: redirect to hosted checkout page
         window.location.href = res.authorization_url;
       } else {
-        setError('Failed to get payment URL from server.');
+        setError('Failed to load Paystack checkout script or get payment URL.');
         setLoading(false);
+        isProcessing.current = false;
       }
-    } catch (err: any) {
-      setError(err.message || 'Payment initialization failed. Please try again.');
+    } catch (err) {
+      const errMsg = err && typeof err === 'object' && 'message' in err
+        ? String((err as { message: unknown }).message)
+        : 'Payment initialization failed. Please try again.';
+      setError(errMsg);
       setLoading(false);
       isProcessing.current = false;
     }
