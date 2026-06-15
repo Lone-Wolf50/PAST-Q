@@ -1115,6 +1115,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     });
 
     replyText = cleanHistoryContent(replyText);
+    replyText = replyText.replace(/<br\s*\/?>/gi, '\n');
 
 
     supabase.from('upsa_ai_queries').insert({

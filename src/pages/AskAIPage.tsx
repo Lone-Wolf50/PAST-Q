@@ -157,7 +157,8 @@ function cleanAlertText(content: string): string {
 function formatAIContentForProse(raw: string): string {
   if (typeof raw !== 'string') return raw;
 
-  let text = raw;
+  // Replace literal <br> tags (case insensitive, with or without slash/space) with newlines
+  let text = raw.replace(/<br\s*\/?>/gi, '\n');
 
   // Collapse nested sub-bullets (indented bullets that elaborate on a
   //    parent point) into prose by joining them into the preceding line.
@@ -248,11 +249,11 @@ const colorKeyTermsInList = (children: React.ReactNode, isDark: boolean): React.
     if (React.isValidElement(child)) {
       const anyChild = child as any;
       const typeStr = typeof anyChild.type === 'string' ? anyChild.type : anyChild.type?.name || '';
-      const isStrong = typeStr === 'strong' || 
-                       (anyChild.props && (
-                         anyChild.props.node?.tagName === 'strong' || 
-                         anyChild.props.className?.includes('ai-strong')
-                       ));
+      const isStrong = typeStr === 'strong' ||
+        (anyChild.props && (
+          anyChild.props.node?.tagName === 'strong' ||
+          anyChild.props.className?.includes('ai-strong')
+        ));
       if (isStrong) {
         return React.cloneElement(anyChild, {
           style: {
@@ -298,7 +299,7 @@ const AskAIPage = () => {
           m.role === 'assistant' ? { ...m, content: cleanAlertText(m.content) } : m
         );
       }
-    } catch {}
+    } catch { }
     return [getWelcomeMessage(username)];
   });
 
@@ -997,10 +998,10 @@ const AskAIPage = () => {
                 exit={{ opacity: 0, y: -20 }}
                 className="max-w-2xl mx-auto mt-12 text-center"
               >
-                <motion.div 
-                  whileHover={{ 
-                    scale: 1.08, 
-                    y: -4, 
+                <motion.div
+                  whileHover={{
+                    scale: 1.08,
+                    y: -4,
                     boxShadow: "0 20px 30px rgba(99, 102, 241, 0.2)",
                     borderColor: "rgba(99, 102, 241, 0.6)"
                   }}
@@ -1073,143 +1074,143 @@ const AskAIPage = () => {
                         );
                       })()}
                       <div className="ai-prose">
-                      <Markdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          h1: ({ children }) => (
-                            <p 
-                              className="ai-section-title"
-                              style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
-                            >
-                              {children}
-                            </p>
-                          ),
-                          h2: ({ children }) => (
-                            <p 
-                              className="ai-section-title"
-                              style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
-                            >
-                              {children}
-                            </p>
-                          ),
-                          h3: ({ children }) => (
-                            <p 
-                              className="ai-section-title"
-                              style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
-                            >
-                              {children}
-                            </p>
-                          ),
-                          h4: ({ children }) => (
-                            <p 
-                              className="ai-section-title"
-                              style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
-                            >
-                              {children}
-                            </p>
-                          ),
-                          p: ({ children }) => <p className="ai-p">{children}</p>,
-                          ul: ({ children }) => <ul className="ai-ul">{children}</ul>,
-                          ol: ({ children }) => <ol className="ai-ol">{children}</ol>,
-                          li: ({ children }) => <li className="ai-li">{colorKeyTermsInList(children, isDark)}</li>,
-                          strong: ({ children }) => {
-                            const text = getChildrenText(children);
-                            const category = getContentCategory(text);
-                            let customStyle = {};
-                            if (category === 'green') {
-                              customStyle = { color: isDark ? '#10b981' : '#059669', fontWeight: 800 };
-                            } else if (category === 'blue') {
-                              customStyle = { color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 };
-                            } else {
-                              customStyle = { fontWeight: isDark ? 850 : 700 };
-                            }
-                            return (
-                              <strong 
-                                className="ai-strong"
-                                style={customStyle}
+                        <Markdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({ children }) => (
+                              <p
+                                className="ai-section-title"
+                                style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
                               >
                                 {children}
-                              </strong>
-                            );
-                          },
-                          em: ({ children }) => <em className="ai-em">{children}</em>,
-                          blockquote: ({ children }) => (
-                            <blockquote 
-                              className="ai-blockquote"
-                              style={{
-                                borderLeftColor: isDark ? '#3b82f6' : '#2563eb',
-                                color: isDark ? '#60a5fa' : '#1d4ed8',
-                                backgroundColor: isDark ? 'rgba(59, 130, 246, 0.04)' : 'rgba(37, 99, 235, 0.03)'
-                              }}
-                            >
-                              {children}
-                            </blockquote>
-                          ),
-                          hr: () => <hr className="ai-hr" />,
-                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
-                          code: ({ className, children, ...props }) => {
-                            const isBlock = className?.includes('language-');
-                            return isBlock ? (
-                              <div className="ai-code-block-wrapper">
-                                {className && (
-                                  <div className="ai-code-lang">{className.replace('language-', '')}</div>
-                                )}
-                                <pre className="ai-pre"><code className={className}>{children}</code></pre>
+                              </p>
+                            ),
+                            h2: ({ children }) => (
+                              <p
+                                className="ai-section-title"
+                                style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                              >
+                                {children}
+                              </p>
+                            ),
+                            h3: ({ children }) => (
+                              <p
+                                className="ai-section-title"
+                                style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                              >
+                                {children}
+                              </p>
+                            ),
+                            h4: ({ children }) => (
+                              <p
+                                className="ai-section-title"
+                                style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                              >
+                                {children}
+                              </p>
+                            ),
+                            p: ({ children }) => <p className="ai-p">{children}</p>,
+                            ul: ({ children }) => <ul className="ai-ul">{children}</ul>,
+                            ol: ({ children }) => <ol className="ai-ol">{children}</ol>,
+                            li: ({ children }) => <li className="ai-li">{colorKeyTermsInList(children, isDark)}</li>,
+                            strong: ({ children }) => {
+                              const text = getChildrenText(children);
+                              const category = getContentCategory(text);
+                              let customStyle = {};
+                              if (category === 'green') {
+                                customStyle = { color: isDark ? '#10b981' : '#059669', fontWeight: 800 };
+                              } else if (category === 'blue') {
+                                customStyle = { color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 };
+                              } else {
+                                customStyle = { fontWeight: isDark ? 850 : 700 };
+                              }
+                              return (
+                                <strong
+                                  className="ai-strong"
+                                  style={customStyle}
+                                >
+                                  {children}
+                                </strong>
+                              );
+                            },
+                            em: ({ children }) => <em className="ai-em">{children}</em>,
+                            blockquote: ({ children }) => (
+                              <blockquote
+                                className="ai-blockquote"
+                                style={{
+                                  borderLeftColor: isDark ? '#3b82f6' : '#2563eb',
+                                  color: isDark ? '#60a5fa' : '#1d4ed8',
+                                  backgroundColor: isDark ? 'rgba(59, 130, 246, 0.04)' : 'rgba(37, 99, 235, 0.03)'
+                                }}
+                              >
+                                {children}
+                              </blockquote>
+                            ),
+                            hr: () => <hr className="ai-hr" />,
+                            a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
+                            code: ({ className, children, ...props }) => {
+                              const isBlock = className?.includes('language-');
+                              return isBlock ? (
+                                <div className="ai-code-block-wrapper">
+                                  {className && (
+                                    <div className="ai-code-lang">{className.replace('language-', '')}</div>
+                                  )}
+                                  <pre className="ai-pre"><code className={className}>{children}</code></pre>
+                                </div>
+                              ) : (
+                                <code className="ai-inline-code" {...props}>{children}</code>
+                              );
+                            },
+                            pre: ({ children }) => <>{children}</>,
+                            table: ({ children }) => (
+                              <div className="ai-table-wrapper">
+                                <table className="ai-table">{children}</table>
                               </div>
-                            ) : (
-                              <code className="ai-inline-code" {...props}>{children}</code>
-                            );
-                          },
-                          pre: ({ children }) => <>{children}</>,
-                          table: ({ children }) => (
-                            <div className="ai-table-wrapper">
-                              <table className="ai-table">{children}</table>
-                            </div>
-                          ),
-                          thead: ({ children }) => <thead className="ai-thead">{children}</thead>,
-                          tbody: ({ children }) => <tbody>{children}</tbody>,
-                          tr: ({ children }) => <tr className="ai-tr">{children}</tr>,
-                          th: ({ children }) => <th className="ai-th">{children}</th>,
-                          td: ({ children }) => <td className="ai-td">{children}</td>,
-                        }}
-                      >
-                        {formatAIContentForProse(message.content)}
-                      </Markdown>
+                            ),
+                            thead: ({ children }) => <thead className="ai-thead">{children}</thead>,
+                            tbody: ({ children }) => <tbody>{children}</tbody>,
+                            tr: ({ children }) => <tr className="ai-tr">{children}</tr>,
+                            th: ({ children }) => <th className="ai-th">{children}</th>,
+                            td: ({ children }) => <td className="ai-td">{children}</td>,
+                          }}
+                        >
+                          {formatAIContentForProse(message.content)}
+                        </Markdown>
 
-                      {message.isErrorFallback && (
-                        <div className="mt-4 pt-4 border-t border-theme-border/30">
-                          <p className="text-[10px] text-theme-muted uppercase font-bold tracking-wider mb-2.5">
-                            Suggested External AI Servers
-                          </p>
-                          <div className="flex flex-wrap gap-2.5">
-                            <a
-                              href="https://chat.openai.com"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-xl text-xs font-bold transition-all border border-emerald-500/20 active:scale-95 shadow-sm"
-                            >
-                              <span>ChatGPT</span>
-                            </a>
-                            <a
-                              href="https://claude.ai"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 rounded-xl text-xs font-bold transition-all border border-orange-500/20 active:scale-95 shadow-sm"
-                            >
-                              <span>Claude</span>
-                            </a>
-                            <a
-                              href="https://gemini.google.com"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 rounded-xl text-xs font-bold transition-all border border-blue-500/20 active:scale-95 shadow-sm"
-                            >
-                              <span>Gemini</span>
-                            </a>
+                        {message.isErrorFallback && (
+                          <div className="mt-4 pt-4 border-t border-theme-border/30">
+                            <p className="text-[10px] text-theme-muted uppercase font-bold tracking-wider mb-2.5">
+                              Suggested External AI Servers
+                            </p>
+                            <div className="flex flex-wrap gap-2.5">
+                              <a
+                                href="https://chat.openai.com"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-xl text-xs font-bold transition-all border border-emerald-500/20 active:scale-95 shadow-sm"
+                              >
+                                <span>ChatGPT</span>
+                              </a>
+                              <a
+                                href="https://claude.ai"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 rounded-xl text-xs font-bold transition-all border border-orange-500/20 active:scale-95 shadow-sm"
+                              >
+                                <span>Claude</span>
+                              </a>
+                              <a
+                                href="https://gemini.google.com"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 rounded-xl text-xs font-bold transition-all border border-blue-500/20 active:scale-95 shadow-sm"
+                              >
+                                <span>Gemini</span>
+                              </a>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
