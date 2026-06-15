@@ -43,6 +43,42 @@ const authLimiter = async (req: Request, res: Response, next: NextFunction): Pro
   }
 };
 
+// ─── Relaxed rate limiter for token refresh ──────────────────
+// Token refreshes verify signed JWTs (not passwords/OTPs), so they are not
+// brute-forceable. A higher limit prevents multi-tab / multi-device session
+// invalidation cascades from exhausting the shared auth rate-limit budget.
+const refreshRatelimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(100, '15 m'),
+      prefix: 'rl:auth:refresh:',
+    })
+  : null;
+
+const refreshLimiter = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  if (!refreshRatelimit) {
+    next();
+    return;
+  }
+  try {
+    const ip = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anonymous';
+    const { success, limit, reset, remaining } = await refreshRatelimit.limit(ip);
+
+    res.setHeader('X-RateLimit-Limit', limit);
+    res.setHeader('X-RateLimit-Remaining', remaining);
+    res.setHeader('X-RateLimit-Reset', reset);
+
+    if (!success) {
+      res.status(429).json({ error: 'Too many refresh requests. Please try again later.' });
+      return;
+    }
+    next();
+  } catch (err) {
+    console.error('Refresh rate limiting error:', err);
+    next();
+  }
+};
+
 // ─── Helpers ─────────────────────────────────────────────────
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 const otpExpiry = () => new Date(Date.now() + 5 * 60 * 1000).toISOString();
@@ -885,7 +921,7 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
 // Accepts the refresh token from:
 //   1. httpOnly cookie (primary — browser sessions)
 //   2. Request body (fallback — PWA/standalone mode where cookies may not persist)
-router.post('/refresh', authLimiter, async (req: Request, res: Response) => {
+router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   const cookies = parseCookies(req.headers.cookie);
   const refreshToken = cookies.refreshToken || (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : null);
 

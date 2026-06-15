@@ -27,6 +27,20 @@ async function performRefresh(): Promise<string | null> {
       }
     }
 
+    // If the server explicitly says the session was invalidated (another device
+    // logged in), the localStorage fallback token carries the same stale
+    // session_version and will also be rejected. Skip it to avoid burning a
+    // rate-limit request for nothing.
+    if (res.status === 401) {
+      try {
+        const errData = await res.clone().json();
+        if (errData?.code === 'SESSION_EXPIRED') {
+          localStorage.removeItem(PWA_REFRESH_KEY);
+          return null;
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
     // Attempt 2: PWA localStorage fallback
     const storedRefresh = localStorage.getItem(PWA_REFRESH_KEY);
     if (storedRefresh) {

@@ -119,6 +119,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
 
+        // If the session was invalidated (another device logged in), the PWA
+        // fallback token carries the same stale session_version and will also
+        // be rejected. Skip it to avoid a wasted rate-limit request.
+        if (res.status === 401) {
+          try {
+            const errData = await res.clone().json();
+            if (errData?.code === 'SESSION_EXPIRED') {
+              localStorage.removeItem(PWA_REFRESH_KEY);
+              setLoading(false);
+              return;
+            }
+          } catch { /* ignore parse errors */ }
+        }
+
         // Attempt 2: PWA localStorage fallback — cookies may have been lost
         // when the OS killed the standalone WebView process.
         const storedRefresh = localStorage.getItem(PWA_REFRESH_KEY);
