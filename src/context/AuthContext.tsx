@@ -72,7 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     window.addEventListener('token_refreshed', handleTokenRefreshed);
     window.addEventListener('session_expired', handleSessionExpired);
-    
+
     return () => {
       window.removeEventListener('token_refreshed', handleTokenRefreshed);
       window.removeEventListener('session_expired', handleSessionExpired);
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             // More than 7 days, clear session and storage
             try {
               await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
-            } catch {}
+            } catch { }
             storage.removeItem('last_visit');
             storage.removeItem(PWA_REFRESH_KEY);
             setLoading(false);
@@ -169,7 +169,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           sessionStorage.setItem('streak_count', String(data.streak));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [token]);
 
   const login = (newToken: string, newUser: AuthUser, refreshToken?: string) => {
@@ -179,7 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     storage.setItem('last_visit', Date.now().toString());
     savePwaRefreshToken(refreshToken);
-    
+
     setToken(newToken);
     setUser(newUser);
   };
@@ -194,7 +194,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     sessionStorage.clear();
     localStorage.removeItem('dismissed_banner');
     localStorage.removeItem(PWA_REFRESH_KEY);
-    
+
     // Clear AI chat related storage keys
     localStorage.removeItem('pastq_ai_messages');
     localStorage.removeItem('pastq_ai_active_conv');
@@ -205,8 +205,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     // Clear Supabase session (OAuth)
-    supabase.auth.signOut().catch(() => {});
-    
+    supabase.auth.signOut().catch(() => { });
+
     setToken(null);
     setUser(null);
 

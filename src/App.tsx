@@ -22,7 +22,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
         sessionStorage.setItem(RELOAD_KEY, '1');
         window.location.reload();
         // Never resolves — reload takes over
-        return new Promise<{ default: T }>(() => {});
+        return new Promise<{ default: T }>(() => { });
       }
       // Already reloaded once; bubble up so ErrorBoundary catches it
       throw err;

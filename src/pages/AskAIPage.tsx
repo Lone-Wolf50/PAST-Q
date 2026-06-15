@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Loader2, Paperclip, Sparkles,
   RotateCcw, Menu, X, Trash2, Plus, Clock
@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm';
 import { clsx } from 'clsx';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../lib/api';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
@@ -147,6 +148,130 @@ function cleanAlertText(content: string): string {
     .trimStart();
 }
 
+/**
+ * Preprocess AI markdown to enforce a prose-first rendering style:
+ *  - Convert markdown headers (##, ###, ####) into plain bold text lines
+ *  - Collapse sub-bullet elaborations into flowing sentences
+ *  - Leave top-level short-fact bullets intact
+ */
+function formatAIContentForProse(raw: string): string {
+  if (typeof raw !== 'string') return raw;
+
+  let text = raw;
+
+  // Collapse nested sub-bullets (indented bullets that elaborate on a
+  //    parent point) into prose by joining them into the preceding line.
+  //    A nested bullet is any line starting with 2+ spaces/tabs then - or *.
+  //    We join these onto the previous line separated by ". " so they read
+  //    as connected sentences rather than fragmented sub-items.
+  const lines = text.split('\n');
+  const result: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const nestedBulletMatch = line.match(/^(\s{2,}|\t+)[-*+]\s+(.+)/);
+    if (nestedBulletMatch && result.length > 0) {
+      // Append to previous line as a continuation sentence
+      const content = nestedBulletMatch[2].trim();
+      const prev = result[result.length - 1];
+      // If previous line ends with punctuation, just add a space; otherwise add ". "
+      const separator = /[.!?:;]\s*$/.test(prev) ? ' ' : '. ';
+      result[result.length - 1] = prev + separator + content;
+    } else {
+      result.push(line);
+    }
+  }
+
+  return result.join('\n');
+}
+
+const getChildrenText = (children: any): string => {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map(getChildrenText).join('');
+  if (children && children.props && children.props.children) {
+    return getChildrenText(children.props.children);
+  }
+  return '';
+};
+
+const getContentCategory = (text: string): 'blue' | 'green' | 'none' => {
+  const lower = text.toLowerCase().trim();
+  // Blue categories: Questions, Subheadings, Section Titles
+  if (
+    lower.startsWith('question') ||
+    lower.includes('question') ||
+    lower.startsWith('q:') ||
+    lower.startsWith('q.') ||
+    lower.startsWith('problem') ||
+    lower.endsWith('?') ||
+    lower.startsWith('what is') ||
+    lower.startsWith('what are') ||
+    lower.startsWith('why do') ||
+    lower.startsWith('why does') ||
+    lower.startsWith('why are') ||
+    lower.startsWith('how to') ||
+    lower.startsWith('how do') ||
+    lower.startsWith('how does') ||
+    lower.startsWith('explain') ||
+    lower.startsWith('define') ||
+    lower.startsWith('describe') ||
+    lower.includes('importance of') ||
+    lower.includes('importances of') ||
+    lower.startsWith('importance') ||
+    lower.startsWith('roles') ||
+    lower.includes('roles of') ||
+    lower.includes('benefits of') ||
+    lower.includes('types of') ||
+    lower.includes('reasons why') ||
+    lower.startsWith('summary') ||
+    lower.startsWith('overview') ||
+    lower.startsWith('conclusion') ||
+    lower.startsWith('introduction')
+  ) {
+    return 'blue';
+  }
+  // Green categories: explicit points/takeaways
+  if (
+    lower.startsWith('main point') ||
+    lower.startsWith('key point') ||
+    lower.startsWith('point') ||
+    lower.startsWith('takeaway') ||
+    lower.startsWith('key focus') ||
+    lower.startsWith('concept')
+  ) {
+    return 'green';
+  }
+  return 'none';
+};
+
+const colorKeyTermsInList = (children: React.ReactNode, isDark: boolean): React.ReactNode => {
+  return React.Children.map(children, (child) => {
+    if (React.isValidElement(child)) {
+      const anyChild = child as any;
+      const typeStr = typeof anyChild.type === 'string' ? anyChild.type : anyChild.type?.name || '';
+      const isStrong = typeStr === 'strong' || 
+                       (anyChild.props && (
+                         anyChild.props.node?.tagName === 'strong' || 
+                         anyChild.props.className?.includes('ai-strong')
+                       ));
+      if (isStrong) {
+        return React.cloneElement(anyChild, {
+          style: {
+            ...anyChild.props.style,
+            color: isDark ? '#10b981' : '#059669',
+            fontWeight: 800
+          }
+        });
+      }
+      if (anyChild.props && anyChild.props.children) {
+        return React.cloneElement(anyChild, {
+          children: colorKeyTermsInList(anyChild.props.children, isDark)
+        });
+      }
+    }
+    return child;
+  });
+};
+
 const AskAIPage = () => {
   const LOADING_MESSAGES = [
     "Analyzing your question...",
@@ -158,6 +283,8 @@ const AskAIPage = () => {
   ];
 
   const { user, token, updateUser } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme !== 'light';
   const rawPlan = user?.plan || 'Free';
   const plan = (rawPlan.charAt(0).toUpperCase() + rawPlan.slice(1).toLowerCase()) as Plan;
 
@@ -949,17 +1076,75 @@ const AskAIPage = () => {
                       <Markdown
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          h1: ({ children }) => <h1 className="ai-h1">{children}</h1>,
-                          h2: ({ children }) => <h2 className="ai-h2">{children}</h2>,
-                          h3: ({ children }) => <h3 className="ai-h3">{children}</h3>,
-                          h4: ({ children }) => <h4 className="ai-h4">{children}</h4>,
+                          h1: ({ children }) => (
+                            <p 
+                              className="ai-section-title"
+                              style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                            >
+                              {children}
+                            </p>
+                          ),
+                          h2: ({ children }) => (
+                            <p 
+                              className="ai-section-title"
+                              style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                            >
+                              {children}
+                            </p>
+                          ),
+                          h3: ({ children }) => (
+                            <p 
+                              className="ai-section-title"
+                              style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                            >
+                              {children}
+                            </p>
+                          ),
+                          h4: ({ children }) => (
+                            <p 
+                              className="ai-section-title"
+                              style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                            >
+                              {children}
+                            </p>
+                          ),
                           p: ({ children }) => <p className="ai-p">{children}</p>,
                           ul: ({ children }) => <ul className="ai-ul">{children}</ul>,
                           ol: ({ children }) => <ol className="ai-ol">{children}</ol>,
-                          li: ({ children }) => <li className="ai-li">{children}</li>,
-                          strong: ({ children }) => <strong className="ai-strong">{children}</strong>,
+                          li: ({ children }) => <li className="ai-li">{colorKeyTermsInList(children, isDark)}</li>,
+                          strong: ({ children }) => {
+                            const text = getChildrenText(children);
+                            const category = getContentCategory(text);
+                            let customStyle = {};
+                            if (category === 'green') {
+                              customStyle = { color: isDark ? '#10b981' : '#059669', fontWeight: 800 };
+                            } else if (category === 'blue') {
+                              customStyle = { color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 };
+                            } else {
+                              customStyle = { fontWeight: isDark ? 850 : 700 };
+                            }
+                            return (
+                              <strong 
+                                className="ai-strong"
+                                style={customStyle}
+                              >
+                                {children}
+                              </strong>
+                            );
+                          },
                           em: ({ children }) => <em className="ai-em">{children}</em>,
-                          blockquote: ({ children }) => <blockquote className="ai-blockquote">{children}</blockquote>,
+                          blockquote: ({ children }) => (
+                            <blockquote 
+                              className="ai-blockquote"
+                              style={{
+                                borderLeftColor: isDark ? '#3b82f6' : '#2563eb',
+                                color: isDark ? '#60a5fa' : '#1d4ed8',
+                                backgroundColor: isDark ? 'rgba(59, 130, 246, 0.04)' : 'rgba(37, 99, 235, 0.03)'
+                              }}
+                            >
+                              {children}
+                            </blockquote>
+                          ),
                           hr: () => <hr className="ai-hr" />,
                           a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
                           code: ({ className, children, ...props }) => {
@@ -988,7 +1173,7 @@ const AskAIPage = () => {
                           td: ({ children }) => <td className="ai-td">{children}</td>,
                         }}
                       >
-                        {message.content}
+                        {formatAIContentForProse(message.content)}
                       </Markdown>
 
                       {message.isErrorFallback && (
