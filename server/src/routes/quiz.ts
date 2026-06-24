@@ -6,6 +6,9 @@ import { generateQuestion } from '../lib/question-generator';
 import { awardBadges, BADGE_REGISTRY } from '../lib/badges';
 import { performOcrPipeline } from '../lib/ocr';
 import { getAiCompletion } from '../lib/ai-helper';
+import { GoogleGenAI } from '@google/genai';
+import { askPuter, isPuterAvailable } from '../lib/puter';
+import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from '../lib/huggingface';
 const pdfParse = require('pdf-parse');
 
 const router = Router();
@@ -1100,6 +1103,102 @@ router.post('/generate-from-paper', async (req: AuthRequest, res: Response): Pro
         extractedText = await performOcrPipeline(pdfBuffer, pageCount);
       } catch (ocrErr: any) {
         console.error('[generate-from-paper] OCR fallback failed:', ocrErr.message);
+      }
+    }
+
+    // Multi-Provider Vision/Extraction Fallback (when OCR fails / is disabled in production)
+    if (extractedText.length < 100 && pdfBuffer) {
+      let extractionFailed = true;
+      const pdfSizeBytes = pdfBuffer.length;
+      const MAX_INLINE_PDF_BYTES = 20 * 1024 * 1024; // 20MB limit
+
+      if (pdfSizeBytes <= MAX_INLINE_PDF_BYTES) {
+        // Fallback 1: Gemini Vision
+        if (process.env.GEMINI_API_KEY) {
+          try {
+            console.log(`[generate-from-paper] OCR failed. Attempting Gemini Vision text extraction (PDF size: ${(pdfSizeBytes / 1024 / 1024).toFixed(2)}MB)...`);
+            const geminiExtractAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
+            const base64Pdf = pdfBuffer.toString('base64');
+            const extractModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+            for (const extractModel of extractModels) {
+              try {
+                const extractResult = await geminiExtractAI.models.generateContent({
+                  model: extractModel,
+                  contents: [{
+                    role: 'user',
+                    parts: [
+                      { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+                      { text: 'Extract ALL text from this PDF document exactly as it appears. Include every question, instruction, header, numbering, and sub-question. Output ONLY the raw text content, nothing else. Do not summarize or paraphrase.' }
+                    ]
+                  }]
+                });
+                const geminiText = extractResult.text?.trim();
+                if (geminiText && geminiText.length > 100) {
+                  extractedText = geminiText;
+                  extractionFailed = false;
+                  console.log(`[generate-from-paper] Gemini Vision extraction succeeded with ${extractModel}! Length: ${geminiText.length}`);
+                  break;
+                }
+              } catch (geminiModelErr: any) {
+                console.warn(`[generate-from-paper] Gemini Vision extraction failed with ${extractModel}:`, geminiModelErr.message);
+              }
+            }
+          } catch (geminiExtractErr: any) {
+            console.warn('[generate-from-paper] Gemini Vision extraction initialization failed:', geminiExtractErr.message);
+          }
+        }
+
+        // Fallback 2: Puter text extraction
+        if (extractionFailed && isPuterAvailable()) {
+          try {
+            console.log('[generate-from-paper] Gemini Vision failed. Attempting Puter text extraction...');
+            const puterExtractText = await askPuter(
+              'You are a document text extractor. Extract ALL text exactly as it appears.',
+              [],
+              'Extract ALL text from this exam paper. Include every question, instruction, header, numbering, and sub-question exactly as written. Output ONLY the raw text content, nothing else.\n\nPaper title: ' + (paper.title || 'Unknown')
+            );
+            if (puterExtractText && puterExtractText.length > 100) {
+              extractedText = puterExtractText;
+              extractionFailed = false;
+              console.log('[generate-from-paper] Puter text extraction succeeded! Length:', puterExtractText.length);
+            }
+          } catch (puterExtErr: any) {
+            console.warn('[generate-from-paper] Puter text extraction failed:', puterExtErr.message);
+          }
+        }
+
+        // Fallback 3: HuggingFace text extraction
+        if (extractionFailed) {
+          try {
+            const hfConfig = await getHFConfig();
+            if (hfConfig && hfConfig.apiKey) {
+              console.log('[generate-from-paper] Gemini + Puter extraction failed. Attempting HuggingFace text extraction...');
+              const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
+              for (const rawModel of hfModels) {
+                const modelId = getHFModelId(rawModel);
+                try {
+                  const hfExtractText = await askHuggingFace(
+                    modelId,
+                    hfConfig.apiKey,
+                    'You are a document text extractor. Extract ALL text exactly as it appears.',
+                    [],
+                    'Extract ALL text from this exam paper. Include every question, instruction, header, numbering, and sub-question exactly as written. Output ONLY the raw text content, nothing else.\n\nPaper title: ' + (paper.title || 'Unknown')
+                  );
+                  if (hfExtractText && hfExtractText.length > 100) {
+                    extractedText = hfExtractText;
+                    extractionFailed = false;
+                    console.log(`[generate-from-paper] HuggingFace text extraction succeeded with ${modelId}! Length: ${hfExtractText.length}`);
+                    break;
+                  }
+                } catch (hfExtErr: any) {
+                  console.warn(`[generate-from-paper] HuggingFace extraction with ${modelId} failed:`, hfExtErr.message);
+                }
+              }
+            }
+          } catch (hfOuterErr: any) {
+            console.warn('[generate-from-paper] HuggingFace text extraction initialization failed:', hfOuterErr.message);
+          }
+        }
       }
     }
 

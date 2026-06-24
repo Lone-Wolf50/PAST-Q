@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { HelpCircle, AlertTriangle, Shield, Clock, ArrowRight, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy, Bot, X, Loader2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { clsx } from 'clsx';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Link, useSearchParams, useBlocker, useNavigate } from 'react-router-dom';
+import remarkGfm from 'remark-gfm';
 
+// Lazy-load ReactMarkdown for performance — only loaded when Cortana drawer opens
 // Lazy-load ReactMarkdown for performance — only loaded when Cortana drawer opens
 const ReactMarkdown = lazy(() => import('react-markdown'));
 
@@ -18,8 +21,163 @@ interface Question {
   time_limit_seconds: number;
 }
 
+function formatAIContentForProse(raw: string): string {
+  if (typeof raw !== 'string') return raw;
+
+  // Replace literal <br> tags (case insensitive, with or without slash/space) with newlines
+  let text = raw.replace(/<br\s*\/?>/gi, '\n');
+
+  // Normalise line endings (CRLF → LF)
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Collapse nested sub-bullets (indented bullets that elaborate on a
+  //    parent point) into prose by joining them into the preceding line.
+  //    A nested bullet is any line starting with 2+ spaces/tabs then - or *.
+  //    We join these onto the previous line separated by ". " so they read
+  //    as connected sentences rather than fragmented sub-items.
+  const lines = text.split('\n');
+  const result: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Fix list markers preceding a heading (e.g. "- ### Title" -> "### Title")
+    line = line.replace(/^(\s*[-*+]\s+|>\s*[-*+]\s+)#{1,4}\s*/, (_, prefix) => {
+      // If it starts with a blockquote indicator, preserve it: "> ### "
+      return prefix.includes('>') ? '> ### ' : '### ';
+    });
+
+    // Fix missing space after heading markers (e.g. "###Title" -> "### Title")
+    line = line.replace(/^(>?\s*)#{1,4}([^\s#].*)$/, '$1### $2');
+
+    const nestedBulletMatch = line.match(/^(\s{2,}|\t+)[-*+]\s+(.+)/);
+    if (nestedBulletMatch && result.length > 0) {
+      // Append to previous line as a continuation sentence
+      const content = nestedBulletMatch[2].trim();
+      const prev = result[result.length - 1];
+      const separator = /[.!?:;]\s*$/.test(prev) ? ' ' : '. ';
+      result[result.length - 1] = prev + separator + content;
+    } else {
+      result.push(line);
+    }
+  }
+
+  // Ensure every markdown heading (# / ## / ### / ####) has a blank line
+  // before it. CommonMark requires this, and react-markdown won't parse a
+  // heading that directly follows a non-blank line.
+  const processed: string[] = [];
+  for (let i = 0; i < result.length; i++) {
+    const line = result[i];
+    const trimmed = line.trimStart();
+    const isHeading = /^#{1,4}\s/.test(trimmed) || /^>\s*#{1,4}\s/.test(trimmed);
+    if (isHeading && i > 0) {
+      const prevLine = result[i - 1];
+      if (prevLine.trim() !== '') {
+        // If both current and previous lines are blockquotes, insert a blockquote blank line
+        if (trimmed.startsWith('>') && prevLine.trimStart().startsWith('>')) {
+          processed.push('>');
+        } else {
+          processed.push('');
+        }
+      }
+    }
+    processed.push(line);
+  }
+
+  return processed.join('\n');
+}
+
+const getChildrenText = (children: any): string => {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map(getChildrenText).join('');
+  if (children && children.props && children.props.children) {
+    return getChildrenText(children.props.children);
+  }
+  return '';
+};
+
+const getContentCategory = (text: string): 'blue' | 'green' | 'none' => {
+  const lower = text.toLowerCase().trim();
+  // Blue categories: Questions, Subheadings, Section Titles
+  if (
+    lower.startsWith('question') ||
+    lower.includes('question') ||
+    lower.startsWith('q:') ||
+    lower.startsWith('q.') ||
+    lower.startsWith('problem') ||
+    lower.endsWith('?') ||
+    lower.startsWith('what is') ||
+    lower.startsWith('what are') ||
+    lower.startsWith('why do') ||
+    lower.startsWith('why does') ||
+    lower.startsWith('why are') ||
+    lower.startsWith('how to') ||
+    lower.startsWith('how do') ||
+    lower.startsWith('how does') ||
+    lower.startsWith('explain') ||
+    lower.startsWith('define') ||
+    lower.startsWith('describe') ||
+    lower.includes('importance of') ||
+    lower.includes('importances of') ||
+    lower.startsWith('importance') ||
+    lower.startsWith('roles') ||
+    lower.includes('roles of') ||
+    lower.includes('benefits of') ||
+    lower.includes('types of') ||
+    lower.includes('reasons why') ||
+    lower.startsWith('summary') ||
+    lower.startsWith('overview') ||
+    lower.startsWith('conclusion') ||
+    lower.startsWith('introduction')
+  ) {
+    return 'blue';
+  }
+  // Green categories: explicit points/takeaways
+  if (
+    lower.startsWith('main point') ||
+    lower.startsWith('key point') ||
+    lower.startsWith('point') ||
+    lower.startsWith('takeaway') ||
+    lower.startsWith('key focus') ||
+    lower.startsWith('concept')
+  ) {
+    return 'green';
+  }
+  return 'none';
+};
+
+const colorKeyTermsInList = (children: React.ReactNode, isDark: boolean): React.ReactNode => {
+  return React.Children.map(children, (child) => {
+    if (React.isValidElement(child)) {
+      const anyChild = child as any;
+      const typeStr = typeof anyChild.type === 'string' ? anyChild.type : anyChild.type?.name || '';
+      const isStrong = typeStr === 'strong' ||
+        (anyChild.props && (
+          anyChild.props.node?.tagName === 'strong' ||
+          anyChild.props.className?.includes('ai-strong')
+        ));
+      if (isStrong) {
+        return React.cloneElement(anyChild, {
+          style: {
+            ...anyChild.props.style,
+            color: isDark ? '#10b981' : '#059669',
+            fontWeight: 800
+          }
+        });
+      }
+      if (anyChild.props && anyChild.props.children) {
+        return React.cloneElement(anyChild, {
+          children: colorKeyTermsInList(anyChild.props.children, isDark)
+        });
+      }
+    }
+    return child;
+  });
+};
+
 const QuizPage = () => {
   const { token } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [searchParams] = useSearchParams();
   const sessionIdParam = searchParams.get('session_id');
   const navigate = useNavigate();
@@ -1066,11 +1224,112 @@ const QuizPage = () => {
               )}
 
               {cortanaExplanation && !cortanaLoading && (
-                <div className="cortana-markdown text-sm text-theme-secondary leading-relaxed">
+                <div className="ai-prose cortana-markdown text-sm text-theme-secondary leading-relaxed">
                   <Suspense fallback={
                     <p className="text-xs text-theme-muted animate-pulse">Rendering explanation...</p>
                   }>
-                    <ReactMarkdown>{cortanaExplanation}</ReactMarkdown>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h1: ({ children }) => (
+                          <p
+                            className="ai-section-title"
+                            style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                          >
+                            {children}
+                          </p>
+                        ),
+                        h2: ({ children }) => (
+                          <p
+                            className="ai-section-title"
+                            style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                          >
+                            {children}
+                          </p>
+                        ),
+                        h3: ({ children }) => (
+                          <p
+                            className="ai-section-title"
+                            style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                          >
+                            {children}
+                          </p>
+                        ),
+                        h4: ({ children }) => (
+                          <p
+                            className="ai-section-title"
+                            style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                          >
+                            {children}
+                          </p>
+                        ),
+                        p: ({ children }) => <p className="ai-p">{children}</p>,
+                        ul: ({ children }) => <ul className="ai-ul">{children}</ul>,
+                        ol: ({ children }) => <ol className="ai-ol">{children}</ol>,
+                        li: ({ children }) => <li className="ai-li">{colorKeyTermsInList(children, isDark)}</li>,
+                        strong: ({ children }) => {
+                          const text = getChildrenText(children);
+                          const category = getContentCategory(text);
+                          let customStyle = {};
+                          if (category === 'green') {
+                            customStyle = { color: isDark ? '#10b981' : '#059669', fontWeight: 800 };
+                          } else if (category === 'blue') {
+                            customStyle = { color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 };
+                          } else {
+                            customStyle = { fontWeight: isDark ? 850 : 700 };
+                          }
+                          return (
+                            <strong
+                              className="ai-strong"
+                              style={customStyle}
+                            >
+                              {children}
+                            </strong>
+                          );
+                        },
+                        em: ({ children }) => <em className="ai-em">{children}</em>,
+                        blockquote: ({ children }) => (
+                          <blockquote
+                            className="ai-blockquote"
+                            style={{
+                              borderLeftColor: isDark ? '#3b82f6' : '#2563eb',
+                              color: isDark ? '#60a5fa' : '#1d4ed8',
+                              backgroundColor: isDark ? 'rgba(59, 130, 246, 0.04)' : 'rgba(37, 99, 235, 0.03)'
+                            }}
+                          >
+                            {children}
+                          </blockquote>
+                        ),
+                        hr: () => <hr className="ai-hr" />,
+                        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
+                        code: ({ className, children, ...props }) => {
+                          const isBlock = className?.includes('language-');
+                          return isBlock ? (
+                            <div className="ai-code-block-wrapper">
+                              {className && (
+                                <div className="ai-code-lang">{className.replace('language-', '')}</div>
+                              )}
+                              <pre className="ai-pre"><code className={className}>{children}</code></pre>
+                            </div>
+                          ) : (
+                            <code className="ai-inline-code" {...props}>{children}</code>
+                          );
+                        },
+                        pre: ({ children }) => <>{children}</>,
+                        table: ({ children }) => (
+                          <div className="ai-table-wrapper">
+                            <table className="ai-table">{children}</table>
+                          </div>
+                        ),
+                        thead: ({ children }) => <thead className="ai-thead">{children}</thead>,
+                        tbody: ({ children }) => <tbody>{children}</tbody>,
+                        tr: ({ children }) => <tr className="ai-tr">{children}</tr>,
+                        th: ({ children }) => <th className="ai-th">{children}</th>,
+                        td: ({ children }) => <td className="ai-td">{children}</td>,
+                      }}
+                    >
+                      {formatAIContentForProse(cortanaExplanation)}
+                    </ReactMarkdown>
                   </Suspense>
                 </div>
               )}

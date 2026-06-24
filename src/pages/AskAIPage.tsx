@@ -160,6 +160,9 @@ function formatAIContentForProse(raw: string): string {
   // Replace literal <br> tags (case insensitive, with or without slash/space) with newlines
   let text = raw.replace(/<br\s*\/?>/gi, '\n');
 
+  // Normalise line endings (CRLF → LF)
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
   // Collapse nested sub-bullets (indented bullets that elaborate on a
   //    parent point) into prose by joining them into the preceding line.
   //    A nested bullet is any line starting with 2+ spaces/tabs then - or *.
@@ -168,13 +171,22 @@ function formatAIContentForProse(raw: string): string {
   const lines = text.split('\n');
   const result: string[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    let line = lines[i];
+
+    // Fix list markers preceding a heading (e.g. "- ### Title" -> "### Title")
+    line = line.replace(/^(\s*[-*+]\s+|>\s*[-*+]\s+)#{1,4}\s*/, (_, prefix) => {
+      // If it starts with a blockquote indicator, preserve it: "> ### "
+      return prefix.includes('>') ? '> ### ' : '### ';
+    });
+
+    // Fix missing space after heading markers (e.g. "###Title" -> "### Title")
+    line = line.replace(/^(>?\s*)#{1,4}([^\s#].*)$/, '$1### $2');
+
     const nestedBulletMatch = line.match(/^(\s{2,}|\t+)[-*+]\s+(.+)/);
     if (nestedBulletMatch && result.length > 0) {
       // Append to previous line as a continuation sentence
       const content = nestedBulletMatch[2].trim();
       const prev = result[result.length - 1];
-      // If previous line ends with punctuation, just add a space; otherwise add ". "
       const separator = /[.!?:;]\s*$/.test(prev) ? ' ' : '. ';
       result[result.length - 1] = prev + separator + content;
     } else {
@@ -182,7 +194,29 @@ function formatAIContentForProse(raw: string): string {
     }
   }
 
-  return result.join('\n');
+  // Ensure every markdown heading (# / ## / ### / ####) has a blank line
+  // before it. CommonMark requires this, and react-markdown won't parse a
+  // heading that directly follows a non-blank line.
+  const processed: string[] = [];
+  for (let i = 0; i < result.length; i++) {
+    const line = result[i];
+    const trimmed = line.trimStart();
+    const isHeading = /^#{1,4}\s/.test(trimmed) || /^>\s*#{1,4}\s/.test(trimmed);
+    if (isHeading && i > 0) {
+      const prevLine = result[i - 1];
+      if (prevLine.trim() !== '') {
+        // If both current and previous lines are blockquotes, insert a blockquote blank line
+        if (trimmed.startsWith('>') && prevLine.trimStart().startsWith('>')) {
+          processed.push('>');
+        } else {
+          processed.push('');
+        }
+      }
+    }
+    processed.push(line);
+  }
+
+  return processed.join('\n');
 }
 
 const getChildrenText = (children: any): string => {
