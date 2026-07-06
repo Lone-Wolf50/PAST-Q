@@ -11,5 +11,15 @@
       "src": "/(.*)",
       "dest": "src/index.ts"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 8 * * 1"
+    },
+    {
+      "path": "/api/cron/revert-temp-plans",
+      "schedule": "0 * * * *"
+    }
   ]
 }

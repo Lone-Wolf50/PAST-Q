@@ -11,10 +11,29 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
 
 export async function runWeeklyDigestJob() {
-  console.log('[Weekly Digest Cron] Starting weekly activity digest and inactive email job...');
+  console.log('[Biweekly Digest Cron] Starting biweekly activity digest and inactive email job...');
   try {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
+    // ── Biweekly Gate ────────────────────────────────────────────────
+    // The cron fires every Monday, but we only send emails every 2 weeks.
+    // Check the global last_digest_run_at timestamp and skip if < 13 days ago.
+    const THIRTEEN_DAYS_MS = 13 * 24 * 60 * 60 * 1000;
+
+    const { data: appConfig } = await supabase
+      .from('upsa_app_config')
+      .select('last_digest_run_at')
+      .eq('id', 1)
+      .single();
+
+    if (appConfig?.last_digest_run_at) {
+      const lastRun = new Date(appConfig.last_digest_run_at).getTime();
+      if (Date.now() - lastRun < THIRTEEN_DAYS_MS) {
+        console.log('[Biweekly Digest Cron] Skipping — last run was less than 13 days ago.');
+        return;
+      }
+    }
+
+    const fourteenDaysAgo = new Date(Date.now() - FOURTEEN_DAYS_MS);
+    const fourteenDaysAgoStr = fourteenDaysAgo.toISOString();
 
     // 1. Fetch verified student users (added last_inactive_email_sent)
     const { data: students, error: userError } = await supabase
@@ -25,23 +44,23 @@ export async function runWeeklyDigestJob() {
 
     if (userError) throw userError;
     if (!students || students.length === 0) {
-      console.log('[Weekly Digest Cron] No verified students found. Exiting.');
+      console.log('[Biweekly Digest Cron] No verified students found. Exiting.');
       return;
     }
 
-    // 2. Fetch submissions from the last 7 days
+    // 2. Fetch submissions from the last 14 days
     const { data: recentSubs, error: subError } = await supabase
       .from('upsa_submissions')
       .select('user_id, points_awarded, question_id, submitted_at')
-      .gte('submitted_at', sevenDaysAgoStr);
+      .gte('submitted_at', fourteenDaysAgoStr);
 
     if (subError) throw subError;
 
-    // 3. Fetch sessions from the last 7 days
+    // 3. Fetch sessions from the last 14 days
     const { data: recentSessions, error: sessionError } = await supabase
       .from('upsa_sessions')
       .select('id, user_id, started_at')
-      .gte('started_at', sevenDaysAgoStr);
+      .gte('started_at', fourteenDaysAgoStr);
 
     if (sessionError) throw sessionError;
 
@@ -63,7 +82,7 @@ export async function runWeeklyDigestJob() {
       recentSessionsMap.get(sess.user_id)!.push(sess);
     });
 
-    // 4. Calculate Leaderboard Rankings (Now and 7 days ago)
+    // 4. Calculate Leaderboard Rankings (Now and 14 days ago)
     const recentPointsMap = new Map<string, number>();
     recentSubsMap.forEach((subs, uid) => {
       const pts = subs.reduce((sum, s) => sum + (Number(s.points_awarded) || 0), 0);
@@ -81,7 +100,7 @@ export async function runWeeklyDigestJob() {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
 
-    // Sort students THEN (7 days ago)
+    // Sort students THEN (14 days ago)
     const sortedThen = [...students].map(s => {
       const recentPts = recentPointsMap.get(s.id) || 0;
       const pointsThen = Math.max(0, (s.total_points || 0) - recentPts);
@@ -110,7 +129,7 @@ export async function runWeeklyDigestJob() {
       const hasActivity = userSubs.length > 0 || userSessions.length > 0;
 
       if (hasActivity) {
-        // --- WEEKLY ACTIVITY DIGEST EMAIL ---
+        // --- BIWEEKLY ACTIVITY DIGEST EMAIL ---
         const quizzesCompleted = userSessions.length;
         const xpEarned = userSubs.reduce((sum, s) => sum + (Number(s.points_awarded) || 0), 0);
         const rankNow = rankNowMap.get(student.id) || sortedNow.length;
@@ -139,7 +158,7 @@ export async function runWeeklyDigestJob() {
           `;
         }
 
-        const subject = `Weekly Activity Digest - PastQ 📊`;
+        const subject = `Biweekly Activity Digest - PastQ 📊`;
         const html = `
           <!DOCTYPE html>
           <html lang="en">
@@ -149,11 +168,11 @@ export async function runWeeklyDigestJob() {
               <div style="max-width: 500px; margin: 0 auto; background-color: #1c1a2e; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.08); overflow: hidden; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                 <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 35px 40px; text-align: center;">
                   <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 800;">Past<span style="color: #a5b4fc;">Q</span></h1>
-                  <p style="color: #c7d2fe; margin: 8px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Your Weekly Study Digest</p>
+                  <p style="color: #c7d2fe; margin: 8px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Your Biweekly Study Digest</p>
                 </div>
                 <div style="padding: 35px 30px 40px 30px;">
                   <p style="font-size: 16px; color: #ffffff; font-weight: 700; margin: 0 0 10px 0;">Hello ${student.username || student.full_name || 'Student'},</p>
-                  <p style="font-size: 14px; line-height: 1.6; color: #94a3b8; margin: 0 0 30px 0;">Here is a summary of your academic achievements on PastQ for the past week. Keep up the amazing momentum!</p>
+                  <p style="font-size: 14px; line-height: 1.6; color: #94a3b8; margin: 0 0 30px 0;">Here is a summary of your academic achievements on PastQ for the past two weeks. Keep up the amazing momentum!</p>
                   
                   <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
                     <tr>
@@ -187,7 +206,7 @@ export async function runWeeklyDigestJob() {
                   </div>
                 </div>
                 <div style="padding: 20px 30px; border-top: 1px solid rgba(255,255,255,0.05); background-color: #121023; text-align: center;">
-                  <p style="color: #475569; font-size: 11px; margin: 0; line-height: 1.5;">You are receiving this weekly digest because you are an active student on PastQ.</p>
+                  <p style="color: #475569; font-size: 11px; margin: 0; line-height: 1.5;">You are receiving this biweekly digest because you are an active student on PastQ.</p>
                 </div>
               </div>
             </div>
@@ -198,7 +217,7 @@ export async function runWeeklyDigestJob() {
         try {
           await sendMailWithFallback({ to: student.email, subject, html });
         } catch (digestErr: any) {
-          console.error(`[Weekly Digest] Failed for ${student.email}:`, digestErr.message || digestErr);
+          console.error(`[Biweekly Digest] Failed for ${student.email}:`, digestErr.message || digestErr);
         }
 
       } else {
@@ -211,16 +230,17 @@ export async function runWeeklyDigestJob() {
         const isFourteenDaysOld = (nowTime - dateCreated) >= FOURTEEN_DAYS_MS;
         if (!isFourteenDaysOld) continue;
 
-        // Skip if we already sent an inactive email within the last 14 days
+        // Skip if we already sent an inactive email within the last 12 days (prevents timing jitter issues)
+        const TWELVE_DAYS_MS = 12 * 24 * 60 * 60 * 1000;
         if (student.last_inactive_email_sent) {
           const lastSent = new Date(student.last_inactive_email_sent).getTime();
-          if ((nowTime - lastSent) < FOURTEEN_DAYS_MS) {
-            console.log(`[Weekly Digest] Skipping inactive email for ${student.email} — sent recently`);
+          if ((nowTime - lastSent) < TWELVE_DAYS_MS) {
+            console.log(`[Biweekly Digest] Skipping inactive email for ${student.email} — sent recently`);
             continue;
           }
         }
 
-        // Check if this student has EVER had any session (not just last 7 days)
+        // Check if this student has EVER had any session (not just last 14 days)
         const { count: everSessionCount } = await supabase
           .from('upsa_sessions')
           .select('id', { count: 'exact', head: true })
@@ -284,28 +304,34 @@ export async function runWeeklyDigestJob() {
         try {
           await sendMailWithFallback({ to: student.email, subject, html });
 
-          // Update last_inactive_email_sent so we don't spam them next Monday
+          // Update last_inactive_email_sent so we don't spam them
           await supabase
             .from('upsa_users')
             .update({ last_inactive_email_sent: new Date().toISOString() })
             .eq('id', student.id);
 
         } catch (inactiveErr: any) {
-          console.error(`[Weekly Digest] Inactive email failed for ${student.email}:`, inactiveErr.message || inactiveErr);
+          console.error(`[Biweekly Digest] Inactive email failed for ${student.email}:`, inactiveErr.message || inactiveErr);
         }
       }
     }
 
-    console.log('[Weekly Digest Cron] Completed Weekly Digest successfully.');
+    // ── Mark this run so the next Monday is skipped (biweekly gate) ──
+    await supabase
+      .from('upsa_app_config')
+      .update({ last_digest_run_at: new Date().toISOString() })
+      .eq('id', 1);
+
+    console.log('[Biweekly Digest Cron] Completed Biweekly Digest successfully.');
   } catch (err: any) {
-    console.error('[Weekly Digest Cron] Critical Error running weekly digest job:', err);
+    console.error('[Biweekly Digest Cron] Critical Error running biweekly digest job:', err);
   }
 }
 
 
 
 // ── Auto-Revert Expired Temporary Plans ──────────────────────────
-async function revertExpiredTempPlans() {
+export async function revertExpiredTempPlans() {
   console.log('[Temp Plan Cron] Checking for expired temporary plans...');
   try {
     const now = new Date().toISOString();
@@ -370,16 +396,24 @@ async function revertExpiredTempPlans() {
   }
 }
 
-// Run every Monday at 8:00 AM Ghana time (Africa/Accra = GMT+0)
-cron.schedule('0 8 * * 1', () => {
-  runWeeklyDigestJob();
-}, {
-  timezone: 'Africa/Accra'
-});
+// Only register node-cron schedules when running outside Vercel (local dev / persistent server).
+// On Vercel, cron jobs are triggered via Vercel Cron → /api/cron/* HTTP endpoints instead.
+if (process.env.VERCEL !== '1') {
+  // Run every Monday at 8:00 AM Ghana time (Africa/Accra = GMT+0)
+  cron.schedule('0 8 * * 1', () => {
+    runWeeklyDigestJob();
+  }, {
+    timezone: 'Africa/Accra'
+  });
 
-// Run every hour to check for expired temporary plans
-cron.schedule('0 * * * *', () => {
-  revertExpiredTempPlans();
-}, {
-  timezone: 'Africa/Accra'
-});
+  // Run every hour to check for expired temporary plans
+  cron.schedule('0 * * * *', () => {
+    revertExpiredTempPlans();
+  }, {
+    timezone: 'Africa/Accra'
+  });
+
+  console.log('[Cron] node-cron schedules registered (non-Vercel environment).');
+} else {
+  console.log('[Cron] Running on Vercel — node-cron schedules skipped. Using Vercel Cron instead.');
+}

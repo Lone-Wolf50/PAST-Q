@@ -18,6 +18,7 @@ import aiRouter from './routes/ai';
 import supportRouter from './routes/support';
 import streaksRouter from './routes/streaks';
 import quizRouter from './routes/quiz';
+import cronRouter from './routes/cron';
 import { supabase } from './lib/supabase';
 import { redis } from './lib/redis';
 import './lib/cron';
@@ -183,6 +184,7 @@ app.use('/api/ai', aiRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/streaks', streaksRouter);
 app.use('/api/quiz', quizRouter);
+app.use('/api/cron', cronRouter);
 
 // ── 404 Handler ────────────────────────────────────────────────────────────────
 app.use((req, res) => {
