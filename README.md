@@ -122,8 +122,9 @@ UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
 
 ## 🗄️ Database Setup & Constraints (Critical)
 
-To run this project, the Supabase PostgreSQL database requires custom constraints on the `upsa_admin_notifications` table. Execute the following SQL in your **Supabase SQL Editor**:
+To run this project, execute the following SQL scripts in your **Supabase SQL Editor** to configure tables, indexes, and custom constraints.
 
+### 1. Admin Notifications Table Constraints
 ```sql
 ALTER TABLE upsa_admin_notifications 
 DROP CONSTRAINT IF EXISTS upsa_admin_notifications_type_check;
@@ -131,6 +132,59 @@ DROP CONSTRAINT IF EXISTS upsa_admin_notifications_type_check;
 ALTER TABLE upsa_admin_notifications 
 ADD CONSTRAINT upsa_admin_notifications_type_check 
 CHECK (type IN ('signup', 'payment', 'alert', 'warning', 'info', 'report'));
+```
+
+### 2. Broadcast Mail Failures Table
+Stores failed email deliveries per broadcast run so they can be retried from the Admin Broadcast UI:
+```sql
+CREATE TABLE IF NOT EXISTS broadcast_failures (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  broadcast_id  UUID NOT NULL,
+  email         TEXT NOT NULL,
+  error_reason  TEXT,
+  created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_broadcast_failures_broadcast_id
+  ON broadcast_failures (broadcast_id);
+
+ALTER TABLE broadcast_failures ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "broadcast_failures_service_all"
+  ON broadcast_failures FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+```
+
+### 3. Cron Failures Table
+Stores failed email deliveries from the biweekly digest cron so they can be reviewed and retried from the Admin dashboard:
+```sql
+CREATE TABLE IF NOT EXISTS cron_failures (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         TEXT NOT NULL,
+  user_type     TEXT NOT NULL, -- 'active' or 'inactive'
+  error_reason  TEXT,
+  created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cron_failures_email
+  ON cron_failures (email);
+
+ALTER TABLE cron_failures ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "cron_failures_service_all"
+  ON cron_failures FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+```
+
+### 4. App Config Cron Timing Column
+Ensure the application configuration table has the biweekly last-run timing column:
+```sql
+ALTER TABLE upsa_app_config 
+ADD COLUMN IF NOT EXISTS last_digest_run_at TIMESTAMP WITH TIME ZONE;
 ```
 
 ---
