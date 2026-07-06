@@ -35,6 +35,9 @@ export async function runWeeklyDigestJob() {
     const fourteenDaysAgo = new Date(Date.now() - FOURTEEN_DAYS_MS);
     const fourteenDaysAgoStr = fourteenDaysAgo.toISOString();
 
+    const failedEmails: { email: string; type: string; error: string }[] = [];
+    let successfulSends = 0;
+
     // 1. Fetch verified student users (added last_inactive_email_sent)
     const { data: students, error: userError } = await supabase
       .from('upsa_users')
@@ -216,8 +219,11 @@ export async function runWeeklyDigestJob() {
 
         try {
           await sendMailWithFallback({ to: student.email, subject, html });
+          successfulSends++;
         } catch (digestErr: any) {
-          console.error(`[Biweekly Digest] Failed for ${student.email}:`, digestErr.message || digestErr);
+          const errMsg = digestErr.message || String(digestErr);
+          console.error(`[Biweekly Digest] Failed for ${student.email}:`, errMsg);
+          failedEmails.push({ email: student.email, type: 'Active Digest', error: errMsg });
         }
 
       } else {
@@ -303,6 +309,7 @@ export async function runWeeklyDigestJob() {
 
         try {
           await sendMailWithFallback({ to: student.email, subject, html });
+          successfulSends++;
 
           // Update last_inactive_email_sent so we don't spam them
           await supabase
@@ -311,7 +318,9 @@ export async function runWeeklyDigestJob() {
             .eq('id', student.id);
 
         } catch (inactiveErr: any) {
-          console.error(`[Biweekly Digest] Inactive email failed for ${student.email}:`, inactiveErr.message || inactiveErr);
+          const errMsg = inactiveErr.message || String(inactiveErr);
+          console.error(`[Biweekly Digest] Inactive email failed for ${student.email}:`, errMsg);
+          failedEmails.push({ email: student.email, type: 'Inactive Reminder', error: errMsg });
         }
       }
     }
@@ -321,6 +330,22 @@ export async function runWeeklyDigestJob() {
       .from('upsa_app_config')
       .update({ last_digest_run_at: new Date().toISOString() })
       .eq('id', 1);
+
+    // ── Send Admin Notification summarizing results ───────────────────
+    if (failedEmails.length > 0) {
+      const errorDetails = failedEmails.map(f => `${f.email} (${f.type}): ${f.error}`).join('\n');
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '⚠️ Email Digest Failures',
+        message: `Biweekly digest sent to ${successfulSends} user(s). Failed to reach ${failedEmails.length} user(s):\n${errorDetails.slice(0, 1000)}`,
+        type: 'alert'
+      });
+    } else {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '📧 Biweekly Digest Completed',
+        message: `Biweekly email digest successfully sent to all ${successfulSends} active/inactive user(s) with zero failures.`,
+        type: 'info'
+      });
+    }
 
     console.log('[Biweekly Digest Cron] Completed Biweekly Digest successfully.');
   } catch (err: any) {
