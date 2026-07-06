@@ -1897,4 +1897,108 @@ router.post('/test-weekly-digest', protect, adminOnly, async (_req: AuthRequest,
   }
 });
 
+// ── Cron Failures Management ─────────────────────────────────────
+
+// List all cron failures
+router.get('/cron-failures', protect, adminOnly, async (_req: AuthRequest, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('cron_failures')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.status(200).json({ failures: data || [] });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch cron failures.' });
+  }
+});
+
+// Retry sending failed cron emails
+router.post('/cron-failures/retry', protect, adminOnly, async (_req: AuthRequest, res: Response) => {
+  try {
+    const { data: failures, error: fetchErr } = await supabase
+      .from('cron_failures')
+      .select('*');
+
+    if (fetchErr) throw fetchErr;
+    if (!failures || failures.length === 0) {
+      res.status(200).json({ message: 'No cron failures to retry.', sent: 0, failed: 0 });
+      return;
+    }
+
+    let sent = 0;
+    let stillFailed = 0;
+    const newFailures: { email: string; user_type: string; error_reason: string }[] = [];
+
+    for (const failure of failures) {
+      try {
+        const subject = failure.user_type === 'active'
+          ? 'Biweekly Activity Digest - PastQ 📊'
+          : 'We miss you at PastQ! 📚';
+
+        const title = failure.user_type === 'active'
+          ? 'Your Biweekly Study Digest'
+          : 'Come back to PastQ';
+
+        const bodyText = failure.user_type === 'active'
+          ? 'We tried to send you your biweekly study digest but it failed to deliver. Log in to PastQ to see your latest stats, leaderboard ranking, and more!'
+          : 'It\'s been a while since your last visit to PastQ. Consistent practice is the key to exam success! Log in today to claim your daily streaks and try the AI tutor.';
+
+        await sendGeneralEmail(failure.email, subject, title, bodyText);
+        sent++;
+      } catch (retryErr: any) {
+        stillFailed++;
+        newFailures.push({
+          email: failure.email,
+          user_type: failure.user_type,
+          error_reason: retryErr.message || 'Retry failed',
+        });
+      }
+    }
+
+    // Clear old failures
+    await supabase.from('cron_failures').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+    // Re-insert any that still failed
+    if (newFailures.length > 0) {
+      await supabase.from('cron_failures').insert(newFailures);
+    }
+
+    // Admin notification
+    await supabase.from('upsa_admin_notifications').insert({
+      title: sent > 0 && stillFailed === 0 ? '✅ Cron Retry Successful' : '⚠️ Cron Retry Partial',
+      message: `Retried ${failures.length} failed cron email(s). ${sent} sent successfully, ${stillFailed} still failed.`,
+      type: stillFailed > 0 ? 'alert' : 'info',
+    });
+
+    res.status(200).json({ message: 'Retry complete.', total: failures.length, sent, failed: stillFailed });
+  } catch (err: any) {
+    console.error('Cron retry error:', err);
+    res.status(500).json({ error: 'Failed to retry cron emails.' });
+  }
+});
+
+// Delete a single cron failure
+router.delete('/cron-failures/:id', protect, adminOnly, async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabase.from('cron_failures').delete().eq('id', id);
+    if (error) throw error;
+    res.status(200).json({ message: 'Cron failure dismissed.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to delete cron failure.' });
+  }
+});
+
+// Clear all cron failures
+router.delete('/cron-failures', protect, adminOnly, async (_req: AuthRequest, res: Response) => {
+  try {
+    const { error } = await supabase.from('cron_failures').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) throw error;
+    res.status(200).json({ message: 'All cron failures cleared.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to clear cron failures.' });
+  }
+});
+
 export default router;

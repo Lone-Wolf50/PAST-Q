@@ -333,10 +333,18 @@ export async function runWeeklyDigestJob() {
 
     // ── Send Admin Notification summarizing results ───────────────────
     if (failedEmails.length > 0) {
-      const errorDetails = failedEmails.map(f => `${f.email} (${f.type}): ${f.error}`).join('\n');
+      // Persist failures to cron_failures table for admin retry
+      const failureRows = failedEmails.map(f => ({
+        email: f.email,
+        user_type: f.type === 'Active Digest' ? 'active' : 'inactive',
+        error_reason: f.error,
+      }));
+      await supabase.from('cron_failures').insert(failureRows);
+
+      const failedList = failedEmails.map(f => `${f.email} (${f.type})`).join(', ');
       await supabase.from('upsa_admin_notifications').insert({
         title: '⚠️ Email Digest Failures',
-        message: `Biweekly digest sent to ${successfulSends} user(s). Failed to reach ${failedEmails.length} user(s):\n${errorDetails.slice(0, 1000)}`,
+        message: `Biweekly digest sent to ${successfulSends} user(s). Failed to reach ${failedEmails.length} user(s): ${failedList.slice(0, 500)}. Check the Cron Failures panel to retry.`,
         type: 'alert'
       });
     } else {
