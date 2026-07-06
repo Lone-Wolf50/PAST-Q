@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, TextareaHTMLAttributes } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type { TextareaHTMLAttributes } from 'react';
 import {
-  X, Loader2, AlertTriangle, Check, Trash2, Plus, RefreshCw, FileText, PlusCircle, Pencil, ChevronDown, ChevronUp
+  X, Loader2, AlertTriangle, Check, Trash2, Plus, RefreshCw, FileText, PlusCircle, Pencil
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -608,7 +609,7 @@ const QuestionScannerModal: React.FC<QuestionScannerModalProps> = ({
             <input
               type="number"
               placeholder="—"
-              value={q.marks !== null && q.marks !== undefined ? q.marks : ''}
+              value={displayMarks !== null && displayMarks !== undefined ? displayMarks : ''}
               onChange={(e) => handleQuestionChange(idx, 'marks', e.target.value === '' ? null : parseInt(e.target.value) || 0)}
               className="w-20 bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-xs text-white font-bold focus:border-indigo-500 focus:outline-none text-center"
             />

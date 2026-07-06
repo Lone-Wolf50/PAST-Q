@@ -571,7 +571,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           const [paperRes, insightsRes] = await Promise.all([
             supabase
               .from('upsa_papers')
-              .select('title, year, semester, file_url, upsa_subjects(name)')
+              .select('title, year, semester, file_url, questions_verified, upsa_subjects(name)')
               .eq('id', paperId)
               .single(),
             supabase
@@ -592,7 +592,46 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
               semester: paper.semester ? String(paper.semester) : undefined,
             };
 
-            if (paper.file_url) {
+            if (paper.questions_verified) {
+              const { data: questions } = await supabase
+                .from('upsa_paper_questions')
+                .select('question_no, body, marks, sub_parts')
+                .eq('paper_id', paperId)
+                .order('question_no', { ascending: true });
+
+              if (questions && questions.length > 0) {
+                const formatted = questions.map((q: any) => {
+                  let qText = `[Question ${q.question_no}]\n`;
+                  qText += `Body: ${q.body}\n`;
+                  if (q.marks) qText += `Marks: ${q.marks}\n`;
+
+                  const formatSubparts = (subparts: any[], level: number): string => {
+                    let res = '';
+                    const indent = '  '.repeat(level);
+                    subparts.forEach((sp: any) => {
+                      const marksStr = sp.marks ? ` (${sp.marks} marks)` : '';
+                      res += `${indent}- (${sp.label}): ${sp.text}${marksStr}\n`;
+                      if (Array.isArray(sp.sub_parts) && sp.sub_parts.length > 0) {
+                        res += formatSubparts(sp.sub_parts, level + 1);
+                      }
+                    });
+                    return res;
+                  };
+
+                  if (Array.isArray(q.sub_parts) && q.sub_parts.length > 0) {
+                    qText += `Sub-parts:\n`;
+                    qText += formatSubparts(q.sub_parts, 0);
+                  }
+                  return qText;
+                }).join('\n');
+
+                extractedText = formatted;
+                extractionFailed = false;
+                console.log(`[AI /chat] Loaded ${questions.length} verified questions for paperId: ${paperId}. Bypassing PDF download.`);
+              }
+            }
+
+            if (!paper.questions_verified && paper.file_url) {
               const pdfRes = await fetch(paper.file_url);
               if (pdfRes.ok) {
                 const arrayBuffer = await pdfRes.arrayBuffer();
@@ -638,11 +677,11 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
             try {
               console.log(`[AI /chat] Running OCR before Gemini call for ${numPages} pages...`);
               const pdfBuffer = Buffer.from(activeFileData, 'base64');
-              const ocrText = await performOcrPipeline(pdfBuffer, numPages);
-              if (ocrText && ocrText.length > 50) {
-                extractedText = ocrText;
+              const ocrRes = await performOcrPipeline(pdfBuffer, numPages);
+              if (ocrRes && ocrRes.text.length > 50) {
+                extractedText = ocrRes.text;
                 extractionFailed = false;
-                console.log('[AI /chat] Pre-Gemini OCR succeeded. Length:', ocrText.length);
+                console.log('[AI /chat] Pre-Gemini OCR succeeded. Length:', ocrRes.text.length);
               }
             } catch (ocrErr: any) {
               console.warn('[AI /chat] Pre-Gemini OCR failed:', ocrErr.message);
@@ -1249,7 +1288,8 @@ router.get('/test-ocr/:paperId', protect, async (req: AuthRequest, res: any) => 
 
     try {
       console.log(`[Test OCR] Running OCR pipeline for ${numPages} pages...`);
-      ocrText = await performOcrPipeline(pdfBuffer, numPages);
+      const ocrRes = await performOcrPipeline(pdfBuffer, numPages);
+      ocrText = ocrRes.text;
       ocrSucceeded = !!(ocrText && ocrText.length > 50);
     } catch (err: any) {
       ocrError = err.message || 'Unknown OCR error';

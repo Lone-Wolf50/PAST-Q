@@ -107,9 +107,9 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
     if (isHybridOrScanned || extractionFailed) {
       console.log(`[AI Insights] Scanned/Hybrid PDF detected (Average chars per page: ${avgCharsPerPage.toFixed(1)}). Triggering OCR...`);
       try {
-        const ocrText = await performOcrPipeline(pdfBuffer, numPages);
-        if (ocrText && ocrText.length > 50) {
-          extractedText = ocrText;
+        const ocrRes = await performOcrPipeline(pdfBuffer, numPages);
+        if (ocrRes && ocrRes.text.length > 50) {
+          extractedText = ocrRes.text;
           console.log(`[AI Insights] OCR succeeded. Extracted length: ${extractedText.length}`);
         }
       } catch (ocrErr: any) {

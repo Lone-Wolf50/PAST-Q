@@ -15,6 +15,12 @@ import { deleteUserComplete } from '../lib/user-deletion';
 import { sendGeneralEmail } from '../lib/mailer';
 import { Ratelimit } from '@upstash/ratelimit';
 import { runWeeklyDigestJob } from '../lib/cron';
+import { GoogleGenAI } from '@google/genai';
+import { performOcrPipeline, OCRPage, OCRBlock } from '../lib/ocr';
+import { processTables, structureExamPaper } from '../lib/structuring';
+import { askPuter, isPuterAvailable } from '../lib/puter';
+import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from '../lib/huggingface';
+const pdf = require('pdf-parse');
 
 const router = Router();
 const upload = multer({
@@ -185,9 +191,7 @@ router.get('/papers', async (_req: AuthRequest, res: Response) => {
   try {
     const { data, error } = await supabase
       .from('upsa_papers')
-      .select('*, upsa_subjects(name, code), upsa_paper_insights(id)')
-      .order('year', { ascending: false })
-      .order('title', { ascending: true });
+      .select('*, upsa_subjects(name, code), upsa_paper_insights(id)');
     if (error) throw error;
 
     // Include per-paper processing state from in-memory tracker
@@ -200,6 +204,20 @@ router.get('/papers', async (_req: AuthRequest, res: Response) => {
       ai_processing_started_at: processingState[p.id] ?? null,
       upsa_paper_insights: undefined
     }));
+
+    // Sort alphabetically by subject name, then paper title
+    papersWithStatus.sort((a: any, b: any) => {
+      const subjectA = (a.upsa_subjects?.name || '').toLowerCase();
+      const subjectB = (b.upsa_subjects?.name || '').toLowerCase();
+      if (subjectA < subjectB) return -1;
+      if (subjectA > subjectB) return 1;
+
+      const titleA = (a.title || '').toLowerCase();
+      const titleB = (b.title || '').toLowerCase();
+      if (titleA < titleB) return -1;
+      if (titleA > titleB) return 1;
+      return 0;
+    });
 
     res.status(200).json({
       papers: papersWithStatus,
@@ -379,6 +397,371 @@ router.delete('/papers/:id', async (req: AuthRequest, res: Response) => {
     res.status(200).json({ message: 'Paper deleted.' });
   } catch {
     res.status(500).json({ error: 'Failed to delete paper.' });
+  }
+});
+
+// ── Papers Questions Scanner and Verification ───────────────────────────────
+router.post('/papers/:id/scan-questions', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { data: paper, error: fetchErr } = await supabase
+      .from('upsa_papers')
+      .select('file_url, title')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !paper || !paper.file_url) {
+      res.status(404).json({ error: 'Paper not found or lacks a PDF file URL.' });
+      return;
+    }
+
+    console.log(`[Scan Questions] Fetching PDF from url: ${paper.file_url}`);
+    const pdfRes = await fetch(paper.file_url);
+    if (!pdfRes.ok) {
+      throw new Error(`Failed to fetch PDF: ${pdfRes.statusText}`);
+    }
+    const arrayBuffer = await pdfRes.arrayBuffer();
+    const pdfBuffer = Buffer.from(arrayBuffer);
+
+    let extractedText = '';
+    let pageCount = 1;
+    try {
+      const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
+      const pdfData = await pdfParser(pdfBuffer);
+      extractedText = (pdfData.text || '').trim();
+      pageCount = Number(pdfData.numpages) || 1;
+      console.log(`[Scan Questions] parsed via pdf-parse: ${pageCount} pages, ${extractedText.length} characters.`);
+    } catch (e: any) {
+      console.warn('[Scan Questions] Initial pdf-parse failed:', e.message);
+    }
+
+function buildDummyOcrPages(text: string): OCRPage[] {
+  const pagesRaw = text.split(/\f/);
+  return pagesRaw.map((pageText, pageIdx) => {
+    const lines = pageText.split('\n').map(l => l.trim()).filter(Boolean);
+    const blocks = lines.map((line, lineIdx) => ({
+      text: line,
+      boundingBox: { x: 50, y: lineIdx * 40, w: 500, h: 30 },
+      confidence: 1.0
+    }));
+    return {
+      pageNumber: pageIdx + 1,
+      width: 600,
+      height: lines.length * 40 + 100,
+      blocks
+    };
+  });
+}
+
+    // Run OCR if text is empty/too short (scanned PDF)
+    let ocrPages: OCRPage[] = [];
+    if (extractedText.length < 100) {
+      try {
+        console.log(`[Scan Questions] Extracted text too short (${extractedText.length} chars). Falling back to OCR pipeline...`);
+        const ocrRes = await performOcrPipeline(pdfBuffer, pageCount);
+        extractedText = ocrRes.text;
+        ocrPages = ocrRes.pages;
+      } catch (ocrErr: any) {
+        console.error('[Scan Questions] OCR pipeline failed:', ocrErr.message);
+      }
+    } else {
+      ocrPages = buildDummyOcrPages(extractedText);
+    }
+
+    const extractionPrompt = `You are a professional exam paper parser. Extract ONLY the actual exam questions from the text below.
+Produce a JSON array of questions matching this schema:
+[
+  {
+    "question_no": number, // e.g. 1, 2, 3...
+    "body": string, // text of the main question. If the question references a data table, include the table data as formatted markdown table in this field.
+    "marks": number | null, // marks allocated to this question, if visible on the paper (null if not specified)
+    "sub_parts": [ // array of sub-questions, if any (empty array if none)
+      {
+        "label": string, // e.g. "a", "b"
+        "text": string, // body of the sub-question
+        "marks": number | null,
+        "sub_parts": [ // optional level 3 recursive nested parts, e.g. "i", "ii" (omit if none)
+          {
+            "label": string,
+            "text": string,
+            "marks": number | null
+          }
+        ]
+      }
+    ]
+  }
+]
+
+CRITICAL RULES — READ CAREFULLY:
+1. ONLY extract items that are actual exam questions asking students to DO something (calculate, explain, discuss, define, solve, evaluate, describe, compare, etc.).
+2. SKIP ALL of the following — they are NOT questions:
+   - Statistical tables (z-tables, t-tables, chi-square tables, F-distribution tables, normal distribution tables)
+   - Formula sheets or lists of formulas
+   - Mark allocation tables or grading rubrics
+   - Frequency tables, data summary tables, or tabular appendices at the end of papers
+   - Header/footer information (university name, exam date, course code, instructions to candidates, time allowed)
+   - Administrative notes like "Answer ALL questions", "This paper has X pages", etc.
+   - Blank answer spaces or line placeholders
+3. Do NOT split table rows, table cells, or individual data entries into separate questions.
+4. If a question refers to a specific data table (e.g. "Use the following data..."), include that data table as formatted markdown table WITHIN the question body field.
+5. When in doubt whether something is a question or reference material, SKIP it. Only include items with clear question numbering (e.g. "1.", "Q1", "Question 1") that ask students to perform a task.
+
+Return ONLY the raw JSON array. Do not include markdown code block syntax (no \`\`\`json etc.). Do not include any prefix or suffix.
+
+Exam paper text:
+${extractedText}`;
+
+    let rawQuestions: any[] = [];
+    let extractionSuccess = false;
+
+    // If OCR failed completely, try Gemini Vision on raw PDF bytes
+    if (extractedText.length < 100) {
+      if (process.env.GEMINI_API_KEY) {
+        try {
+          console.log('[Scan Questions] OCR returned insufficient text. Falling back to Gemini Vision on raw PDF...');
+          const geminiExtractAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
+          const base64Pdf = pdfBuffer.toString('base64');
+          const response = await geminiExtractAI.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: [{
+              role: 'user',
+              parts: [
+                { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+                { text: `Extract ONLY the actual exam questions from this exam paper PDF.
+Produce a JSON array of questions matching this schema:
+[
+  {
+    "question_no": number,
+    "body": string, // If the question references a data table, include that data as formatted markdown table in this field.
+    "marks": number | null,
+    "sub_parts": [
+      {
+        "label": string,
+        "text": string,
+        "marks": number | null,
+        "sub_parts": [
+          {
+            "label": string,
+            "text": string,
+            "marks": number | null
+          }
+        ]
+      }
+    ]
+  }
+]
+
+CRITICAL RULES:
+1. ONLY extract items that are actual exam questions asking students to DO something (calculate, explain, discuss, define, solve, etc.).
+2. SKIP ALL of these — they are NOT questions: statistical tables (z-tables, t-tables, chi-square tables, F-distribution, normal distribution), formula sheets, mark allocation tables, grading rubrics, frequency tables, data summary appendices, header/footer info, administrative notes, blank answer spaces.
+3. Do NOT split table rows or cells into separate questions. If a question references data, include the data as a formatted markdown table inside the question body.
+4. When in doubt, SKIP it. Only include numbered items that ask students to perform a task.
+
+Return ONLY the raw JSON array. Do not include markdown code block syntax (no \`\`\`json etc.).` }
+              ]
+            }],
+            config: {
+              role: 'user',
+              responseMimeType: 'application/json'
+            } as any
+          });
+
+          const replyText = response.text?.trim();
+          if (replyText) {
+            const cleanedText = replyText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+            rawQuestions = JSON.parse(cleanedText);
+            extractionSuccess = true;
+            console.log(`[Scan Questions] Gemini Vision extraction succeeded. Found ${rawQuestions.length} questions.`);
+          }
+        } catch (err: any) {
+          console.error('[Scan Questions] Gemini Vision fallback failed:', err.message);
+        }
+      }
+    } else {
+      // 1. Try deterministic document-structuring engine first
+      try {
+        console.log(`[Scan Questions] Formatting tables in OCR pages...`);
+        const processedPages = await processTables(ocrPages, process.env.GEMINI_API_KEY || '');
+        console.log(`[Scan Questions] Parsing hierarchical questions...`);
+        const structResult = await structureExamPaper(processedPages, process.env.GEMINI_API_KEY || '');
+        if (structResult.questions && structResult.questions.length > 0) {
+          rawQuestions = structResult.questions;
+          extractionSuccess = true;
+          console.log(`[Scan Questions] Deterministic engine succeeded. Found ${rawQuestions.length} questions.`);
+        }
+      } catch (err: any) {
+        console.error('[Scan Questions] Deterministic structuring failed, falling back to LLM:', err.message);
+      }
+
+      // 2. LLM Fallback (Gemini -> Puter -> HF) if deterministic engine found 0 questions
+      if (!extractionSuccess && process.env.GEMINI_API_KEY) {
+        try {
+          console.log('[Scan Questions] Fallback: Structuring questions using Gemini LLM...');
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: extractionPrompt,
+            config: {
+              responseMimeType: 'application/json'
+            }
+          });
+          const replyText = response.text?.trim();
+          if (replyText) {
+            const cleanedText = replyText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+            rawQuestions = JSON.parse(cleanedText);
+            extractionSuccess = true;
+            console.log(`[Scan Questions] Gemini structuring succeeded. Found ${rawQuestions.length} questions.`);
+          }
+        } catch (err: any) {
+          console.warn('[Scan Questions] Gemini structuring fallback failed:', err.message);
+        }
+      }
+
+      // Try Puter Fallback
+      if (!extractionSuccess && isPuterAvailable()) {
+        try {
+          console.log('[Scan Questions] Fallback: Structuring questions using Puter LLM...');
+          const replyText = await askPuter(
+            "You are a professional exam paper parser. Output ONLY a raw JSON array.",
+            [],
+            extractionPrompt
+          );
+          if (replyText) {
+            const cleanedText = replyText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+            rawQuestions = JSON.parse(cleanedText);
+            extractionSuccess = true;
+            console.log(`[Scan Questions] Puter structuring succeeded. Found ${rawQuestions.length} questions.`);
+          }
+        } catch (err: any) {
+          console.warn('[Scan Questions] Puter structuring fallback failed:', err.message);
+        }
+      }
+
+      // Try Hugging Face Fallback
+      if (!extractionSuccess) {
+        try {
+          const hfConfig = await getHFConfig();
+          if (hfConfig && hfConfig.apiKey) {
+            const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
+            for (const rawModel of hfModels) {
+              const modelId = getHFModelId(rawModel);
+              console.log(`[Scan Questions] Fallback: Structuring questions using HF model: ${modelId}`);
+              try {
+                const replyText = await askHuggingFace(
+                  modelId,
+                  hfConfig.apiKey,
+                  "You are a professional exam paper parser. Output ONLY a raw JSON array.",
+                  [],
+                  extractionPrompt
+                );
+                if (replyText) {
+                  const cleanedText = replyText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+                  rawQuestions = JSON.parse(cleanedText);
+                  extractionSuccess = true;
+                  console.log(`[Scan Questions] HF structuring succeeded. Found ${rawQuestions.length} questions.`);
+                  break;
+                }
+              } catch (hfErr: any) {
+                console.warn(`[Scan Questions] HF model ${modelId} structuring fallback failed:`, hfErr.message);
+              }
+            }
+          }
+        } catch (err: any) {
+          console.warn('[Scan Questions] Hugging Face structuring fallback initialization failed:', err.message);
+        }
+      }
+    }
+
+    if (!extractionSuccess || !Array.isArray(rawQuestions) || rawQuestions.length === 0) {
+      res.status(500).json({ error: 'Failed to extract structured questions from PDF. Please check credentials or retry.' });
+      return;
+    }
+
+    res.status(200).json({ questions: rawQuestions });
+  } catch (err: any) {
+    console.error('[Scan Questions] Route error:', err);
+    res.status(500).json({ error: 'Internal server error while scanning paper: ' + err.message });
+  }
+});
+
+router.post('/papers/:id/verify-questions', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const { questions } = req.body;
+
+  if (!Array.isArray(questions)) {
+    res.status(400).json({ error: 'Invalid questions payload. Must be an array.' });
+    return;
+  }
+
+  try {
+    // 1. Delete existing questions for this paper to avoid unique key conflicts
+    await supabase
+      .from('upsa_paper_questions')
+      .delete()
+      .eq('paper_id', id);
+
+    // 2. Prepare the rows
+    const rows = questions.map((q: any) => ({
+      paper_id: id,
+      question_no: q.question_no,
+      body: q.body,
+      marks: (q.marks !== undefined && q.marks !== null) ? q.marks : null,
+      sub_parts: Array.isArray(q.sub_parts) ? q.sub_parts : []
+    }));
+
+    // 3. Bulk insert
+    if (rows.length > 0) {
+      const { error: insertErr } = await supabase
+        .from('upsa_paper_questions')
+        .insert(rows);
+
+      if (insertErr) throw insertErr;
+    }
+
+    // 4. Update the verification status on the paper
+    const { error: updateErr } = await supabase
+      .from('upsa_papers')
+      .update({
+        questions_verified: true,
+        questions_verified_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (updateErr) throw updateErr;
+
+    res.status(200).json({ message: 'Questions successfully verified and saved.' });
+  } catch (err: any) {
+    console.error('[Verify Questions] Route error:', err);
+    res.status(500).json({ error: 'Failed to save verified questions: ' + err.message });
+  }
+});
+
+router.delete('/papers/:id/verified-questions', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    // 1. Delete questions
+    const { error: deleteErr } = await supabase
+      .from('upsa_paper_questions')
+      .delete()
+      .eq('paper_id', id);
+
+    if (deleteErr) throw deleteErr;
+
+    // 2. Reset verification flag on the paper
+    const { error: updateErr } = await supabase
+      .from('upsa_papers')
+      .update({
+        questions_verified: false,
+        questions_verified_at: null
+      })
+      .eq('id', id);
+
+    if (updateErr) throw updateErr;
+
+    res.status(200).json({ message: 'Verified questions cleared successfully.' });
+  } catch (err: any) {
+    console.error('[Clear Questions] Route error:', err);
+    res.status(500).json({ error: 'Failed to clear verified questions: ' + err.message });
   }
 });
 

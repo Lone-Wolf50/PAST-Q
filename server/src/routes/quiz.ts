@@ -1100,7 +1100,8 @@ router.post('/generate-from-paper', async (req: AuthRequest, res: Response): Pro
     if (extractedText.length < 100 && pdfBuffer) {
       try {
         console.log(`[generate-from-paper] Extracted text too short (${extractedText.length} chars). Falling back to OCR pipeline...`);
-        extractedText = await performOcrPipeline(pdfBuffer, pageCount);
+        const ocrRes = await performOcrPipeline(pdfBuffer, pageCount);
+        extractedText = ocrRes.text;
       } catch (ocrErr: any) {
         console.error('[generate-from-paper] OCR fallback failed:', ocrErr.message);
       }

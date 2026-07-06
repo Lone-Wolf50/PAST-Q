@@ -468,4 +468,39 @@ router.post('/:id/report', protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ── GET VERIFIED QUESTIONS FOR A PAPER ────────────────────────────────────────
+router.get('/:id/questions', protect, async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { data: paper, error: paperErr } = await supabase
+      .from('upsa_papers')
+      .select('questions_verified')
+      .eq('id', id)
+      .single();
+
+    if (paperErr || !paper) {
+      res.status(404).json({ error: 'Paper not found.' });
+      return;
+    }
+
+    if (!paper.questions_verified) {
+      res.status(200).json({ verified: false });
+      return;
+    }
+
+    const { data: questions, error: qErr } = await supabase
+      .from('upsa_paper_questions')
+      .select('question_no, body, marks, sub_parts')
+      .eq('paper_id', id)
+      .order('question_no', { ascending: true });
+
+    if (qErr) throw qErr;
+
+    res.status(200).json({ verified: true, questions: questions || [] });
+  } catch (err: any) {
+    console.error('[GET /papers/:id/questions] Error:', err);
+    res.status(500).json({ error: 'Failed to fetch paper questions.' });
+  }
+});
+
 export default router;

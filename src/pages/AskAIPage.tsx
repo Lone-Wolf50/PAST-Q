@@ -398,6 +398,47 @@ const AskAIPage = () => {
       };
       fetchPaperMeta();
 
+      // Fetch verified questions if they exist
+      apiFetch(`/papers/${initialPaperId}/questions`, { token })
+        .then((qRes) => {
+          if (qRes.verified && qRes.questions && qRes.questions.length > 0) {
+            const formatSubparts = (subparts: any[], indent: string): string => {
+              return subparts.map((sp: any) => {
+                const marksStr = sp.marks ? ` (${sp.marks} marks)` : '';
+                let nestedStr = '';
+                if (Array.isArray(sp.sub_parts) && sp.sub_parts.length > 0) {
+                  nestedStr = '\n' + formatSubparts(sp.sub_parts, indent + '  ');
+                }
+                return `${indent}- **${sp.label}**: ${sp.text}${marksStr}${nestedStr}`;
+              }).join('\n');
+            };
+
+            const listStr = qRes.questions.map((q: any) => {
+              const marksStr = q.marks ? ` (${q.marks} marks)` : '';
+              let subpartsStr = '';
+              if (Array.isArray(q.sub_parts) && q.sub_parts.length > 0) {
+                subpartsStr = '\n' + formatSubparts(q.sub_parts, '   ');
+              }
+              return `- **Question ${q.question_no}**: ${q.body}${marksStr}${subpartsStr}`;
+            }).join('\n\n');
+
+            const customizedWelcome: Message = {
+              id: 'welcome',
+              role: 'assistant',
+              content: `Welcome back, ${username}! Ready to study this paper? 🚀✨\n\nI have scanned and verified the questions in this exam paper. Here is what it covers:\n\n${listStr}\n\nWhich question would you like to study? You can type the question number or ask me any concept! 🎓`,
+              timestamp: Date.now(),
+            };
+
+            setMessages(prev => {
+              if (prev.length === 1 && prev[0].id === 'welcome') {
+                return [customizedWelcome];
+              }
+              return prev.map(m => m.id === 'welcome' ? customizedWelcome : m);
+            });
+          }
+        })
+        .catch(() => {});
+
       // For Plus/Pro: auto-restore existing conversation for this paper
       const existingConvId = localStorage.getItem(`pastq_paper_conv_${initialPaperId}`);
       if (existingConvId && (plan === 'Plus' || plan === 'Pro')) {

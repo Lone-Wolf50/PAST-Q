@@ -14,6 +14,7 @@ import { apiFetch, apiFetchMultipart } from '../lib/api';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { AlertModal } from '../components/ui/AlertModal';
 import BulkUploadModal from '../components/BulkUploadModal';
+import QuestionScannerModal from '../components/QuestionScannerModal';
 import { getBulkUploadDraft } from '../lib/bulkUploadDb';
 
 const AdminPapersPage = () => {
@@ -143,6 +144,16 @@ const AdminPapersPage = () => {
   const [insightModal, setInsightModal] = useState<{ show: boolean; paper: any | null; insights: any | null; loading: boolean }>({
     show: false, paper: null, insights: null, loading: false
   });
+
+  // Question scanner modal
+  const [scannerModal, setScannerModal] = useState<{ show: boolean; paper: any | null }>({
+    show: false,
+    paper: null
+  });
+
+  const handleOpenScanner = (paper: any) => {
+    setScannerModal({ show: true, paper });
+  };
 
   const handleViewInsights = async (paper: any) => {
     setInsightModal({ show: true, paper, insights: null, loading: true });
@@ -460,12 +471,25 @@ const AdminPapersPage = () => {
     }
   };
 
-  const filteredPapers = papers.filter((p) => {
-    const matchSearch = !searchTerm || p.title.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchSubject = !filterSubject || p.upsa_subjects?.code === filterSubject;
-    const matchYear = !filterYear || p.year === filterYear;
-    return matchSearch && matchSubject && matchYear;
-  });
+  const filteredPapers = [...papers]
+    .sort((a, b) => {
+      const subjectA = (a.upsa_subjects?.name || '').toLowerCase();
+      const subjectB = (b.upsa_subjects?.name || '').toLowerCase();
+      if (subjectA < subjectB) return -1;
+      if (subjectA > subjectB) return 1;
+
+      const titleA = (a.title || '').toLowerCase();
+      const titleB = (b.title || '').toLowerCase();
+      if (titleA < titleB) return -1;
+      if (titleA > titleB) return 1;
+      return 0;
+    })
+    .filter((p) => {
+      const matchSearch = !searchTerm || p.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchSubject = !filterSubject || p.upsa_subjects?.code === filterSubject;
+      const matchYear = !filterYear || p.year === filterYear;
+      return matchSearch && matchSubject && matchYear;
+    });
 
   const totalPages = Math.ceil(filteredPapers.length / papersPerPage);
   const paginatedPapers = filteredPapers.slice(
@@ -623,6 +647,16 @@ const AdminPapersPage = () => {
                             </span>
                           )}
 
+                          {paper.questions_verified ? (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[9px] font-bold border border-emerald-500/20">
+                              <CheckCircle2 className="w-2.5 h-2.5" /> VERIFIED
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-theme-surface text-theme-muted text-[9px] font-bold border border-theme-border">
+                              NOT SCANNED
+                            </span>
+                          )}
+
                           {paper.has_answers && (
                             <div className="p-1 rounded-md bg-emerald-500/10 border border-emerald-500/20">
                               <FileCheck className="w-3 h-3 text-emerald-400" />
@@ -632,6 +666,13 @@ const AdminPapersPage = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenScanner(paper)}
+                          title="Scan & Verify Questions"
+                          className="p-2.5 rounded-xl bg-theme-surface border border-theme-border text-theme-muted hover:text-indigo-400 transition-colors"
+                        >
+                          <Layers className="w-4 h-4" />
+                        </button>
                         <a
                           href={paper.file_url}
                           target="_blank"
@@ -672,6 +713,7 @@ const AdminPapersPage = () => {
                     <th className="px-6 py-4 font-bold text-center">Year / Sem</th>
                     <th className="px-6 py-4 font-bold text-center">Source</th>
                     <th className="px-6 py-4 font-bold text-center">AI Insights</th>
+                    <th className="px-6 py-4 font-bold text-center">Scan Status</th>
                     <th className="px-6 py-4 font-bold text-center">Answers</th>
                     <th className="px-6 py-4 font-bold text-right">Actions</th>
                   </tr>
@@ -754,6 +796,17 @@ const AdminPapersPage = () => {
                             )}
                           </td>
                           <td className="px-6 py-4 text-center">
+                            {paper.questions_verified ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                                <CheckCircle2 className="w-3 h-3" /> VERIFIED
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-theme-surface border border-theme-border text-theme-muted text-[10px] font-bold">
+                                NOT SCANNED
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
                             {paper.has_answers ? (
                               <div className="flex justify-center">
                                 <FileCheck className="w-5 h-5 text-emerald-400" />
@@ -764,6 +817,13 @@ const AdminPapersPage = () => {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleOpenScanner(paper)}
+                                title="Scan & Verify Questions"
+                                className="p-2 rounded-lg bg-theme-surface hover:bg-theme-surface-2 text-theme-muted hover:text-indigo-400 transition-colors"
+                              >
+                                <Layers className="w-4 h-4" />
+                              </button>
                               <a
                                 href={paper.file_url}
                                 target="_blank"
@@ -1339,6 +1399,18 @@ const AdminPapersPage = () => {
           onEditPaper={(paper) => {
             setShowBulkModal(false);
             handleOpenEdit(paper);
+          }}
+        />
+      )}
+
+      {/* ── Question Scanner Modal ── */}
+      {scannerModal.show && scannerModal.paper && (
+        <QuestionScannerModal
+          paper={scannerModal.paper}
+          onClose={() => setScannerModal({ show: false, paper: null })}
+          onSaveSuccess={() => {
+            setScannerModal({ show: false, paper: null });
+            fetchPapers();
           }}
         />
       )}
