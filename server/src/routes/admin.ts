@@ -1397,7 +1397,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       supabase.from('upsa_papers').select('*', { count: 'exact', head: true }),
       supabase.from('upsa_deleted_accounts').select('*', { count: 'exact', head: true }),
       supabase.from('upsa_users').select('plan').eq('role', 'student').eq('is_verified', true).neq('plan', 'free'),
-      supabase.from('upsa_transactions').select('amount, status, created_at').gte('created_at', gteDate.toISOString()),
+      supabase.from('upsa_transactions').select('amount, status, plan, created_at'), // Fetch all-time transactions with plan
       supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', false),
       supabase.from('upsa_failed_accounts').select('*', { count: 'exact', head: true }),
     ]);
@@ -1407,7 +1407,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     const totalPapers = results[2].count || 0;
     const totalDeleted = results[3].count || 0;
     const planRows = results[4].data || [];
-    const transactions = results[5].data || [];
+    const allTransactions = results[5].data || [];
     const unverifiedCount = results[6].count || 0;
     const failedRegistrationAttempts = results[7].count || 0;
     const totalFailed = unverifiedCount;
@@ -1417,18 +1417,24 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       if (u.plan in planBreakdown) planBreakdown[u.plan as keyof typeof planBreakdown]++;
     });
 
+    // 1. Calculate All-Time KPIs for the top cards
     let totalRevenue = 0;
     let failedTransactions = 0;
-    transactions.forEach((t: any) => {
+    allTransactions.forEach((t: any) => {
       if (t.status === 'success') totalRevenue += Number(t.amount) || 0;
       if (t.status === 'failed') failedTransactions++;
     });
 
-    // Process sales data for charts
-    const salesByPeriod: Record<string, number> = {};
-    const revenueByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
+    // 2. Filter transactions in-memory by range for charts
+    const filteredTransactions = allTransactions.filter((t: any) => {
+      return new Date(t.created_at) >= gteDate;
+    });
 
-    transactions.forEach((t: any) => {
+    // Process sales data for charts using filtered transactions
+    const salesByPeriod: Record<string, number> = {};
+    const revenueBreakdownByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
+
+    filteredTransactions.forEach((t: any) => {
       if (t.status === 'success') {
         let periodKey: string;
         const d = new Date(t.created_at);
@@ -1441,11 +1447,11 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
 
         salesByPeriod[periodKey] = (salesByPeriod[periodKey] || 0) + (Number(t.amount) || 0);
 
-        // Revenue by plan (we assume the plan is in the transaction metadata or we can infer it)
-        // Since we don't have a direct plan column in transactions, we'll try to find it in metadata
-        // or just skip if not present. Actually, let's assume we can infer it for this dashboard.
-        // For now, let's use a dummy grouping or check if we have it.
-        // Wait, I'll check the transaction schema in a moment.
+        // Revenue by plan
+        const p = t.plan?.toLowerCase();
+        if (p && p in revenueBreakdownByPlan) {
+          revenueBreakdownByPlan[p] += Number(t.amount) || 0;
+        }
       }
     });
 
@@ -1460,21 +1466,6 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       const plan = q.upsa_users?.plan?.toLowerCase();
       if (plan && plan in aiUsageByPlan) {
         aiUsageByPlan[plan]++;
-      }
-    });
-
-    // Revenue by Plan (Sum from transactions)
-    const { data: revenueData } = await supabase
-      .from('upsa_transactions')
-      .select('amount, plan')
-      .eq('status', 'success')
-      .gte('created_at', gteDate.toISOString());
-
-    const revenueBreakdownByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
-    (revenueData || []).forEach((r: any) => {
-      const p = r.plan?.toLowerCase();
-      if (p && p in revenueBreakdownByPlan) {
-        revenueBreakdownByPlan[p] += Number(r.amount) || 0;
       }
     });
 
