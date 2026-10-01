@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 import { Link } from 'react-router-dom';
 import { Users, FileText, TrendingUp, UserMinus, UserX, Menu, Bell, Search, RotateCw, Trash2, AlertTriangle } from 'lucide-react';
@@ -43,7 +43,7 @@ const AdminDashboard = () => {
   const [isBannerSaving, setIsBannerSaving] = useState(false);
   const hasLoadedBanner = React.useRef(false);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const token = localStorage.getItem('admin_token');
       if (!token) return;
@@ -71,8 +71,9 @@ const AdminDashboard = () => {
         }
       }
     } catch (err: any) {
+      // Silently handle fetch errors — dashboard will retry on next interval
     }
-  };
+  }, [timeRange]);
 
   const handleDismissDeletion = async (id: string | undefined, email: string) => {
     const identifier = id || email;
@@ -107,9 +108,9 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-    const interval = setInterval(() => fetchDashboardData(), 30000); // refresh every 30s
+    const interval = setInterval(fetchDashboardData, 30000); // refresh every 30s
     return () => clearInterval(interval);
-  }, [timeRange]);
+  }, [fetchDashboardData]);
 
   const toggleGlobalAi = async () => {
     try {
@@ -146,31 +147,31 @@ const AdminDashboard = () => {
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
 
-  const STATS_CARDS = [
+  const STATS_CARDS = useMemo(() => [
     { label: 'Total Students', value: stats?.totalStudents || 0, change: '', icon: Users, color: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20' },
     { label: 'Active Subscriptions', value: stats?.activePlans || 0, change: '', icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
     { label: 'Total Papers', value: stats?.totalPapers || 0, change: '', icon: FileText, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
     { label: 'Deleted Accounts', value: stats?.totalDeleted || 0, change: '', icon: UserMinus, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
     { label: 'Failed Users', value: stats?.totalFailed || 0, change: '', icon: UserX, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-  ];
+  ], [stats]);
 
-  const pieData = [
+  const pieData = useMemo(() => [
     { name: 'Active Students', value: stats?.totalStudents || 0 },
     { name: 'Deleted Accounts', value: stats?.totalDeleted || 0 },
-  ];
+  ], [stats]);
 
-  const revenueByPlanData = [
+  const revenueByPlanData = useMemo(() => [
     { name: 'Basic', value: stats?.revenueByPlan?.basic || 0, color: '#10b981' },
     { name: 'Plus', value: stats?.revenueByPlan?.plus || 0, color: '#6366f1' },
     { name: 'Pro', value: stats?.revenueByPlan?.pro || 0, color: '#f59e0b' },
-  ];
+  ], [stats]);
 
-  const aiUsageData = [
+  const aiUsageData = useMemo(() => [
     { name: 'Free', value: stats?.aiUsageByPlan?.free || 0, color: '#9ca3af' },
     { name: 'Basic', value: stats?.aiUsageByPlan?.basic || 0, color: '#10b981' },
     { name: 'Plus', value: stats?.aiUsageByPlan?.plus || 0, color: '#6366f1' },
     { name: 'Pro', value: stats?.aiUsageByPlan?.pro || 0, color: '#f59e0b' },
-  ];
+  ], [stats]);
 
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
