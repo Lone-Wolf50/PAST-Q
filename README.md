@@ -51,6 +51,14 @@ PastQ is a premium educational platform designed to help students master past ex
 - **Failed Join Attempts Monitor**: Real-time dashboard monitoring of registration failures.
 - **AI Health Monitoring**: Real-time status indicators for API quota and processing status.
 
+### 🤖 Telegram Admin Bot Suite
+- **Remote Operations & Alerts**: Instant Telegram alerts for student signups, plan upgrades, payment verifications, and system anomalies.
+- **Plan Management**: Grant, upgrade, or revoke subscription tiers remotely (`/plan`, `/tempplan`, `/revokeplan`) with instant session cache eviction.
+- **User Moderation & Quotas**: Real-time account inspection (`/user`), account suspension/activation (`/suspend`, `/activate`), AI access control (`/aiuser`), and daily quota resets (`/resetlimits`).
+- **Targeted & Safe Broadcast Emailing**: Direct one-to-one communication (`/email`) and safe system-wide announcements (`/broadcast`) backed by preview prompts and mandatory confirmation gates (`/broadcast_confirm`).
+- **DevOps & Diagnostics**: On-demand Upstash Redis cache invalidation (`/cache`), automated biweekly digest cron retry and test dispatches (`/cron`), and multi-tier AI fallback status inspections (`/fallbacks`).
+- **Automated Menu Sync**: Automatically synchronizes command auto-complete suggestions directly to Telegram via the Bot API on server boot.
+
 ### 🔒 AI Academic Guardrails
 - **Off-Topic Refusal**: The AI Tutor is strictly restricted to academic, educational, and course-related topics.
 - **Zero Leakage Policy**: Non-academic queries receive a polite refusal — no answers, scores, or details are leaked.
@@ -67,6 +75,8 @@ PastQ is a premium educational platform designed to help students master past ex
 - **AI Models**: Hugging Face Serverless APIs + Puter.js SDK + Google Gemini API.
 - **OCR Engine**: Google Cloud Vision + Tesseract.js.
 - **Payments**: Paystack Integration.
+- **Email Delivery**: Brevo SMTP with Gmail failover.
+- **Admin Bot**: Telegram Bot API (`node-telegram-bot-api`).
 - **Hosting**: Vercel (Frontend + Backend).
 
 ---
@@ -116,6 +126,18 @@ PAYSTACK_SECRET_KEY=your_secret_key
 # Redis (Upstash Serverless)
 UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url
 UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
+
+# Telegram Admin Bot
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_telegram_chat_id
+TELEGRAM_ENABLED=true
+
+# Email Service (Brevo SMTP & Gmail Fallback)
+BREVO_SMTP_USER=your_brevo_user
+BREVO_SMTP_PASS=your_brevo_password
+BREVO_SMTP_HOST=smtp-relay.brevo.com
+BREVO_SMTP_PORT=587
+EMAIL_FROM=PastQ <noreply@pastqhub.com>
 ```
 
 ---
