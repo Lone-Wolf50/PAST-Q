@@ -1,5 +1,7 @@
 import { Bot, Context } from 'node-telegram-bot-api';
 import { supabase } from './supabase';
+import { sendGeneralEmail } from './mailer';
+import { invalidateCachedSession, redis } from './redis';
 import path from 'path';
 import dotenv from 'dotenv';
 
@@ -22,6 +24,16 @@ function isEnabled(): boolean {
 
 let bot: Bot | null = null;
 let isPollingActive = false;
+
+// ── In-Memory Pending Broadcast Drafts (for safe 2-step confirmation) ────────
+interface PendingBroadcast {
+  subject: string;
+  title: string;
+  body: string;
+  recipientsCount: number;
+  timestamp: number;
+}
+const pendingBroadcasts = new Map<string, PendingBroadcast>();
 
 // ── Resilient Polling Loop ──────────────────────────────────────────────────
 // Automatically recovers from 409 Conflict, network drops, or temporary Telegram API errors
@@ -54,6 +66,36 @@ async function startResilientPolling(botInstance: Bot) {
   console.log('[Telegram] 🛑 Polling loop stopped.');
 }
 
+const BOT_COMMANDS = [
+  { command: 'stats', description: 'Full dashboard KPI summary' },
+  { command: 'revenue', description: 'Revenue breakdown by plan' },
+  { command: 'users', description: 'Total students and recent signups' },
+  { command: 'user', description: 'Student profile & limit status' },
+  { command: 'plan', description: 'Set student plan (free/basic/plus/pro)' },
+  { command: 'tempplan', description: 'Grant temporary plan for N days' },
+  { command: 'revokeplan', description: 'Revert student to Free tier' },
+  { command: 'suspend', description: 'Suspend student account access' },
+  { command: 'activate', description: 'Restore suspended student account' },
+  { command: 'aiuser', description: 'Toggle student AI tutor access' },
+  { command: 'resetlimits', description: 'Reset AI query & PDF download quotas' },
+  { command: 'email', description: 'Send direct email to student' },
+  { command: 'broadcast', description: 'Compose mass email broadcast' },
+  { command: 'broadcast_confirm', description: 'Confirm and send mass broadcast' },
+  { command: 'broadcast_cancel', description: 'Discard pending broadcast draft' },
+  { command: 'signups', description: 'View last 10 signups' },
+  { command: 'deletions', description: 'View recent account deletions' },
+  { command: 'failed', description: 'View failed join attempts' },
+  { command: 'payments', description: 'View recent payments' },
+  { command: 'ai', description: 'View or toggle global AI status' },
+  { command: 'banner', description: 'View or update site banner' },
+  { command: 'fallbacks', description: 'View or clear AI failover logs' },
+  { command: 'cron', description: 'Retry failed cron emails or test digest' },
+  { command: 'cache', description: 'Test or evict Redis session cache' },
+  { command: 'papers', description: 'Total papers count' },
+  { command: 'health', description: 'Server health and uptime check' },
+  { command: 'help', description: 'Show all available commands' },
+];
+
 // ── Initialize ──────────────────────────────────────────────────────────────
 export function initTelegramBot() {
   const token = getBotToken();
@@ -67,6 +109,11 @@ export function initTelegramBot() {
   try {
     bot = new Bot(token);
     registerCommands(bot);
+
+    // Auto-sync command list with Telegram Bot API so autocomplete menu updates
+    bot.api.setMyCommands({ commands: BOT_COMMANDS }).catch((err: any) => {
+      console.warn('[Telegram] Could not auto-sync commands with Telegram API:', err.message);
+    });
 
     // Use polling in local dev / persistent server, no polling in Vercel serverless
     const usePolling = process.env.VERCEL !== '1';
@@ -322,25 +369,40 @@ function registerCommands(bot: Bot) {
       return;
     }
     await ctx.reply([
-      `📋 *Available Commands*`,
+      `📋 *PastQ Admin Commands*`,
       `━━━━━━━━━━━━━━━━━━`,
+      `📊 *Analytics & KPIs*`,
       `/stats — Full dashboard KPI summary`,
       `/revenue — Revenue breakdown by plan`,
-      `/users — Total students + recent signups`,
-      `/signups — Last 10 signups with details`,
-      `/deletions — Recent account deletions`,
-      `/failed — Failed join attempts`,
-      `/ai — AI status + query distribution`,
-      `/ai on — Enable global AI`,
-      `/ai off — Disable global AI (block)`,
-      `/banner — View current site banner`,
-      `/banner set <text> — Set & activate banner`,
-      `/banner on — Show banner`,
-      `/banner off — Hide banner`,
       `/payments — Recent payment transactions`,
       `/papers — Total papers count`,
       `/health — Server health check`,
-      `/help — Show this message`,
+      ``,
+      `👤 *Student & Plan Control*`,
+      `/users — Total students + recent signups`,
+      `/user <email> — Student profile & limit status`,
+      `/plan <email> <plan> — Set plan (free/basic/plus/pro)`,
+      `/tempplan <email> <plan> [days] — Grant temp plan`,
+      `/revokeplan <email> — Revert student to Free tier`,
+      `/suspend <email> — Suspend student account`,
+      `/activate <email> — Restore student account`,
+      `/aiuser <email> <on|off> — Toggle student AI tutor`,
+      `/resetlimits <email> — Reset AI & PDF quotas`,
+      ``,
+      `📧 *Email & Announcements*`,
+      `/email <email> | <subj> | <body> — Send direct email`,
+      `/broadcast <subj> | <title> | <body> — Mass broadcast`,
+      `/signups — Last 10 signups with details`,
+      `/deletions — Recent account deletions`,
+      `/failed — Failed join attempts`,
+      ``,
+      `⚙️ *System & DevOps*`,
+      `/ai [on|off] — Global AI master toggle`,
+      `/banner [set <text>|on|off] — Global site banner`,
+      `/fallbacks [clear] — AI failover logs`,
+      `/cron [retry|test] — Cron retry & weekly digest`,
+      `/cache [user <id>|flush] — Redis session cache`,
+      `/help — Show this command menu`,
     ].join('\n'), { parse_mode: 'Markdown' });
   });
 
@@ -726,6 +788,700 @@ function registerCommands(bot: Bot) {
       `Node: ${process.version}`,
       `Environment: ${process.env.VERCEL === '1' ? 'Vercel (Serverless)' : 'Persistent Server'}`,
     ].join('\n'), { parse_mode: 'Markdown' });
+  });
+
+  // ── Plan Assignment: /plan <email> <plan> ──────────────────────────────────
+  bot.command('plan', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /plan from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const rawArg = typeof ctx.match === 'string' ? ctx.match.trim() : '';
+    const parts = rawArg.split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply([
+        `⚠️ *Usage:* \`/plan <student_email> <free|basic|plus|pro>\``,
+        `*Example:* \`/plan student@upsa.edu.gh pro\``,
+      ].join('\n'), { parse_mode: 'Markdown' });
+      return;
+    }
+    const email = parts[0].toLowerCase();
+    const plan = parts[1].toLowerCase();
+    const validPlans = ['free', 'basic', 'plus', 'pro'];
+    if (!validPlans.includes(plan)) {
+      await ctx.reply(`⚠️ Invalid plan \`${esc(plan)}\`. Options: \`free\`, \`basic\`, \`plus\`, \`pro\`.`, { parse_mode: 'Markdown' });
+      return;
+    }
+    try {
+      const { data: user, error: fetchErr } = await supabase.from('upsa_users')
+        .select('id, email, full_name, plan')
+        .eq('email', email)
+        .single();
+
+      if (fetchErr || !user) {
+        await ctx.reply(`❌ Student not found with email \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+      const prevPlan = user.plan || 'free';
+      const { error: updateErr } = await supabase.from('upsa_users')
+        .update({ plan, original_plan: plan, temp_plan_expires_at: null })
+        .eq('id', user.id);
+
+      if (updateErr) {
+        await ctx.reply(`❌ Update failed: ${updateErr.message}`);
+        return;
+      }
+
+      await invalidateCachedSession(user.id).catch(() => {});
+
+      await ctx.reply([
+        `✅ *Plan Updated Successfully*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `👤 Student: *${esc(user.full_name || 'No Name')}*`,
+        `📧 Email: \`${esc(user.email)}\``,
+        `🔄 Previous: \`${prevPlan.toUpperCase()}\``,
+        `⭐ New Plan: *${plan.toUpperCase()}*`,
+        `🧹 Session Cache: Evicted (Instant Live Update)`,
+      ].join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Temporary Plan: /tempplan <email> <plan> [days] ────────────────────────
+  bot.command('tempplan', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /tempplan from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const rawArg = typeof ctx.match === 'string' ? ctx.match.trim() : '';
+    const parts = rawArg.split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply([
+        `⚠️ *Usage:* \`/tempplan <student_email> <basic|plus|pro> [days]\``,
+        `*Example:* \`/tempplan student@upsa.edu.gh pro 7\``,
+        `_(Days defaults to 5 if omitted)_`,
+      ].join('\n'), { parse_mode: 'Markdown' });
+      return;
+    }
+    const email = parts[0].toLowerCase();
+    const plan = parts[1].toLowerCase();
+    const days = parts[2] ? parseInt(parts[2], 10) : 5;
+    const validPlans = ['basic', 'plus', 'pro'];
+    if (!validPlans.includes(plan)) {
+      await ctx.reply(`⚠️ Invalid plan \`${esc(plan)}\`. Options: \`basic\`, \`plus\`, \`pro\`.`, { parse_mode: 'Markdown' });
+      return;
+    }
+    if (isNaN(days) || days < 1 || days > 30) {
+      await ctx.reply('⚠️ Days must be a number between 1 and 30.', { parse_mode: 'Markdown' });
+      return;
+    }
+    try {
+      const { data: user, error: fetchErr } = await supabase.from('upsa_users')
+        .select('id, email, full_name, plan, original_plan')
+        .eq('email', email)
+        .single();
+
+      if (fetchErr || !user) {
+        await ctx.reply(`❌ Student not found with email \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+      const originalPlan = user.original_plan || user.plan || 'free';
+
+      const { error: updateErr } = await supabase.from('upsa_users')
+        .update({
+          plan,
+          original_plan: originalPlan,
+          temp_plan_expires_at: expiresAt
+        })
+        .eq('id', user.id);
+
+      if (updateErr) {
+        await ctx.reply(`❌ Update failed: ${updateErr.message}`);
+        return;
+      }
+
+      await invalidateCachedSession(user.id).catch(() => {});
+
+      const expiryDate = new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      await ctx.reply([
+        `⏳ *Temporary Plan Granted*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `👤 Student: *${esc(user.full_name || 'No Name')}*`,
+        `📧 Email: \`${esc(user.email)}\``,
+        `⭐ Temp Plan: *${plan.toUpperCase()}*`,
+        `📅 Duration: *${days} day(s)* (Expires: ${expiryDate})`,
+        `🔄 Auto-Revert: \`${originalPlan.toUpperCase()}\``,
+        `🧹 Session Cache: Evicted (Instant Live Update)`,
+      ].join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Revoke Plan: /revokeplan <email> ───────────────────────────────────────
+  bot.command('revokeplan', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /revokeplan from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const email = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (!email) {
+      await ctx.reply('⚠️ Usage: `/revokeplan <student_email>`', { parse_mode: 'Markdown' });
+      return;
+    }
+    try {
+      const { data: user } = await supabase.from('upsa_users').select('id, email, full_name, plan').eq('email', email).single();
+      if (!user) {
+        await ctx.reply(`❌ Student not found with email \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+      await supabase.from('upsa_users').update({ plan: 'free', original_plan: null, temp_plan_expires_at: null }).eq('id', user.id);
+      await invalidateCachedSession(user.id).catch(() => {});
+      await ctx.reply(`✅ Reverted *${esc(user.full_name || email)}* to *FREE* tier.`, { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── User Lookup: /user <email> ─────────────────────────────────────────────
+  bot.command('user', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /user from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const email = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (!email) {
+      await ctx.reply('⚠️ Usage: `/user <student_email>`\nExample: `/user student@upsa.edu.gh`', { parse_mode: 'Markdown' });
+      return;
+    }
+    try {
+      const { data: user, error: userErr } = await supabase.from('upsa_users')
+        .select('id, email, full_name, plan, original_plan, temp_plan_expires_at, role, status, is_verified, ai_enabled, pdf_downloads_count, pdf_downloads_blocked_until, created_at')
+        .eq('email', email)
+        .single();
+
+      if (userErr || !user) {
+        await ctx.reply(`❌ Student not found with email \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { count: queryCount } = await supabase.from('upsa_ai_queries')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', thirtyDaysAgo);
+
+      const isBlocked = user.pdf_downloads_blocked_until && new Date(user.pdf_downloads_blocked_until) > new Date();
+      const pdfBlockedInfo = isBlocked
+        ? `🔴 Blocked until ${new Date(user.pdf_downloads_blocked_until).toLocaleDateString('en-GB')}`
+        : '🟢 Quota OK';
+
+      const planText = user.temp_plan_expires_at
+        ? `${user.plan.toUpperCase()} (Temp until ${new Date(user.temp_plan_expires_at).toLocaleDateString('en-GB')})`
+        : user.plan.toUpperCase();
+
+      const statusText = user.status === 'active' ? '🟢 Active' : user.status === 'suspended' ? '🟡 Suspended' : '🔴 Deactivated';
+
+      await ctx.reply([
+        `👤 *Student Profile*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `Name: *${esc(user.full_name || 'No Name')}*`,
+        `Email: \`${esc(user.email)}\``,
+        `Verified: ${user.is_verified ? '✅ Yes' : '❌ No'}`,
+        `Plan: *${planText}*`,
+        `Status: ${statusText}`,
+        `AI Tutor: ${user.ai_enabled ?? true ? '🟢 Enabled' : '🔴 Disabled'}`,
+        `AI Queries (30d): *${queryCount || 0}*`,
+        `PDF Downloads: *${user.pdf_downloads_count || 0}* (${pdfBlockedInfo})`,
+        `Joined: ${new Date(user.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+        ``,
+        `_Quick Actions:_`,
+        `• Change plan: \`/plan ${user.email} <plan>\``,
+        `• Reset quotas: \`/resetlimits ${user.email}\``,
+        `• Moderation: \`/suspend ${user.email}\` or \`/activate ${user.email}\``,
+      ].join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Suspend User: /suspend <email> ─────────────────────────────────────────
+  bot.command('suspend', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /suspend from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const email = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (!email) {
+      await ctx.reply('⚠️ Usage: `/suspend <student_email>`', { parse_mode: 'Markdown' });
+      return;
+    }
+    try {
+      const { data: user } = await supabase.from('upsa_users').select('id, email, full_name').eq('email', email).single();
+      if (!user) {
+        await ctx.reply(`❌ Student not found with email \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+      await supabase.from('upsa_users').update({ status: 'suspended' }).eq('id', user.id);
+      await invalidateCachedSession(user.id).catch(() => {});
+      await ctx.reply(`🚫 Account for *${esc(user.full_name || email)}* is now *SUSPENDED*. Access blocked.`, { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Activate User: /activate <email> ───────────────────────────────────────
+  bot.command('activate', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /activate from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const email = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (!email) {
+      await ctx.reply('⚠️ Usage: `/activate <student_email>`', { parse_mode: 'Markdown' });
+      return;
+    }
+    try {
+      const { data: user } = await supabase.from('upsa_users').select('id, email, full_name').eq('email', email).single();
+      if (!user) {
+        await ctx.reply(`❌ Student not found with email \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+      await supabase.from('upsa_users').update({ status: 'active' }).eq('id', user.id);
+      await invalidateCachedSession(user.id).catch(() => {});
+      await ctx.reply(`🟢 Account for *${esc(user.full_name || email)}* is now *ACTIVE*. Access restored.`, { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Toggle User AI: /aiuser <email> <on|off> ───────────────────────────────
+  bot.command('aiuser', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /aiuser from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const rawArg = typeof ctx.match === 'string' ? ctx.match.trim() : '';
+    const parts = rawArg.split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply('⚠️ Usage: `/aiuser <student_email> <on|off>`\nExample: `/aiuser student@upsa.edu.gh off`', { parse_mode: 'Markdown' });
+      return;
+    }
+    const email = parts[0].toLowerCase();
+    const toggle = parts[1].toLowerCase();
+    if (toggle !== 'on' && toggle !== 'off') {
+      await ctx.reply('⚠️ Use `on` or `off`. Example: `/aiuser student@upsa.edu.gh off`', { parse_mode: 'Markdown' });
+      return;
+    }
+    const enabled = toggle === 'on';
+    try {
+      const { data: user } = await supabase.from('upsa_users').select('id, email, full_name').eq('email', email).single();
+      if (!user) {
+        await ctx.reply(`❌ Student not found with email \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+      await supabase.from('upsa_users').update({ ai_enabled: enabled }).eq('id', user.id);
+      await invalidateCachedSession(user.id).catch(() => {});
+      await ctx.reply(`🤖 AI tutor access for *${esc(user.full_name || email)}* is now *${enabled ? '🟢 ENABLED' : '🔴 DISABLED'}*.`, { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Reset Limits: /resetlimits <email> ─────────────────────────────────────
+  bot.command('resetlimits', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /resetlimits from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const email = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (!email) {
+      await ctx.reply('⚠️ Usage: `/resetlimits <student_email>`', { parse_mode: 'Markdown' });
+      return;
+    }
+    try {
+      const { data: user } = await supabase.from('upsa_users').select('id, email, full_name').eq('email', email).single();
+      if (!user) {
+        await ctx.reply(`❌ Student not found with email \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+      // Reset PDF download limits and views
+      await supabase.from('upsa_users').update({
+        pdf_downloads_count: 0,
+        pdf_downloads_blocked_until: null,
+        pdf_views_count: 0,
+        pdf_views_blocked_until: null,
+      }).eq('id', user.id);
+
+      // Clear recent 10h queries for free quota unblock
+      const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString();
+      await supabase.from('upsa_ai_queries').delete().eq('user_id', user.id).gte('created_at', tenHoursAgo);
+
+      await invalidateCachedSession(user.id).catch(() => {});
+      await ctx.reply(`⚡ All AI query quotas & PDF download limits have been *RESET* for *${esc(user.full_name || email)}*!`, { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Direct Email: /email <email> | <subject> | <body> ───────────────────────
+  bot.command('email', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /email from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const rawArg = typeof ctx.match === 'string' ? ctx.match.trim() : '';
+    const parts = rawArg.split('|').map(s => s.trim());
+    if (parts.length < 3) {
+      await ctx.reply([
+        `⚠️ *Usage:* \`/email <email> | <subject> | <body>\``,
+        `*Or:* \`/email <email> | <subject> | <title> | <body>\``,
+        ``,
+        `*Example:*`,
+        `\`/email user@upsa.edu.gh | Notice | Update | Hello Jazz, your plan has been updated!\``,
+      ].join('\n'), { parse_mode: 'Markdown' });
+      return;
+    }
+    const email = parts[0].toLowerCase();
+    const subject = parts[1];
+    let title = subject;
+    let body = '';
+    if (parts.length === 3) {
+      body = parts[2];
+    } else {
+      title = parts[2];
+      body = parts.slice(3).join('|');
+    }
+
+    try {
+      const { data: user } = await supabase.from('upsa_users').select('full_name').eq('email', email).maybeSingle();
+      const studentName = user?.full_name?.trim() || 'PastQ Student';
+      const firstName = user?.full_name?.trim().split(/\s+/)[0] || 'Student';
+
+      const personalize = (txt: string) => txt
+        .replace(/\{\{name\}\}/gi, studentName)
+        .replace(/\{\{first_name\}\}/gi, firstName)
+        .replace(/Hello PastQ Student/gi, `Hello ${firstName}`);
+
+      await sendGeneralEmail(email, personalize(subject), personalize(title), personalize(body));
+      await ctx.reply(`✅ Email delivered to \`${esc(email)}\`!`, { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`❌ Delivery failed to \`${esc(email)}\`: ${esc(err.message)}`, { parse_mode: 'Markdown' });
+    }
+  });
+
+  // ── Email Broadcast: /broadcast <subject> | <title> | <body> ────────────────
+  bot.command('broadcast', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /broadcast from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const rawArg = typeof ctx.match === 'string' ? ctx.match.trim() : '';
+    const parts = rawArg.split('|').map(s => s.trim());
+    if (parts.length < 2) {
+      await ctx.reply([
+        `📢 *Mass Email Broadcast*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `*Usage:* \`/broadcast <subject> | <body>\``,
+        `*Or:* \`/broadcast <subject> | <title> | <body>\``,
+        ``,
+        `*Example:*`,
+        `\`/broadcast Exam Revision Papers | New 2026 Papers Live | Hello students, 2026 revision past papers are now live!\``,
+        ``,
+        `_A preview will be shown with recipient count before anything is sent._`,
+      ].join('\n'), { parse_mode: 'Markdown' });
+      return;
+    }
+
+    const subject = parts[0];
+    let title = subject;
+    let body = '';
+    if (parts.length === 2) {
+      body = parts[1];
+    } else {
+      title = parts[1];
+      body = parts.slice(2).join('|');
+    }
+
+    try {
+      const { count, error: countErr } = await supabase
+        .from('upsa_users')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', 'student')
+        .eq('is_verified', true);
+
+      if (countErr || !count) {
+        await ctx.reply(`⚠️ No verified students found to broadcast to.`);
+        return;
+      }
+
+      pendingBroadcasts.set(ctx.chatId!.toString(), {
+        subject,
+        title,
+        body,
+        recipientsCount: count,
+        timestamp: Date.now(),
+      });
+
+      await ctx.reply([
+        `📢 *Mass Broadcast Preview*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `👥 Audience: *${count} verified students*`,
+        `📌 Subject: *${esc(subject)}*`,
+        `🏷️ Title: *${esc(title)}*`,
+        `📝 Message Body:`,
+        `"${esc(body.slice(0, 200))}${body.length > 200 ? '...' : ''}"`,
+        ``,
+        `⚠️ *To SEND to all ${count} students, send:*`,
+        `\`/broadcast_confirm\``,
+        ``,
+        `To discard this draft, send \`/broadcast_cancel\``,
+      ].join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Broadcast Confirm: /broadcast_confirm ──────────────────────────────────
+  bot.command('broadcast_confirm', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /broadcast_confirm from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const chatId = ctx.chatId?.toString();
+    if (!chatId || !pendingBroadcasts.has(chatId)) {
+      await ctx.reply('⚠️ No pending broadcast found. Compose one first with `/broadcast <subject> | <title> | <body>`.', { parse_mode: 'Markdown' });
+      return;
+    }
+    const draft = pendingBroadcasts.get(chatId)!;
+    pendingBroadcasts.delete(chatId);
+
+    await ctx.reply(`📤 Starting broadcast to *${draft.recipientsCount}* students in batches of 10... Please wait.`, { parse_mode: 'Markdown' });
+
+    try {
+      const { data: students } = await supabase
+        .from('upsa_users')
+        .select('email, full_name')
+        .eq('role', 'student')
+        .eq('is_verified', true);
+
+      if (!students || students.length === 0) {
+        await ctx.reply('⚠️ No students found.');
+        return;
+      }
+
+      let sent = 0;
+      let failed = 0;
+      const BATCH_SIZE = 10;
+
+      for (let i = 0; i < students.length; i += BATCH_SIZE) {
+        const batch = students.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map(s => {
+            const studentName = s.full_name?.trim() || 'PastQ Student';
+            const firstName = s.full_name?.trim().split(/\s+/)[0] || 'Student';
+            const personalize = (txt: string) => txt
+              .replace(/\{\{name\}\}/gi, studentName)
+              .replace(/\{\{first_name\}\}/gi, firstName)
+              .replace(/Hello PastQ Student/gi, `Hello ${firstName}`);
+
+            return sendGeneralEmail(
+              s.email,
+              personalize(draft.subject),
+              personalize(draft.title),
+              personalize(draft.body)
+            );
+          })
+        );
+
+        results.forEach(r => {
+          if (r.status === 'fulfilled') sent++;
+          else failed++;
+        });
+
+        if (i + BATCH_SIZE < students.length) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+
+      await ctx.reply([
+        `🎉 *Broadcast Dispatch Complete!*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `👥 Total: *${students.length}*`,
+        `✅ Sent: *${sent}*`,
+        `❌ Failed: *${failed}*`,
+        `📌 Subject: *${esc(draft.subject)}*`,
+      ].join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Broadcast failed: ${err.message}`);
+    }
+  });
+
+  // ── Broadcast Cancel: /broadcast_cancel ────────────────────────────────────
+  bot.command('broadcast_cancel', async (ctx: Context) => {
+    if (!isAuthorized(ctx.chatId)) return;
+    const chatId = ctx.chatId?.toString();
+    if (chatId && pendingBroadcasts.has(chatId)) {
+      pendingBroadcasts.delete(chatId);
+      await ctx.reply('🗑️ Broadcast draft discarded.', { parse_mode: 'Markdown' });
+    } else {
+      await ctx.reply('ℹ️ No pending broadcast to discard.');
+    }
+  });
+
+  // ── Redis Cache: /cache [user <userId>|flush] ──────────────────────────────
+  bot.command('cache', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /cache from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const rawArg = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (!redis) {
+      await ctx.reply('ℹ️ Upstash Redis is not configured (running in local-memory fallback mode).');
+      return;
+    }
+    if (rawArg.startsWith('user ')) {
+      const userId = rawArg.replace('user ', '').trim();
+      await invalidateCachedSession(userId);
+      await ctx.reply(`🧹 Evicted Redis session for user ID: \`${esc(userId)}\``, { parse_mode: 'Markdown' });
+    } else {
+      try {
+        const ping = await redis.ping();
+        await ctx.reply(`🟢 Upstash Redis is online. Ping: \`${ping}\`.\n_To evict a student session: \`/cache user <userId>\`_`, { parse_mode: 'Markdown' });
+      } catch (err: any) {
+        await ctx.reply(`⚠️ Redis ping failed: ${err.message}`);
+      }
+    }
+  });
+
+  // ── Cron Failures & Digest: /cron [retry|test] ─────────────────────────────
+  bot.command('cron', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /cron from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const subcmd = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (subcmd === 'retry') {
+      try {
+        const { data: failures, error: fetchErr } = await supabase.from('cron_failures').select('*');
+        if (fetchErr) throw fetchErr;
+        if (!failures || failures.length === 0) {
+          await ctx.reply('✨ No failed cron emails to retry. All schedules clear!');
+          return;
+        }
+        let sent = 0;
+        let failed = 0;
+        for (const f of failures) {
+          try {
+            const subject = f.user_type === 'active' ? 'Biweekly Activity Digest - PastQ 📊' : 'We miss you at PastQ! 📚';
+            const title = f.user_type === 'active' ? 'Your Biweekly Study Digest' : 'Come back to PastQ';
+            const body = f.user_type === 'active'
+              ? 'We tried to send you your biweekly study digest. Log in to PastQ to see your latest stats!'
+              : 'It has been a while since your last visit. Log in today to claim daily streaks!';
+            await sendGeneralEmail(f.email, subject, title, body);
+            sent++;
+            await supabase.from('cron_failures').delete().eq('id', f.id);
+          } catch {
+            failed++;
+          }
+        }
+        await ctx.reply(`🔄 *Cron Retry Complete*\n• Sent: *${sent}*\n• Failed: *${failed}*`, { parse_mode: 'Markdown' });
+      } catch (err: any) {
+        await ctx.reply(`⚠️ Error: ${err.message}`);
+      }
+    } else if (subcmd === 'test' || subcmd === 'digest') {
+      await ctx.reply('📡 Triggering weekly digest job in background...');
+      try {
+        const { runWeeklyDigestJob } = require('./cron');
+        await runWeeklyDigestJob();
+        await ctx.reply('✅ Weekly digest run completed.');
+      } catch (err: any) {
+        await ctx.reply(`⚠️ Failed to run weekly digest: ${err.message}`);
+      }
+    } else {
+      await ctx.reply('⚠️ Usage: `/cron retry` (retry failed cron emails) or `/cron test` (trigger digest)', { parse_mode: 'Markdown' });
+    }
+  });
+
+  // ── Model Fallbacks: /fallbacks [clear] ─────────────────────────────────────
+  bot.command('fallbacks', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /fallbacks from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const subcmd = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (subcmd === 'clear') {
+      try {
+        const { data: allFallbacks } = await supabase.from('upsa_admin_notifications').select('id, metadata');
+        const fallbackIds = (allFallbacks || []).filter((n: any) => !!n.metadata?.is_fallback).map((n: any) => n.id);
+        if (fallbackIds.length > 0) {
+          await supabase.from('upsa_admin_notifications').delete().in('id', fallbackIds);
+        }
+        await ctx.reply(`🧹 Cleared *${fallbackIds.length}* model fallback log(s).`, { parse_mode: 'Markdown' });
+      } catch (err: any) {
+        await ctx.reply(`⚠️ Failed to clear fallbacks: ${err.message}`);
+      }
+      return;
+    }
+
+    try {
+      const { data } = await supabase.from('upsa_admin_notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(15);
+
+      const fallbacks = (data || []).filter((n: any) => !!n.metadata?.is_fallback);
+      if (fallbacks.length === 0) {
+        await ctx.reply('🟢 *No recent model fallbacks.* All AI and OCR services operating normally.', { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const lines = [`🔀 *Recent Model Fallbacks (${fallbacks.length})*`, `━━━━━━━━━━━━━━━━━━`];
+      fallbacks.slice(0, 5).forEach((f: any, i: number) => {
+        const attempts = f.metadata?.attempts || [];
+        const primary = attempts[0]?.model_or_service || 'Unknown';
+        const outcome = f.metadata?.success ? '🟢 Resolved' : '🔴 Failed';
+        const type = f.metadata?.request_type || 'AI';
+        lines.push(`${i + 1}. [${type}] ${esc(primary)} → ${outcome}`);
+        lines.push(`   _${esc(f.title.slice(0, 50))}_`);
+      });
+      lines.push(``);
+      lines.push(`_Tip: Type \`/fallbacks clear\` to clear resolved logs._`);
+      await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
   });
 
   // Listen to incoming non-command messages to help setup chat ID if not configured
