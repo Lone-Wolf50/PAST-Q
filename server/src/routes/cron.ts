@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { runWeeklyDigestJob, revertExpiredTempPlans } from '../lib/cron';
+import { sendDailyDigest } from '../lib/telegram';
 
 const router = Router();
 
@@ -56,6 +57,19 @@ router.get('/revert-temp-plans', async (_req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[Cron Route] revert-temp-plans failed:', err.message || err);
     res.status(500).json({ error: err.message || 'Temp plan revert job failed.' });
+  }
+});
+
+// ── Daily Telegram Summary Digest ───────────────────────────────
+// Vercel Cron triggers this every day at 8:00 AM UTC (Ghana time)
+router.get('/daily-digest', async (_req: Request, res: Response) => {
+  try {
+    console.log('[Cron Route] Vercel Cron triggered: daily-digest');
+    await sendDailyDigest();
+    res.status(200).json({ ok: true, job: 'daily-digest', timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    console.error('[Cron Route] daily-digest failed:', err.message || err);
+    res.status(500).json({ error: err.message || 'Daily digest failed.' });
   }
 });
 

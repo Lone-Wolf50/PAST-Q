@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { supabase } from './supabase';
 import { sendMailWithFallback } from './mailer';
 import { invalidateCachedSession } from './redis';
+import { sendDailyDigest, notifyTelegram } from './telegram';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -347,12 +348,22 @@ export async function runWeeklyDigestJob() {
         message: `Biweekly digest sent to ${successfulSends} user(s). Failed to reach ${failedEmails.length} user(s): ${failedList.slice(0, 500)}. Check the Cron Failures panel to retry.`,
         type: 'alert'
       });
+      notifyTelegram(
+        `⚠️ *Biweekly Digest Completed with Failures*\n` +
+        `• Successfully sent: *${successfulSends}*\n` +
+        `• Failed: *${failedEmails.length}*\n` +
+        `Check Admin Dashboard > Cron Failures to review & retry.`
+      );
     } else {
       await supabase.from('upsa_admin_notifications').insert({
         title: '📧 Biweekly Digest Completed',
         message: `Biweekly email digest successfully sent to all ${successfulSends} active/inactive user(s) with zero failures.`,
         type: 'info'
       });
+      notifyTelegram(
+        `📧 *Biweekly Email Digest Sent*\n` +
+        `Successfully delivered to *${successfulSends}* students with zero failures.`
+      );
     }
 
     console.log('[Biweekly Digest Cron] Completed Biweekly Digest successfully.');
@@ -421,6 +432,10 @@ export async function revertExpiredTempPlans() {
         message: `${actualRevertedUsers.length} user(s) had their temporary plan reverted back to their original plan.`,
         type: 'info',
       });
+      notifyTelegram(
+        `⏳ *Temporary Plans Expired*\n` +
+        `${actualRevertedUsers.length} user(s) had their temporary plan reverted back to their original plan.`
+      );
     }
     
     console.log('[Temp Plan Cron] Completed reverting expired temporary plans.');
@@ -435,6 +450,13 @@ if (process.env.VERCEL !== '1') {
   // Run every Monday at 8:00 AM Ghana time (Africa/Accra = GMT+0)
   cron.schedule('0 8 * * 1', () => {
     runWeeklyDigestJob();
+  }, {
+    timezone: 'Africa/Accra'
+  });
+
+  // Run daily at 8:00 AM Ghana time for Telegram admin summary digest
+  cron.schedule('0 8 * * *', () => {
+    sendDailyDigest();
   }, {
     timezone: 'Africa/Accra'
   });

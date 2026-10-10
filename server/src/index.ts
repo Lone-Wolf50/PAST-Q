@@ -19,9 +19,11 @@ import supportRouter from './routes/support';
 import streaksRouter from './routes/streaks';
 import quizRouter from './routes/quiz';
 import cronRouter from './routes/cron';
+import telegramRouter from './routes/telegram-webhook';
 import { supabase } from './lib/supabase';
 import { redis } from './lib/redis';
 import './lib/cron';
+import { initTelegramBot } from './lib/telegram';
 
 dotenv.config();
 
@@ -185,6 +187,7 @@ app.use('/api/support', supportRouter);
 app.use('/api/streaks', streaksRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/cron', cronRouter);
+app.use('/api/telegram', telegramRouter);
 
 // ── 404 Handler ────────────────────────────────────────────────────────────────
 app.use((req, res) => {
@@ -221,6 +224,9 @@ process.on('unhandledRejection', (reason) => {
   console.error('🔴 UNHANDLED PROMISE REJECTION:', reason);
   Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
 });
+
+// ── Initialize Telegram Bot ──────────────────────────────────────────────────
+initTelegramBot();
 
 if (process.env.VERCEL !== '1') {
   app.listen(Number(PORT), '0.0.0.0', () => {

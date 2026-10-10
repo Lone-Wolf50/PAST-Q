@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { protect, AuthRequest } from '../middleware/auth';
 import { invalidateCachedSession } from '../lib/redis';
 import { deleteUserComplete } from '../lib/user-deletion';
+import { notifyTelegram } from '../lib/telegram';
 
 const router = Router();
 
@@ -279,6 +280,12 @@ router.delete('/me', async (req: AuthRequest, res: Response) => {
         message: `User ${user.email} (${user.full_name || 'No Name'}) has permanently deleted their account.`,
         type: 'alert'
       });
+      notifyTelegram(
+        `🗑️ *Account Deleted (Self)*\n` +
+        `• Name: *${user.full_name || 'No Name'}*\n` +
+        `• Email: \`${user.email}\`\n` +
+        `• Plan: *${user.plan || 'free'}*`
+      );
     }
 
     res.status(200).json({ message: 'Account deleted successfully.' });

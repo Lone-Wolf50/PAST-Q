@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { notifyTelegram } from './telegram';
 
 export interface FallbackAttempt {
   model_or_service: string;
@@ -89,6 +90,14 @@ export async function logFallbackEvent(payload: FallbackLogPayload) {
     if (error) {
       console.error('[Fallback Logger] Failed to save to Supabase:', error.message);
     }
+
+    notifyTelegram(
+      `🔄 *AI/OCR Provider Fallback*\n` +
+      `• Type: *${payload.request_type}*\n` +
+      `• Status: ${payload.success ? '✅ Recovered via Fallback' : '❌ All Providers Failed'}\n` +
+      `• Provider: \`${payload.selected_model_or_service || 'None'}\`\n` +
+      `• Attempts: ${payload.attempts.length}`
+    );
   } catch (err: any) {
     console.error('[Fallback Logger] Unexpected error:', err.message);
   }

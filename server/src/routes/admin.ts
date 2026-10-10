@@ -15,6 +15,7 @@ import { deleteUserComplete } from '../lib/user-deletion';
 import { sendGeneralEmail } from '../lib/mailer';
 import { Ratelimit } from '@upstash/ratelimit';
 import { runWeeklyDigestJob } from '../lib/cron';
+import { notifyTelegram } from '../lib/telegram';
 import { GoogleGenAI } from '@google/genai';
 import { performOcrPipeline, OCRPage, OCRBlock } from '../lib/ocr';
 import { processTables, structureExamPaper } from '../lib/structuring';
@@ -104,6 +105,14 @@ router.post('/auth/login', adminAuthLimiter, async (req: Request, res: Response)
       { id: 'admin', email: config.admin_email, plan: 'pro', role: 'admin' },
       process.env.JWT_SECRET!,
       { expiresIn: '8h' } as jwt.SignOptions
+    );
+
+    const ip = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+    notifyTelegram(
+      `🔐 *Admin Login*\n` +
+      `• Admin: \`${config.admin_email}\`\n` +
+      `• IP: \`${ip}\`\n` +
+      `• Time: ${new Date().toLocaleTimeString('en-GB')}`
     );
 
     res.status(200).json({ token });
@@ -306,6 +315,12 @@ router.post(
         .single();
 
       if (error) throw error;
+
+      notifyTelegram(
+        `📄 *New Paper Added*\n` +
+        `• Title: *${title}*\n` +
+        `• Year: ${year} (Sem ${semester})`
+      );
 
       res.status(201).json({ paper: data, file_url: finalFileUrl });
     } catch (e: any) {
@@ -1019,6 +1034,11 @@ router.patch('/users/:id/plan', async (req: AuthRequest, res: Response) => {
   try {
     await supabase.from('upsa_users').update({ plan }).eq('id', id);
     invalidateCachedSession(id as string).catch(() => {});
+    notifyTelegram(
+      `📋 *Student Plan Updated by Admin*\n` +
+      `• User ID: \`${id}\`\n` +
+      `• New Plan: *${plan}*`
+    );
     res.status(200).json({ message: `Plan updated to ${plan}.` });
   } catch {
     res.status(500).json({ error: 'Failed to update plan.' });
@@ -1174,12 +1194,22 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
             message: `Admin permanently deleted active student ${user.email} (${user.full_name || 'No Name'}) from the system. Their account has been archived in the Deleted panel.`,
             type: 'alert'
           });
+          notifyTelegram(
+            `🗑️ *Student Deleted by Admin*\n` +
+            `• Name: *${user.full_name || 'No Name'}*\n` +
+            `• Email: \`${user.email}\`\n` +
+            `• Plan: *${user.plan || 'free'}*`
+          );
         } else {
           await supabase.from('upsa_admin_notifications').insert({
             title: '🧹 Failed Registration Removed',
             message: `Admin removed unverified/failed user ${user.email} (${user.full_name || 'No Name'}) from the system.`,
             type: 'info'
           });
+          notifyTelegram(
+            `🧹 *Unverified Student Removed*\n` +
+            `• Email: \`${user.email}\``
+          );
         }
       } catch {}
     }
@@ -1604,6 +1634,20 @@ router.post('/ai-config', async (req: AuthRequest, res: Response) => {
       .upsert(updates);
 
     if (upsertError) throw upsertError;
+
+    if (typeof globalAiBlock === 'boolean') {
+      notifyTelegram(
+        `🤖 *Global AI Status Changed*\n` +
+        `• Status: ${updates.global_ai_block ? '🔴 Offline (Blocked)' : '🟢 Online'}`
+      );
+    }
+    if (typeof globalBanner === 'string' || typeof globalBannerActive === 'boolean') {
+      notifyTelegram(
+        `📢 *Global Banner Updated*\n` +
+        `• Active: ${updates.global_banner_active ? '✅ Yes' : '❌ No'}\n` +
+        `• Text: "${updates.global_banner || 'None'}"`
+      );
+    }
 
     res.status(200).json({ 
       success: true, 

@@ -3,6 +3,7 @@ import https from 'https';
 import crypto from 'crypto';
 import { supabase } from '../lib/supabase';
 import { protect, AuthRequest } from '../middleware/auth';
+import { notifyTelegram } from '../lib/telegram';
 
 const router = Router();
 
@@ -175,6 +176,12 @@ router.get('/verify/:reference', protect, async (req: AuthRequest, res: Response
           message: `Congratulations! Your account has been upgraded to the ${plan} plan.`,
           type: 'success'
         });
+
+        // Notify Telegram
+        const amountGHS = (parsed.data.amount / 100).toFixed(2);
+        notifyTelegram(
+          `💰 *Payment Received*\n━━━━━━━━━━━━━━━\n💵 GH₵ ${amountGHS}\n📋 Upgraded to ${plan}\n🔖 Ref: ${reference}\n📅 ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+        ).catch(() => {});
       }
 
       res.status(200).json({ message: `Plan upgraded to ${plan} successfully.` });
@@ -254,6 +261,12 @@ router.post('/webhook', async (req: Request, res: Response) => {
           message: `Congratulations! Your account has been upgraded to the ${plan} plan.`,
           type: 'success'
         });
+
+        // Notify Telegram (webhook path)
+        const whAmountGHS = (event.data.amount / 100).toFixed(2);
+        notifyTelegram(
+          `💰 *Payment Received (Webhook)*\n━━━━━━━━━━━━━━━\n💵 GH₵ ${whAmountGHS}\n📋 Upgraded to ${plan}\n🔖 Ref: ${reference}\n📅 ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+        ).catch(() => {});
       }
     }
   }

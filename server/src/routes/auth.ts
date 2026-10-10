@@ -6,6 +6,7 @@ import validator from 'validator';
 import { supabase } from '../lib/supabase';
 import { invalidateCachedSession, setCachedSession, redis } from '../lib/redis';
 import { sendOtpEmail } from '../lib/mailer';
+import { notifyTelegram } from '../lib/telegram';
 import crypto from 'crypto';
 
 const router = Router();
@@ -436,6 +437,11 @@ router.post('/verify-email', authLimiter, async (req: Request, res: Response) =>
       message: `${fullUser.full_name || 'No Name'} (${email}) has created an account and verified their email.`,
       type: 'info',
     });
+
+    // Notify Telegram
+    notifyTelegram(
+      `🆕 *New Signup*\n━━━━━━━━━━━━━\n👤 ${fullUser.full_name || 'No Name'}\n📧 ${email}\n📋 Free plan\n📅 ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+    ).catch(() => {});
 
     const token = jwt.sign(
       { id: fullUser.id, email: fullUser.email, plan: fullUser.plan, role: fullUser.role || 'student', session_version: newSessionVersion },
@@ -875,6 +881,11 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
         message: `${full_name || 'No Name'} (${email}) has registered and signed in via Google.`,
         type: 'info',
       });
+
+      // Notify Telegram
+      notifyTelegram(
+        `🆕 *New Signup (Google)*\n━━━━━━━━━━━━━\n👤 ${full_name || 'No Name'}\n📧 ${email}\n📋 Free plan\n📅 ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+      ).catch(() => {});
     }
 
     // 4. Sign our own PastQ JWT with the new session_version
