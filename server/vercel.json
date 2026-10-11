@@ -6,6 +6,37 @@
       "use": "@vercel/node"
     }
   ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), browsing-topics=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",
@@ -14,12 +45,12 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/weekly-digest",
-      "schedule": "0 8 * * 1"
+      "path": "/api/cron/daily-digest",
+      "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/cron/revert-temp-plans",
-      "schedule": "0 * * * *"
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 8 * * 1"
     }
   ]
 }

@@ -23,6 +23,7 @@ import telegramRouter from './routes/telegram-webhook';
 import { supabase } from './lib/supabase';
 import { redis } from './lib/redis';
 import './lib/cron';
+import { checkOpportunisticDailyDigest } from './lib/cron';
 import { initTelegramBot } from './lib/telegram';
 
 dotenv.config();
@@ -58,8 +59,28 @@ const corsOptions = {
 app.options(/.*/, cors(corsOptions));
 app.use(cors(corsOptions));
 
+// ── Opportunistic Cron Fallback ────────────────────────────────────────────────
+// If Vercel Cron fails or is delayed past 8:00 AM, the first incoming request
+// triggers the daily Telegram digest in the background (fire-and-forget).
+app.use((_req, _res, next) => {
+  checkOpportunisticDailyDigest().catch(() => {});
+  next();
+});
+
 // ── Security Middlewares ───────────────────────────────────────────────────────
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xFrameOptions: { action: 'sameorigin' },
+  })
+);
+
+// Standard security headers not fully covered by Helmet
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), browsing-topics=()');
+  next();
+});
 // Specific body parser overrides MUST come before the global 1MB body parser:
 // Allow larger payloads on the AI chat route for base64 encoded PDF uploads
 app.use('/api/ai/chat', express.json({ limit: '15mb' }));

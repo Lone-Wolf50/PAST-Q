@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { supabase } from './supabase';
 import { sendMailWithFallback } from './mailer';
-import { invalidateCachedSession } from './redis';
+import { invalidateCachedSession, redis } from './redis';
 import { sendDailyDigest, notifyTelegram } from './telegram';
 import dotenv from 'dotenv';
 
@@ -471,4 +471,38 @@ if (process.env.VERCEL !== '1') {
   console.log('[Cron] node-cron schedules registered (non-Vercel environment).');
 } else {
   console.log('[Cron] Running on Vercel — node-cron schedules skipped. Using Vercel Cron instead.');
+}
+
+let lastOpportunisticCheckMs = 0;
+
+/**
+ * Opportunistic Fallback:
+ * If Vercel Cron fails or is delayed past 8:00 AM Ghana time (UTC+0),
+ * this function checks if today's daily summary has been sent.
+ * If not, it fires sendDailyDigest() automatically on the next incoming request.
+ */
+export async function checkOpportunisticDailyDigest(): Promise<void> {
+  const nowMs = Date.now();
+  if (nowMs - lastOpportunisticCheckMs < 5 * 60 * 1000) return; // Throttled to at most once every 5 minutes
+  lastOpportunisticCheckMs = nowMs;
+
+  try {
+    const now = new Date();
+    // Ghana time is UTC (Africa/Accra = UTC+0)
+    const currentHourUtc = now.getUTCHours();
+    if (currentHourUtc < 8) return; // Only after 8:00 AM Ghana time
+
+    const todayDateStr = now.toISOString().slice(0, 10);
+    const lockKey = `cron:daily_digest:${todayDateStr}`;
+
+    if (redis) {
+      const acquired = await redis.set(lockKey, 'sent', { nx: true, ex: 86400 });
+      if (acquired === 'OK') {
+        console.log(`[Opportunistic Cron] 🕒 Vercel cron fallback triggered for ${todayDateStr}. Sending daily digest...`);
+        sendDailyDigest().catch((err) => console.error('[Opportunistic Cron] Error sending digest:', err));
+      }
+    }
+  } catch (err: any) {
+    // Fail silently so it never interrupts traffic
+  }
 }

@@ -1,7 +1,51 @@
 {
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://*.google-analytics.com https://js.paystack.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://api.paystack.co https://*.r2.dev https://*.vercel.app https://pastqhub.com https://www.pastqhub.com http://localhost:5000 http://localhost:5173 ws://localhost:5173; frame-src 'self' https://checkout.paystack.com https://standard.paystack.co https://js.paystack.co https://*.r2.dev blob:; worker-src 'self' blob:; object-src 'self' blob:; base-uri 'self'; form-action 'self' https://checkout.paystack.com; frame-ancestors 'self';"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), browsing-topics=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily-digest",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 8 * * 1"
+    }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/server/src/index.ts" },
     { "source": "/:path*", "destination": "/index.html" }
   ]
 }
-

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { runWeeklyDigestJob, revertExpiredTempPlans } from '../lib/cron';
 import { sendDailyDigest } from '../lib/telegram';
+import { redis } from '../lib/redis';
 
 const router = Router();
 
@@ -11,24 +12,29 @@ const router = Router();
  */
 function verifyCronSecret(req: Request, res: Response, next: Function) {
   const cronSecret = process.env.CRON_SECRET;
+  const isVercelCron = req.headers['x-vercel-cron'] === '1';
 
-  // If no CRON_SECRET is configured, block all requests for safety
-  if (!cronSecret) {
-    console.error('[Cron Route] CRON_SECRET env variable is not set. Blocking request.');
-    res.status(500).json({ error: 'Cron secret not configured.' });
-    return;
-  }
+  // 1. If CRON_SECRET is configured, check Bearer token, query param, or official Vercel cron header
+  if (cronSecret) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader?.replace(/^Bearer\s+/i, '') || (req.query.secret as string);
 
-  const authHeader = req.headers['authorization'];
-  const token = authHeader?.replace(/^Bearer\s+/i, '');
+    if (token === cronSecret || isVercelCron) {
+      return next();
+    }
 
-  if (token !== cronSecret) {
     console.warn('[Cron Route] Unauthorized cron request blocked.');
     res.status(401).json({ error: 'Unauthorized.' });
     return;
   }
 
-  next();
+  // 2. If CRON_SECRET is not yet configured, allow Vercel's automated cron or dev/local testing
+  if (isVercelCron || process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
+    return next();
+  }
+
+  console.warn('[Cron Route] CRON_SECRET env variable is not set and request is not a verified Vercel cron.');
+  res.status(401).json({ error: 'Cron secret not configured.' });
 }
 
 // Apply the secret verification to all cron routes
@@ -65,6 +71,12 @@ router.get('/revert-temp-plans', async (_req: Request, res: Response) => {
 router.get('/daily-digest', async (_req: Request, res: Response) => {
   try {
     console.log('[Cron Route] Vercel Cron triggered: daily-digest');
+    const todayDateStr = new Date().toISOString().slice(0, 10);
+    if (redis) {
+      await redis.set(`cron:daily_digest:${todayDateStr}`, 'sent', { ex: 86400 }).catch(() => {});
+    }
+    // Also clean up any expired temp plans during the daily check
+    await revertExpiredTempPlans().catch((err) => console.error('[Cron Route] revertExpiredTempPlans error:', err));
     await sendDailyDigest();
     res.status(200).json({ ok: true, job: 'daily-digest', timestamp: new Date().toISOString() });
   } catch (err: any) {

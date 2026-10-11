@@ -68,6 +68,7 @@ async function startResilientPolling(botInstance: Bot) {
 
 const BOT_COMMANDS = [
   { command: 'stats', description: 'Full dashboard KPI summary' },
+  { command: 'digest', description: 'Trigger daily KPI digest now' },
   { command: 'revenue', description: 'Revenue breakdown by plan' },
   { command: 'users', description: 'Total students and recent signups' },
   { command: 'user', description: 'Student profile & limit status' },
@@ -144,8 +145,14 @@ export function initTelegramBot() {
 
 // ── Send a message (fire-and-forget, never throws) ──────────────────────────
 export async function notifyTelegram(message: string): Promise<void> {
+  if (!bot && getBotToken() && isEnabled()) {
+    initTelegramBot();
+  }
   const chatId = getChatId();
-  if (!bot || !chatId || !isEnabled()) return;
+  if (!bot || !chatId || !isEnabled()) {
+    console.warn(`[Telegram] notifyTelegram skipped: bot=${Boolean(bot)}, chatId=${Boolean(chatId)}, enabled=${isEnabled()}`);
+    return;
+  }
   try {
     await bot.api.sendMessage({
       chat_id: Number(chatId) || chatId,
@@ -308,7 +315,14 @@ export function buildDigestMessage(stats: NonNullable<Awaited<ReturnType<typeof 
 
 // ── Send daily digest ───────────────────────────────────────────────────────
 export async function sendDailyDigest(): Promise<void> {
-  if (!bot || !getChatId() || !isEnabled()) return;
+  if (!bot && getBotToken() && isEnabled()) {
+    initTelegramBot();
+  }
+  const chatId = getChatId();
+  if (!bot || !chatId || !isEnabled()) {
+    console.warn(`[Telegram] Cannot send daily digest: bot=${Boolean(bot)}, chatId=${Boolean(chatId)}, enabled=${isEnabled()}`);
+    return;
+  }
 
   try {
     const stats = await fetchDashboardStats();
@@ -424,6 +438,44 @@ function registerCommands(bot: Bot) {
     } catch (err: any) {
       await ctx.reply(`⚠️ Error: ${err.message}`);
     }
+  });
+
+  // /digest — trigger daily digest on demand
+  bot.command('digest', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /digest from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    try {
+      await ctx.reply('⏳ Compiling PastQ Daily Summary...');
+      await sendDailyDigest();
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // /cron — test or trigger cron tasks
+  bot.command('cron', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /cron from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const arg = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (arg === 'test' || arg === 'digest') {
+      await ctx.reply('⏳ Manually triggering Daily Summary Digest...');
+      await sendDailyDigest();
+      return;
+    }
+    await ctx.reply([
+      `⚙️ *Cron Commands*`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `• \`/cron test\` — Trigger daily digest immediately`,
+      `• \`/stats\` or \`/digest\` — Fetch current KPI summary`,
+    ].join('\n'), { parse_mode: 'Markdown' });
   });
 
   // /revenue — revenue breakdown
