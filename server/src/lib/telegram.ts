@@ -166,7 +166,12 @@ export async function notifyTelegram(message: string): Promise<void> {
 
 // ── Webhook update handler (for Vercel serverless / webhook mode) ───────────
 export function handleTelegramWebhook(update: any): void {
-  if (!bot || !isEnabled()) return;
+  if (!isEnabled()) return;
+  // Lazy-init the bot on cold starts (same pattern as notifyTelegram)
+  if (!bot && getBotToken()) {
+    initTelegramBot();
+  }
+  if (!bot) return;
   try {
     bot.handleUpdate(update).catch((err: any) => {
       console.error('[Telegram Webhook] Failed to handle update:', err.message);

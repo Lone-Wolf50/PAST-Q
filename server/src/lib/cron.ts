@@ -474,6 +474,7 @@ if (process.env.VERCEL !== '1') {
 }
 
 let lastOpportunisticCheckMs = 0;
+let lastOpportunisticDigestDate = ''; // In-memory fallback when Redis is unavailable
 
 /**
  * Opportunistic Fallback:
@@ -498,7 +499,15 @@ export async function checkOpportunisticDailyDigest(): Promise<void> {
     if (redis) {
       const acquired = await redis.set(lockKey, 'sent', { nx: true, ex: 86400 });
       if (acquired === 'OK') {
+        lastOpportunisticDigestDate = todayDateStr;
         console.log(`[Opportunistic Cron] 🕒 Vercel cron fallback triggered for ${todayDateStr}. Sending daily digest...`);
+        sendDailyDigest().catch((err) => console.error('[Opportunistic Cron] Error sending digest:', err));
+      }
+    } else {
+      // Fallback: use in-memory tracking when Redis is unavailable
+      if (lastOpportunisticDigestDate !== todayDateStr) {
+        lastOpportunisticDigestDate = todayDateStr;
+        console.log(`[Opportunistic Cron] 🕒 Vercel cron fallback (no Redis) triggered for ${todayDateStr}. Sending daily digest...`);
         sendDailyDigest().catch((err) => console.error('[Opportunistic Cron] Error sending digest:', err));
       }
     }
