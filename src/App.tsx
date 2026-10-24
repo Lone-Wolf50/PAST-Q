@@ -113,6 +113,7 @@ const StudentNotificationsPage = lazyWithRetry(() => import('./pages/StudentNoti
 const QuizPage = lazyWithRetry(() => import('./pages/QuizPage'));
 const LeaderboardPage = lazyWithRetry(() => import('./pages/LeaderboardPage'));
 const AccountAppealPage = lazyWithRetry(() => import('./pages/AccountAppealPage'));
+const DownloadsPage = lazyWithRetry(() => import('./pages/DownloadsPage'));
 
 const PageLoader = () => (
   <div className="w-full flex-grow flex items-center justify-center min-h-[60vh]">
@@ -276,6 +277,7 @@ const router = createBrowserRouter([
       // Protected Routes
       { path: 'papers', element: <ProtectedRoute><PapersPage /></ProtectedRoute> },
       { path: 'papers/:id', element: <ProtectedRoute><PaperViewerPage /></ProtectedRoute> },
+      { path: 'downloads', element: <ProtectedRoute><DownloadsPage /></ProtectedRoute> },
       { path: 'profile', element: <ProtectedRoute><ProfilePage /></ProtectedRoute> },
       { path: 'quiz', element: <ProtectedRoute><QuizPage /></ProtectedRoute> },
       { path: 'leaderboard', element: <ProtectedRoute><LeaderboardPage /></ProtectedRoute> },

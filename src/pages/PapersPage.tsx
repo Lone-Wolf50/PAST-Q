@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, BookOpen, Download, Eye, Star, Flame, FileCheck, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Search, BookOpen, Download, Eye, Star, Flame, FileCheck, ChevronLeft, ChevronRight, Loader2, CheckCircle2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Link } from 'react-router-dom';
 import { apiFetch, apiDownload } from '../lib/api';
@@ -97,6 +97,7 @@ const PapersPage = () => {
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [bookmarkLoading, setBookmarkLoading] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [streak, setStreak] = useState<number>(0);
 
@@ -158,6 +159,14 @@ const PapersPage = () => {
       .catch(() => { });
   }, [token, isPremium]);
 
+  // Load downloaded paper IDs to prevent duplicate downloads
+  useEffect(() => {
+    if (!token) return;
+    apiFetch('/papers/downloads/ids', { token: token! })
+      .then(res => setDownloadedIds(new Set(res.ids || [])))
+      .catch(() => { });
+  }, [token]);
+
   // Load streak from session storage (set by AuthContext ping)
   useEffect(() => {
     const stored = sessionStorage.getItem('streak_count');
@@ -185,6 +194,17 @@ const PapersPage = () => {
   };
 
   const handleDownload = async (paperId: string, action: 'view' | 'download') => {
+    // Prevent re-downloading papers already in the panel
+    if (action === 'download' && downloadedIds.has(paperId)) {
+      setAlert({
+        show: true,
+        title: 'Already Downloaded',
+        message: 'This paper is already in your Downloads panel. Go to My Downloads to access it.',
+        variant: 'info'
+      });
+      return;
+    }
+
     if (action === 'download') {
       setDownloadingId(paperId);
     }
@@ -214,15 +234,38 @@ const PapersPage = () => {
           window.open(res.file_url.split('?')[0], '_blank');
         }
       } else {
-        const blob = await apiDownload(`/papers/${paperId}/download`, token!);
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
+        // For free users, the server returns JSON (panel_only).
+        // For paid users, the server returns a binary PDF blob.
+        const isPaidUser = ['basic', 'plus', 'pro'].includes(user?.plan?.toLowerCase() || '');
+
+        if (!isPaidUser) {
+          // Free user: server returns JSON with file_url for panel-only viewing
+          const res = await apiFetch(`/papers/${paperId}/download`, {
+            method: 'POST',
+            token: token!
+          });
+          // Mark as downloaded in local state
+          setDownloadedIds(prev => new Set(prev).add(paperId));
+          setAlert({
+            show: true,
+            title: 'Added to Downloads',
+            message: res.message || 'Paper saved to your Downloads panel. Upgrade to also download to your device.',
+            variant: 'success'
+          });
+        } else {
+          // Paid user: server returns binary blob for device download
+          const blob = await apiDownload(`/papers/${paperId}/download`, token!);
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+          // Mark as downloaded in local state
+          setDownloadedIds(prev => new Set(prev).add(paperId));
+        }
       }
     } catch (err: any) {
       const body = err?.body || err?.response;
@@ -541,18 +584,27 @@ const PapersPage = () => {
                       >
                         <Eye className="w-5 h-5" />
                       </Link>
-                      <button
-                        onClick={() => handleDownload(paper.id, 'download')}
-                        disabled={downloadingId !== null}
-                        className={`w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white transition-all shadow-lg hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title="Download PDF"
-                      >
-                        {downloadingId === paper.id ? (
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : (
-                          <Download className="w-5 h-5" />
-                        )}
-                      </button>
+                      {downloadedIds.has(paper.id) ? (
+                        <div
+                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 cursor-default"
+                          title="Already in your Downloads panel"
+                        >
+                          <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleDownload(paper.id, 'download')}
+                          disabled={downloadingId !== null}
+                          className={`w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white transition-all shadow-lg hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title="Download PDF"
+                        >
+                          {downloadingId === paper.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Download className="w-5 h-5" />
+                          )}
+                        </button>
+                      )}
                     </div>
 
                   </div>

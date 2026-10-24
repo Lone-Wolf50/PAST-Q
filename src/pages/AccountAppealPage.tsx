@@ -122,11 +122,16 @@ const AccountAppealPage = () => {
                 <textarea
                   placeholder="Please explain why you'd like your account restored..."
                   value={reason}
-                  onChange={(e) => setReason(e.target.value)}
+                  onChange={(e) => {
+                    // Strip emojis from input
+                    const stripped = e.target.value.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
+                    setReason(stripped);
+                  }}
                   className="w-full bg-theme-surface border border-theme-border rounded-xl py-3 pl-10 pr-4 text-theme-primary placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:bg-theme-surface-2 transition-colors resize-none h-28"
                   required
                 />
               </div>
+              <p className="text-[10px] text-theme-muted ml-1">Emojis are not allowed in your appeal.</p>
             </div>
 
             <button

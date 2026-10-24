@@ -72,6 +72,60 @@ router.get('/', protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ── GET USER'S DOWNLOAD HISTORY (Panel) ─────────────────────────────────────
+router.get('/downloads/list', protect, async (req: AuthRequest, res: Response) => {
+  const user = req.user!;
+  try {
+    const { data, error } = await supabase
+      .from('upsa_user_downloads')
+      .select('id, paper_id, paper_title, subject_name, subject_code, year, semester, downloaded_at')
+      .eq('user_id', user.id)
+      .order('downloaded_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.status(200).json({ downloads: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch download history.' });
+  }
+});
+
+// ── GET DOWNLOADED PAPER IDS (for disabling re-download buttons) ────────────
+router.get('/downloads/ids', protect, async (req: AuthRequest, res: Response) => {
+  const user = req.user!;
+  try {
+    const { data, error } = await supabase
+      .from('upsa_user_downloads')
+      .select('paper_id')
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+
+    res.status(200).json({ ids: (data || []).map((d: any) => d.paper_id) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch downloaded IDs.' });
+  }
+});
+
+// ── REMOVE FROM DOWNLOADS PANEL ─────────────────────────────────────────────
+router.delete('/downloads/:downloadId', protect, async (req: AuthRequest, res: Response) => {
+  const user = req.user!;
+  const { downloadId } = req.params;
+  try {
+    const { error } = await supabase
+      .from('upsa_user_downloads')
+      .delete()
+      .eq('id', downloadId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+
+    res.status(200).json({ message: 'Removed from downloads.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove download.' });
+  }
+});
+
 // ── GET SINGLE PAPER ──────────────────────────────────────────────────────────
 router.get('/:id', protect, async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
@@ -116,7 +170,7 @@ router.get('/:id', protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ── REQUEST DOWNLOAD URL (Enforces Limits) ──────────────────────────────────
+// ── REQUEST DOWNLOAD URL (Enforces Limits + Records in Downloads Panel) ─────
 router.post('/:id/download', protect, async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const user = req.user!;
@@ -136,11 +190,22 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
 
     const { plan, pdf_downloads_count, pdf_downloads_blocked_until } = userData;
     const safePlan = (plan || 'free').toLowerCase();
+    const isPaid = ['basic', 'plus', 'pro'].includes(safePlan);
     const isUnlimited = ['plus', 'pro'].includes(safePlan);
     const limit = safePlan === 'basic' ? 20 : 4;
+
+    // 1b. Check if this paper was already downloaded by this user
+    const { data: existingDownload } = await supabase
+      .from('upsa_user_downloads')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('paper_id', id)
+      .single();
+
+    const isReDownload = !!existingDownload;
     
-    // 2. Check if blocked
-    if (!isUnlimited && pdf_downloads_blocked_until) {
+    // 2. Check if blocked (skip for re-downloads — already in panel)
+    if (!isReDownload && !isUnlimited && pdf_downloads_blocked_until) {
       const blockedUntil = new Date(pdf_downloads_blocked_until);
       if (blockedUntil > new Date()) {
         const daysLeft = Math.ceil((blockedUntil.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
@@ -149,15 +214,13 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
           message: `You have reached your download limit. Please wait ${daysLeft} days or upgrade your plan.` 
         });
         return;
-      } else {
-        // Block expired, reset count implicitly by continuing and updating it later
       }
     }
 
-    // 3. Fetch file URL
+    // 3. Fetch paper details + file URL
     const { data: paper, error: paperError } = await supabase
       .from('upsa_papers')
-      .select('file_url')
+      .select('file_url, title, year, semester, upsa_subjects(name, code)')
       .eq('id', id)
       .single();
 
@@ -166,8 +229,8 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
       return;
     }
 
-    // 4. Update usage (if not unlimited)
-    if (!isUnlimited) {
+    // 4. Update usage only for NEW downloads (not re-downloads) and non-unlimited plans
+    if (!isReDownload && !isUnlimited) {
       let newCount = (pdf_downloads_count || 0) + 1;
       let newBlockedUntil = null;
       
@@ -193,8 +256,35 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
         .eq('id', user.id);
     }
 
-    // 5. Fetch file from storage
-    const fileResponse = await fetch(paper.file_url);
+    // 5. Record in downloads panel (upsert to prevent duplicates)
+    if (!isReDownload) {
+      const subjectData = (paper as any).upsa_subjects;
+      await supabase
+        .from('upsa_user_downloads')
+        .upsert({
+          user_id: user.id,
+          paper_id: id,
+          paper_title: (paper as any).title || 'Untitled Paper',
+          subject_name: subjectData?.name || null,
+          subject_code: subjectData?.code || null,
+          year: (paper as any).year || null,
+          semester: (paper as any).semester || null,
+          downloaded_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,paper_id' });
+    }
+
+    // 6. For FREE users — return file_url for panel viewing only (no device download)
+    if (!isPaid) {
+      res.status(200).json({ 
+        file_url: (paper as any).file_url,
+        panel_only: true,
+        message: 'Paper added to your Downloads panel. Upgrade to download to your device.' 
+      });
+      return;
+    }
+
+    // 7. For PAID users — fetch and send binary for device download
+    const fileResponse = await fetch((paper as any).file_url);
     if (!fileResponse.ok) {
       res.status(500).json({ error: 'Failed to retrieve the file from storage.' });
       return;
@@ -211,6 +301,7 @@ router.post('/:id/download', protect, async (req: AuthRequest, res: Response) =>
     res.status(500).json({ error: 'Failed to process download request.' });
   }
 });
+
 
 // ── REQUEST VIEW URL (Enforces Limits) ──────────────────────────────────────
 router.post('/:id/view', protect, async (req: AuthRequest, res: Response) => {
