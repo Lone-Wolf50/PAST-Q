@@ -16,33 +16,21 @@ const AuthCallback = () => {
     started.current = true;
     
     let isMounted = true;
+    let authSubscription: { unsubscribe: () => void } | null = null;
 
     // Helper to validate allowed emails
     const isAllowedEmail = (emailStr: string): boolean => {
       const lowercaseEmail = emailStr.toLowerCase().trim();
       
-      // 1. Block student upsamail (e.g. 10306679@upsamail.edu.gh or id10306679@upsamail.edu.gh)
       const upsaStudentRegex = /^(id)?\d+@upsamail\.edu\.gh$/i;
-      if (upsaStudentRegex.test(lowercaseEmail)) {
-        return false;
-      }
-      
-      // 2. Allow non-student upsamail (e.g. staff/admin @upsamail.edu.gh)
-      if (lowercaseEmail.endsWith('@upsamail.edu.gh')) {
-        return true;
-      }
-      
-      // 3. Force all other personal/third-party emails to strictly be Gmail
-      if (lowercaseEmail.endsWith('@gmail.com')) {
-        return true;
-      }
-      
+      if (upsaStudentRegex.test(lowercaseEmail)) return false;
+      if (lowercaseEmail.endsWith('@upsamail.edu.gh')) return true;
+      if (lowercaseEmail.endsWith('@gmail.com')) return true;
       return false;
     };
 
     /**
      * Complete the login once we have a valid Supabase session.
-     * Exchanges the Supabase access token for a PastQ JWT.
      */
     const completeLogin = async (accessToken: string, email: string) => {
       if (!isAllowedEmail(email)) {
@@ -51,7 +39,6 @@ const AuthCallback = () => {
 
       if (isMounted) setStatus('Setting up your account...');
 
-      // Exchange the Supabase token for our own custom PastQ JWT
       const data = await apiFetch('/auth/google-login', {
         method: 'POST',
         body: { token: accessToken },
@@ -59,10 +46,8 @@ const AuthCallback = () => {
 
       if (isMounted) setStatus('All done! Redirecting...');
 
-      // Log into the AuthContext (stores token in session/localStorage)
       login(data.token, data.user, data.refreshToken);
 
-      // Small delay so the success state is visible
       setTimeout(() => {
         if (isMounted) navigate('/papers', { replace: true });
       }, 600);
@@ -72,9 +57,38 @@ const AuthCallback = () => {
       try {
         if (isMounted) setStatus('Verifying your identity...');
 
-        // ── Attempt 1: Immediate getSession() ────────────────────────────
-        // Works on desktop where the PKCE exchange has already completed
-        // by the time React mounts this component.
+        // ── Step 1: Check for PKCE authorization code in URL ─────────────
+        // On PKCE flow, Supabase redirects back with ?code=xxx in the URL.
+        // We must explicitly exchange this code for a session. This is the
+        // primary fix for mobile where detectSessionInUrl can race.
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get('code');
+
+        if (code) {
+          if (isMounted) setStatus('Completing sign-in...');
+          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          
+          if (!exchangeError && exchangeData?.session?.access_token) {
+            await completeLogin(exchangeData.session.access_token, exchangeData.session.user?.email || '');
+            return;
+          }
+          // If exchange failed, fall through to other methods
+          console.warn('PKCE code exchange failed:', exchangeError?.message);
+        }
+
+        // ── Step 2: Check for hash fragment tokens (implicit flow fallback) ─
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessTokenFromHash = hashParams.get('access_token');
+        if (accessTokenFromHash) {
+          const { data: { session: hashSession } } = await supabase.auth.getSession();
+          if (hashSession?.access_token) {
+            await completeLogin(hashSession.access_token, hashSession.user?.email || '');
+            return;
+          }
+        }
+
+        // ── Step 3: Try getSession() directly ────────────────────────────
+        // Works when detectSessionInUrl already completed (desktop, fast mobile)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (!sessionError && session?.access_token) {
@@ -82,30 +96,18 @@ const AuthCallback = () => {
           return;
         }
 
-        // ── Attempt 2: Wait for onAuthStateChange ────────────────────────
-        // On mobile browsers (Chrome Custom Tabs, Safari, PWA WebViews),
-        // the PKCE code exchange from the URL may complete asynchronously
-        // AFTER getSession() returns null. Listen for the auth event.
+        // ── Step 4: Last resort — listen for onAuthStateChange ───────────
         if (isMounted) setStatus('Completing sign-in...');
 
         await new Promise<void>((resolve, reject) => {
           const timeoutId = setTimeout(() => {
-            subscription.unsubscribe();
+            authSubscription?.unsubscribe();
             reject(new Error('Sign-in timed out. Please try again.'));
-          }, 15000); // 15 second timeout
+          }, 15000);
 
           const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, newSession) => {
-              if (event === 'SIGNED_IN' && newSession?.access_token) {
-                clearTimeout(timeoutId);
-                subscription.unsubscribe();
-                try {
-                  await completeLogin(newSession.access_token, newSession.user?.email || '');
-                  resolve();
-                } catch (err) {
-                  reject(err);
-                }
-              } else if (event === 'TOKEN_REFRESHED' && newSession?.access_token) {
+              if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && newSession?.access_token) {
                 clearTimeout(timeoutId);
                 subscription.unsubscribe();
                 try {
@@ -117,10 +119,9 @@ const AuthCallback = () => {
               }
             }
           );
+          authSubscription = subscription;
 
-          // Also re-check getSession one more time after a small delay,
-          // in case the PKCE exchange completed between our first call
-          // and setting up the listener.
+          // Retry getSession after a delay
           setTimeout(async () => {
             try {
               const { data: { session: retrySession } } = await supabase.auth.getSession();
@@ -131,16 +132,15 @@ const AuthCallback = () => {
                 resolve();
               }
             } catch {
-              // Ignore — the listener or timeout will handle it
+              // Listener or timeout will handle it
             }
-          }, 1000);
+          }, 2000);
         });
       } catch (err: any) {
         console.error('OAuth callback error:', err);
-        // Clear Supabase session to prevent auto-login loops on next attempt
         await supabase.auth.signOut().catch(() => {});
         if (isMounted) {
-          // If the account was previously deleted, redirect to appeal page
+          // Redirect to appeal page if account was previously deleted
           if (err.body?.code === 'ACCOUNT_DELETED' || (err.status === 403 && err.message?.includes('deleted'))) {
             navigate('/account-appeal', { replace: true });
             return;
@@ -154,6 +154,7 @@ const AuthCallback = () => {
 
     return () => {
       isMounted = false;
+      authSubscription?.unsubscribe();
     };
   }, []);
 
