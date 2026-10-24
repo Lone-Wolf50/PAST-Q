@@ -116,6 +116,10 @@ const RegisterPage = () => {
 
       navigate('/verify-email', { state: { email } });
     } catch (err: any) {
+      if (err.body?.code === 'ACCOUNT_DELETED' || err.status === 403) {
+        navigate('/account-appeal');
+        return;
+      }
       setError(err.message);
     } finally {
       setLoading(false);

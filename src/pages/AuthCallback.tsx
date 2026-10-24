@@ -140,6 +140,11 @@ const AuthCallback = () => {
         // Clear Supabase session to prevent auto-login loops on next attempt
         await supabase.auth.signOut().catch(() => {});
         if (isMounted) {
+          // If the account was previously deleted, redirect to appeal page
+          if (err.body?.code === 'ACCOUNT_DELETED' || (err.status === 403 && err.message?.includes('deleted'))) {
+            navigate('/account-appeal', { replace: true });
+            return;
+          }
           setError(err.message || 'Something went wrong. Please try again.');
         }
       }

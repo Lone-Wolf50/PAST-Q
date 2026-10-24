@@ -112,6 +112,7 @@ const StudentSubscriptionPage = lazyWithRetry(() => import('./pages/StudentSubsc
 const StudentNotificationsPage = lazyWithRetry(() => import('./pages/StudentNotificationsPage'));
 const QuizPage = lazyWithRetry(() => import('./pages/QuizPage'));
 const LeaderboardPage = lazyWithRetry(() => import('./pages/LeaderboardPage'));
+const AccountAppealPage = lazyWithRetry(() => import('./pages/AccountAppealPage'));
 
 const PageLoader = () => (
   <div className="w-full flex-grow flex items-center justify-center min-h-[60vh]">
@@ -201,7 +202,7 @@ function Layout() {
     return <PageLoader />;
   }
 
-  const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/auth/callback'];
+  const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/auth/callback', '/account-appeal'];
   const isAdminPath = location.pathname.startsWith('/hq-portal');
   const isLandingPage = location.pathname === '/';
   const shouldHideFooter = (isLoggedIn && !isLandingPage) || isAdminPath || hideFooterRoutes.includes(location.pathname);
@@ -266,6 +267,7 @@ const router = createBrowserRouter([
       { path: 'auth/callback', element: <AuthCallback /> },
       { path: 'forgot-password', element: <GuestRoute><ForgotPasswordPage /></GuestRoute> },
       { path: 'reset-password', element: <GuestRoute><ResetPasswordPage /></GuestRoute> },
+      { path: 'account-appeal', element: <GuestRoute><AccountAppealPage /></GuestRoute> },
       { path: 'pricing', element: <PricingPage /> },
 
       // Admin Login

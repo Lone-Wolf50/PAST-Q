@@ -278,7 +278,8 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
     if (deletedRecord) {
       console.warn(`🚫 Re-registration blocked for deleted account: ${email}`);
       res.status(403).json({
-        error: 'This email address is associated with a previously deleted account and cannot be used to register again. Please contact support if you believe this is a mistake.'
+        code: 'ACCOUNT_DELETED',
+        error: 'This email is associated with a previously deleted account. You can request account restoration through our appeal process.'
       });
       return;
     }
@@ -787,7 +788,8 @@ router.post('/google-login', authLimiter, async (req: Request, res: Response) =>
     if (deletedGoogleRecord) {
       console.warn(`🚫 Google OAuth re-registration blocked for deleted account: ${email}`);
       res.status(403).json({
-        error: 'This email address is associated with a previously deleted account and cannot be used to register again. Please contact support if you believe this is a mistake.'
+        code: 'ACCOUNT_DELETED',
+        error: 'This email is associated with a previously deleted account. You can request account restoration through our appeal process.'
       });
       return;
     }
@@ -1033,6 +1035,64 @@ router.post('/logout', async (req: Request, res: Response) => {
     maxAge: 0,
   });
   res.status(200).json({ message: 'Logged out successfully.' });
+});
+
+// ─── ACCOUNT APPEAL (Deleted account restoration request) ────
+router.post('/appeal', authLimiter, async (req: Request, res: Response) => {
+  const email = sanitizeEmail(req.body.email);
+  const reason = typeof req.body.reason === 'string' ? req.body.reason.trim().slice(0, 1000) : '';
+
+  if (!email) {
+    res.status(400).json({ error: 'A valid email address is required.' });
+    return;
+  }
+  if (!reason || reason.length < 20) {
+    res.status(400).json({ error: 'Please provide a detailed reason (at least 20 characters).' });
+    return;
+  }
+
+  try {
+    // Check that this email actually exists in deleted accounts
+    const { data: deletedRecord } = await supabase
+      .from('upsa_deleted_accounts')
+      .select('email, full_name, plan, deleted_at')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (!deletedRecord) {
+      // Don't reveal whether the email exists — just accept it
+      res.status(200).json({ message: 'Your appeal has been submitted. We will review it shortly.' });
+      return;
+    }
+
+    const deletedDate = new Date(deletedRecord.deleted_at).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric'
+    });
+
+    // Notify admin via Telegram
+    notifyTelegram(
+      `🔔 *Account Restoration Appeal*\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `📧 Email: \`${email}\`\n` +
+      `👤 Name: ${deletedRecord.full_name || 'Unknown'}\n` +
+      `📋 Previous Plan: ${deletedRecord.plan || 'free'}\n` +
+      `🗑️ Deleted: ${deletedDate}\n\n` +
+      `💬 *Reason:*\n${reason.slice(0, 500)}\n\n` +
+      `_To approve, use:_ \`/restore ${email}\``
+    ).catch(() => {});
+
+    // Also log as admin notification
+    await supabase.from('upsa_admin_notifications').insert({
+      title: '🔔 Account Restoration Appeal',
+      message: `${deletedRecord.full_name || 'Unknown'} (${email}) is requesting account restoration. Reason: ${reason.slice(0, 300)}`,
+      type: 'warning',
+    });
+
+    res.status(200).json({ message: 'Your appeal has been submitted. We will review it shortly.' });
+  } catch (err) {
+    console.error('Appeal submission error:', err);
+    res.status(500).json({ error: 'Failed to submit appeal. Please try again later.' });
+  }
 });
 
 export default router;

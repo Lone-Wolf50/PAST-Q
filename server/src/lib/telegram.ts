@@ -95,6 +95,7 @@ const BOT_COMMANDS = [
   { command: 'papers', description: 'Total papers count' },
   { command: 'health', description: 'Server health and uptime check' },
   { command: 'help', description: 'Show all available commands' },
+  { command: 'restore', description: 'Restore a deleted account (approve appeal)' },
 ];
 
 // ── Initialize ──────────────────────────────────────────────────────────────
@@ -403,6 +404,7 @@ function registerCommands(bot: Bot) {
       `/revokeplan <email> — Revert student to Free tier`,
       `/suspend <email> — Suspend student account`,
       `/activate <email> — Restore student account`,
+      `/restore <email> — Approve deleted account appeal`,
       `/aiuser <email> <on|off> — Toggle student AI tutor`,
       `/resetlimits <email> — Reset AI & PDF quotas`,
       ``,
@@ -1120,6 +1122,78 @@ function registerCommands(bot: Bot) {
       await supabase.from('upsa_users').update({ status: 'active' }).eq('id', user.id);
       await invalidateCachedSession(user.id).catch(() => {});
       await ctx.reply(`🟢 Account for *${esc(user.full_name || email)}* is now *ACTIVE*. Access restored.`, { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ── Restore Deleted Account: /restore <email> ─────────────────────────────
+  bot.command('restore', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /restore from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized. This bot is private to PastQ administrators.');
+      return;
+    }
+    const email = typeof ctx.match === 'string' ? ctx.match.trim().toLowerCase() : '';
+    if (!email) {
+      await ctx.reply('⚠️ Usage: `/restore <email>`\nThis removes the email from the deleted accounts list, allowing them to register again.', { parse_mode: 'Markdown' });
+      return;
+    }
+    try {
+      // Check if the email exists in deleted accounts
+      const { data: deletedRecord } = await supabase
+        .from('upsa_deleted_accounts')
+        .select('id, email, full_name, plan, deleted_at')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (!deletedRecord) {
+        await ctx.reply(`❌ No deleted account found for \`${esc(email)}\`.`, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      // Remove from deleted accounts — this allows re-registration
+      const { error: deleteErr } = await supabase
+        .from('upsa_deleted_accounts')
+        .delete()
+        .eq('id', deletedRecord.id);
+
+      if (deleteErr) {
+        await ctx.reply(`❌ Failed to restore: ${deleteErr.message}`);
+        return;
+      }
+
+      // Notify via admin notification
+      await supabase.from('upsa_admin_notifications').insert({
+        title: '✅ Deleted Account Restored',
+        message: `Admin approved account restoration for ${deletedRecord.full_name || 'Unknown'} (${email}). They can now register again.`,
+        type: 'info',
+      });
+
+      // Send notification email to the user
+      try {
+        await sendGeneralEmail(
+          email,
+          'Your PastQ Account Restoration Has Been Approved',
+          'Account Restoration Approved',
+          `Hello ${deletedRecord.full_name?.split(/\s+/)[0] || 'there'},\n\nGreat news! Your account restoration request has been reviewed and approved. You can now register again on PastQ using this email address.\n\nVisit pastqhub.com and click "Register" to create your new account.\n\nWelcome back!`
+        );
+      } catch {
+        // Non-critical — continue even if email fails
+      }
+
+      const deletedDate = new Date(deletedRecord.deleted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      await ctx.reply([
+        `✅ *Account Restored Successfully*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `👤 Name: *${esc(deletedRecord.full_name || 'Unknown')}*`,
+        `📧 Email: \`${esc(email)}\``,
+        `📋 Previous Plan: ${deletedRecord.plan || 'free'}`,
+        `🗑️ Was Deleted: ${deletedDate}`,
+        ``,
+        `The user has been emailed and can now register again.`,
+      ].join('\n'), { parse_mode: 'Markdown' });
     } catch (err: any) {
       await ctx.reply(`⚠️ Error: ${err.message}`);
     }
