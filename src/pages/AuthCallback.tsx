@@ -17,62 +17,124 @@ const AuthCallback = () => {
     
     let isMounted = true;
 
-    const handleCallback = async () => {
-      // Helper to validate allowed emails
-      const isAllowedEmail = (emailStr: string): boolean => {
-        const lowercaseEmail = emailStr.toLowerCase().trim();
-        
-        // 1. Block student upsamail (e.g. 10306679@upsamail.edu.gh or id10306679@upsamail.edu.gh)
-        const upsaStudentRegex = /^(id)?\d+@upsamail\.edu\.gh$/i;
-        if (upsaStudentRegex.test(lowercaseEmail)) {
-          return false;
-        }
-        
-        // 2. Allow non-student upsamail (e.g. staff/admin @upsamail.edu.gh)
-        if (lowercaseEmail.endsWith('@upsamail.edu.gh')) {
-          return true;
-        }
-        
-        // 3. Force all other personal/third-party emails to strictly be Gmail
-        if (lowercaseEmail.endsWith('@gmail.com')) {
-          return true;
-        }
-        
+    // Helper to validate allowed emails
+    const isAllowedEmail = (emailStr: string): boolean => {
+      const lowercaseEmail = emailStr.toLowerCase().trim();
+      
+      // 1. Block student upsamail (e.g. 10306679@upsamail.edu.gh or id10306679@upsamail.edu.gh)
+      const upsaStudentRegex = /^(id)?\d+@upsamail\.edu\.gh$/i;
+      if (upsaStudentRegex.test(lowercaseEmail)) {
         return false;
-      };
+      }
+      
+      // 2. Allow non-student upsamail (e.g. staff/admin @upsamail.edu.gh)
+      if (lowercaseEmail.endsWith('@upsamail.edu.gh')) {
+        return true;
+      }
+      
+      // 3. Force all other personal/third-party emails to strictly be Gmail
+      if (lowercaseEmail.endsWith('@gmail.com')) {
+        return true;
+      }
+      
+      return false;
+    };
 
+    /**
+     * Complete the login once we have a valid Supabase session.
+     * Exchanges the Supabase access token for a PastQ JWT.
+     */
+    const completeLogin = async (accessToken: string, email: string) => {
+      if (!isAllowedEmail(email)) {
+        throw new Error('Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.');
+      }
+
+      if (isMounted) setStatus('Setting up your account...');
+
+      // Exchange the Supabase token for our own custom PastQ JWT
+      const data = await apiFetch('/auth/google-login', {
+        method: 'POST',
+        body: { token: accessToken },
+      });
+
+      if (isMounted) setStatus('All done! Redirecting...');
+
+      // Log into the AuthContext (stores token in session/localStorage)
+      login(data.token, data.user, data.refreshToken);
+
+      // Small delay so the success state is visible
+      setTimeout(() => {
+        if (isMounted) navigate('/papers', { replace: true });
+      }, 600);
+    };
+
+    const handleCallback = async () => {
       try {
         if (isMounted) setStatus('Verifying your identity...');
 
-        // Get the session that Supabase set after the OAuth redirect
+        // ── Attempt 1: Immediate getSession() ────────────────────────────
+        // Works on desktop where the PKCE exchange has already completed
+        // by the time React mounts this component.
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (sessionError || !session?.access_token) {
-          throw new Error('Could not retrieve session from Google. Please try again.');
+        if (!sessionError && session?.access_token) {
+          await completeLogin(session.access_token, session.user?.email || '');
+          return;
         }
 
-        const email = session.user?.email || '';
-        if (!isAllowedEmail(email)) {
-          throw new Error('Only personal Gmail accounts (@gmail.com) or staff upsamail emails are allowed. Student upsamail accounts and other third-party providers (Yahoo, Outlook, etc.) are restricted.');
-        }
+        // ── Attempt 2: Wait for onAuthStateChange ────────────────────────
+        // On mobile browsers (Chrome Custom Tabs, Safari, PWA WebViews),
+        // the PKCE code exchange from the URL may complete asynchronously
+        // AFTER getSession() returns null. Listen for the auth event.
+        if (isMounted) setStatus('Completing sign-in...');
 
-        if (isMounted) setStatus('Setting up your account...');
+        await new Promise<void>((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            subscription.unsubscribe();
+            reject(new Error('Sign-in timed out. Please try again.'));
+          }, 15000); // 15 second timeout
 
-        // Exchange the Supabase token for our own custom PastQ JWT
-        const data = await apiFetch('/auth/google-login', {
-          method: 'POST',
-          body: { token: session.access_token },
+          const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (event, newSession) => {
+              if (event === 'SIGNED_IN' && newSession?.access_token) {
+                clearTimeout(timeoutId);
+                subscription.unsubscribe();
+                try {
+                  await completeLogin(newSession.access_token, newSession.user?.email || '');
+                  resolve();
+                } catch (err) {
+                  reject(err);
+                }
+              } else if (event === 'TOKEN_REFRESHED' && newSession?.access_token) {
+                clearTimeout(timeoutId);
+                subscription.unsubscribe();
+                try {
+                  await completeLogin(newSession.access_token, newSession.user?.email || '');
+                  resolve();
+                } catch (err) {
+                  reject(err);
+                }
+              }
+            }
+          );
+
+          // Also re-check getSession one more time after a small delay,
+          // in case the PKCE exchange completed between our first call
+          // and setting up the listener.
+          setTimeout(async () => {
+            try {
+              const { data: { session: retrySession } } = await supabase.auth.getSession();
+              if (retrySession?.access_token) {
+                clearTimeout(timeoutId);
+                subscription.unsubscribe();
+                await completeLogin(retrySession.access_token, retrySession.user?.email || '');
+                resolve();
+              }
+            } catch {
+              // Ignore — the listener or timeout will handle it
+            }
+          }, 1000);
         });
-
-        if (isMounted) setStatus('All done! Redirecting...');
-
-        // Log into the AuthContext (stores token in session/localStorage)
-        login(data.token, data.user, data.refreshToken);
-
-        // Small delay so the success state is visible
-        setTimeout(() => {
-          navigate('/papers', { replace: true });
-        }, 600);
       } catch (err: any) {
         console.error('OAuth callback error:', err);
         // Clear Supabase session to prevent auto-login loops on next attempt
