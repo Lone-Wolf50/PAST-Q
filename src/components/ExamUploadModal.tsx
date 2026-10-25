@@ -222,14 +222,20 @@ const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess })
                   <div key={i} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-theme-border/60 bg-theme-surface group">
                     <img src={photo.preview} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
                     {/* Overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 sm:group-hover:opacity-100 transition-opacity pointer-events-none" />
                     <button
-                      onClick={() => removePhoto(i)}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-500/90 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removePhoto(i);
+                      }}
+                      aria-label={`Remove photo ${i + 1}`}
+                      title="Remove photo"
+                      className="absolute top-2 right-2 z-10 p-2 sm:p-1.5 rounded-lg bg-red-500/90 hover:bg-red-600 text-white shadow-md transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100 active:scale-95 cursor-pointer flex items-center justify-center"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                     </button>
-                    <span className="absolute bottom-2 left-2 text-[10px] font-bold text-white/80 bg-black/40 px-2 py-0.5 rounded-md">
+                    <span className="absolute bottom-2 left-2 text-[10px] font-bold text-white/80 bg-black/40 px-2 py-0.5 rounded-md pointer-events-none">
                       Page {i + 1}
                     </span>
                   </div>
