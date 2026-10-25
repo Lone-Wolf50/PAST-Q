@@ -234,6 +234,10 @@ Sentry.setupExpressErrorHandler(app);
 // ── Global Error Handler ───────────────────────────────────────────────────────
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('❌ GLOBAL ERROR:', err);
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    res.status(413).json({ error: 'File size too large. Maximum allowed size is 4.5MB.' });
+    return;
+  }
   res.status(500).json({
     error: 'An unexpected server error occurred.',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined

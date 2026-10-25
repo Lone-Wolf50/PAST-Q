@@ -16,10 +16,50 @@ type Step = 'capture' | 'details' | 'uploading' | 'success' | 'error';
 
 const MAX_PHOTOS = 4;
 
+// ── Helper to compress a file into a lightweight JPEG data URL ──────────────
+const compressFileToJpeg = (file: File, maxDim = 1600, quality = 0.78): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const raw = ev.target?.result as string;
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(raw);
+          return;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(raw);
+      img.src = raw;
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+};
+
 const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess }) => {
   const { token } = useAuth();
   const [step, setStep] = useState<Step>('capture');
   const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([]);
+  const [isProcessingPhotos, setIsProcessingPhotos] = useState(false);
   const [subjectName, setSubjectName] = useState('');
   const [courseCode, setCourseCode] = useState('');
   const [year, setYear] = useState('');
@@ -33,25 +73,35 @@ const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess })
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // ── Add photos from file input ────────────────────────────────────────────
-  const handleFilesSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFilesSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     const remaining = MAX_PHOTOS - photos.length;
     const toAdd = files.slice(0, remaining);
 
-    toAdd.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setPhotos((prev) => {
-          if (prev.length >= MAX_PHOTOS) return prev;
-          return [...prev, { file, preview: ev.target?.result as string }];
-        });
-      };
-      reader.readAsDataURL(file);
-    });
+    setIsProcessingPhotos(true);
+    try {
+      const compressedPreviews = await Promise.all(
+        toAdd.map((file) => compressFileToJpeg(file, 1600, 0.78))
+      );
 
-    // Reset inputs so the same file can be re-selected
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (cameraInputRef.current) cameraInputRef.current.value = '';
+      setPhotos((prev) => {
+        const next = [...prev];
+        compressedPreviews.forEach((preview, idx) => {
+          if (next.length < MAX_PHOTOS && preview) {
+            next.push({ file: toAdd[idx], preview });
+          }
+        });
+        return next;
+      });
+    } catch (err) {
+      console.error('[ExamUpload] Photo processing error:', err);
+    } finally {
+      setIsProcessingPhotos(false);
+      // Reset inputs so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
   }, [photos.length]);
 
   const removePhoto = (index: number) => {
@@ -75,36 +125,71 @@ const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess })
       )
     );
 
-    // Create PDF in A4 landscape/portrait depending on image orientation
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 5;
+    const generatePdf = (imageSources: string[]): Blob => {
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 5;
 
-    loadedImages.forEach((img, i) => {
-      if (i > 0) pdf.addPage();
+      loadedImages.forEach((img, i) => {
+        if (i > 0) pdf.addPage();
 
-      const imgRatio = img.width / img.height;
-      const availW = pageW - margin * 2;
-      const availH = pageH - margin * 2;
+        const imgRatio = img.width / img.height;
+        const availW = pageW - margin * 2;
+        const availH = pageH - margin * 2;
 
-      let drawW: number, drawH: number;
-      if (imgRatio > availW / availH) {
-        // Image is wider proportionally
-        drawW = availW;
-        drawH = availW / imgRatio;
-      } else {
-        drawH = availH;
-        drawW = availH * imgRatio;
-      }
+        let drawW: number, drawH: number;
+        if (imgRatio > availW / availH) {
+          drawW = availW;
+          drawH = availW / imgRatio;
+        } else {
+          drawH = availH;
+          drawW = availH * imgRatio;
+        }
 
-      const x = (pageW - drawW) / 2;
-      const y = (pageH - drawH) / 2;
+        const x = (pageW - drawW) / 2;
+        const y = (pageH - drawH) / 2;
 
-      pdf.addImage(img.src, 'JPEG', x, y, drawW, drawH, undefined, 'MEDIUM');
-    });
+        pdf.addImage(imageSources[i], 'JPEG', x, y, drawW, drawH, undefined, 'FAST');
+      });
 
-    return pdf.output('blob');
+      return pdf.output('blob');
+    };
+
+    let blob = generatePdf(photos.map((p) => p.preview));
+
+    // If still over 3.5 MB (safety margin below Vercel's 4.5 MB gateway limit),
+    // re-compress images more aggressively
+    if (blob.size > 3.5 * 1024 * 1024) {
+      console.warn('[ExamUpload] PDF size is', (blob.size / 1024 / 1024).toFixed(2), 'MB — compressing more aggressively');
+      const recompressed = loadedImages.map((img) => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1200;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return img.src;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        return canvas.toDataURL('image/jpeg', 0.6);
+      });
+
+      blob = generatePdf(recompressed);
+    }
+
+    console.log('[ExamUpload] Final PDF size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+    return blob;
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -119,6 +204,11 @@ const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess })
       setUploadProgress(20);
       const pdfBlob = await createPdfFromPhotos();
       setUploadProgress(50);
+
+      // Pre-flight check: ensure payload stays safely below Vercel's 4.5MB gateway limit
+      if (pdfBlob.size > 4.2 * 1024 * 1024) {
+        throw new Error('Exam paper file size exceeds 4MB. Please retake the photos or upload fewer pages.');
+      }
 
       // Step 2: Build FormData
       const formData = new FormData();
@@ -143,7 +233,11 @@ const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess })
       onSuccess?.();
     } catch (err: any) {
       console.error('[ExamUpload] Upload error:', err);
-      setErrorMsg(err?.body?.error || err.message || 'Upload failed. Please try again.');
+      let message = err?.body?.error || err?.body?.message || err.message || 'Upload failed. Please try again.';
+      if (typeof message === 'string' && (message.includes('Failed to fetch') || message.includes('NetworkError') || message.includes('413'))) {
+        message = 'Upload failed due to connection error or file size limit. Please ensure your images are clear and try again.';
+      }
+      setErrorMsg(message);
       setStep('error');
     }
   };
@@ -243,14 +337,26 @@ const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess })
 
                 {/* Add photo slot */}
                 {photos.length < MAX_PHOTOS && (
-                  <div className="aspect-[3/4] rounded-xl border-2 border-dashed border-theme-border/60 hover:border-indigo-500/40 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer bg-theme-surface/30 hover:bg-indigo-500/5 group"
-                    onClick={() => fileInputRef.current?.click()}
+                  <div
+                    className={clsx(
+                      "aspect-[3/4] rounded-xl border-2 border-dashed border-theme-border/60 flex flex-col items-center justify-center gap-2 transition-all bg-theme-surface/30",
+                      isProcessingPhotos
+                        ? "opacity-60 cursor-wait"
+                        : "hover:border-indigo-500/40 cursor-pointer hover:bg-indigo-500/5 group"
+                    )}
+                    onClick={() => {
+                      if (!isProcessingPhotos) fileInputRef.current?.click();
+                    }}
                   >
                     <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
-                      <Plus className="w-5 h-5 text-indigo-400" />
+                      {isProcessingPhotos ? (
+                        <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+                      ) : (
+                        <Plus className="w-5 h-5 text-indigo-400" />
+                      )}
                     </div>
                     <span className="text-[11px] font-bold text-theme-muted group-hover:text-indigo-400 transition-colors">
-                      Add Photo
+                      {isProcessingPhotos ? "Optimizing..." : "Add Photo"}
                     </span>
                     <span className="text-[9px] text-theme-muted/60 font-medium">
                       {photos.length}/{MAX_PHOTOS}
@@ -262,16 +368,18 @@ const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess })
               {/* Action buttons */}
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => cameraInputRef.current?.click()}
-                  disabled={photos.length >= MAX_PHOTOS}
+                  disabled={photos.length >= MAX_PHOTOS || isProcessingPhotos}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-500/10 hover:bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 rounded-xl text-sm font-bold transition-all disabled:opacity-40 cursor-pointer"
                 >
                   <Camera className="w-4 h-4" />
                   Camera
                 </button>
                 <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={photos.length >= MAX_PHOTOS}
+                  disabled={photos.length >= MAX_PHOTOS || isProcessingPhotos}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-theme-surface hover:bg-theme-surface-2 border border-theme-border/60 text-theme-secondary rounded-xl text-sm font-bold transition-all disabled:opacity-40 cursor-pointer"
                 >
                   <ImageIcon className="w-4 h-4" />
@@ -506,7 +614,7 @@ const ExamUploadModal: React.FC<ExamUploadModalProps> = ({ onClose, onSuccess })
               </button>
               <button
                 onClick={() => setStep('details')}
-                disabled={photos.length === 0}
+                disabled={photos.length === 0 || isProcessingPhotos}
                 className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-indigo-500/15 disabled:opacity-40 cursor-pointer flex items-center justify-center gap-2"
               >
                 <FileText className="w-4 h-4" />

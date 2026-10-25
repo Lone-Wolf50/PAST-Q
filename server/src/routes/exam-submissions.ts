@@ -115,7 +115,20 @@ Do NOT include any explanation, markdown, or extra text — only the JSON.`,
 // ══════════════════════════════════════════════════════════════════════════════
 // POST /api/exam-submissions  — Student uploads a combined PDF
 // ══════════════════════════════════════════════════════════════════════════════
-router.post('/', upload.single('pdf'), async (req: AuthRequest, res: Response) => {
+router.post(
+  '/',
+  (req: any, res: any, next: any) => {
+    upload.single('pdf')(req, res, (err: any) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: 'File size too large. Maximum allowed size is 4.5MB.' });
+        }
+        return res.status(400).json({ error: err.message || 'File upload error.' });
+      }
+      next();
+    });
+  },
+  async (req: AuthRequest, res: Response) => {
   const userId = req.user!.id;
   const userEmail = req.user!.email;
 
