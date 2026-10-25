@@ -1663,8 +1663,20 @@ router.post('/ai-config', async (req: AuthRequest, res: Response) => {
 // ── Broadcast Email ──────────────────
 // If `recipients` array is provided, send only to those emails (individual mode).
 // Otherwise, send to ALL verified students (broadcast mode).
+// Supports optional `offset` + `limit` chunking so large broadcasts never hit Vercel's 60s serverless timeout.
 router.post('/broadcast', async (req: AuthRequest, res: Response) => {
-  const { subject, title, body: bodyText, recipients, sendInAppNotification } = req.body;
+  const {
+    subject,
+    title,
+    body: bodyText,
+    recipients,
+    sendInAppNotification,
+    offset,
+    limit,
+    broadcastId: incomingBroadcastId,
+    cumulativeSent = 0,
+    cumulativeFailed = 0,
+  } = req.body;
 
   if (!subject || !title || !bodyText) {
     res.status(400).json({ error: 'Subject, title, and body are required.' });
@@ -1672,16 +1684,16 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    // Generate a unique ID for this broadcast run (used for failure tracking / retry)
-    const broadcastId = crypto.randomUUID();
+    // Reuse broadcastId across chunks if provided, or generate a new one
+    const broadcastId = incomingBroadcastId || crypto.randomUUID();
+    const isChunked = typeof offset === 'number' && typeof limit === 'number' && limit > 0;
 
-    let usersWithNames: { id?: string; email: string; full_name?: string }[] = [];
+    let allUsersWithNames: { id?: string; email: string; full_name?: string }[] = [];
     const isIndividual = Array.isArray(recipients) && recipients.length > 0;
 
     if (isIndividual) {
       // Individual mode — use provided email list
       const emailsList = recipients.map((e: string) => e.trim().toLowerCase()).filter(Boolean);
-      // Fetch names and IDs for these emails from DB if they exist
       const { data: dbUsers } = await supabase
         .from('upsa_users')
         .select('id, email, full_name')
@@ -1695,7 +1707,7 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
           }
         });
       }
-      usersWithNames = emailsList.map((email: string) => {
+      allUsersWithNames = emailsList.map((email: string) => {
         const dbInfo = userMap.get(email);
         return {
           id: dbInfo?.id,
@@ -1704,24 +1716,33 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
         };
       });
     } else {
-      // Broadcast mode — fetch all verified student emails and names
+      // Broadcast mode — fetch all verified student emails and names in deterministic order
       const { data: users, error } = await supabase
         .from('upsa_users')
         .select('id, email, full_name')
         .eq('role', 'student')
-        .eq('is_verified', true);
+        .eq('is_verified', true)
+        .order('id', { ascending: true });
 
       if (error) throw error;
       if (!users || users.length === 0) {
-        res.status(200).json({ message: 'No verified students found.', sent: 0, failed: 0, broadcastId });
+        res.status(200).json({ message: 'No verified students found.', total: 0, sent: 0, failed: 0, hasMore: false, broadcastId });
         return;
       }
-      usersWithNames = users.map((u: any) => ({
+      allUsersWithNames = users.map((u: any) => ({
         id: u.id,
         email: u.email,
         full_name: u.full_name
       })).filter(u => u.email);
     }
+
+    const totalAudience = allUsersWithNames.length;
+    const usersWithNames = isChunked
+      ? allUsersWithNames.slice(offset, offset + limit)
+      : allUsersWithNames;
+    const hasMore = isChunked ? (offset + limit < totalAudience) : false;
+    const isFirstChunk = !isChunked || offset === 0;
+    const isLastChunk = !isChunked || !hasMore;
 
     const personalizeText = (text: string, fullName?: string) => {
       const name = fullName?.trim() || 'PastQ Student';
@@ -1735,11 +1756,13 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
     };
 
     let sent = 0;
+    let sentViaBrevo = 0;
+    let sentViaGmail = 0;
     let failed = 0;
     const errors: string[] = [];
     const failureRows: { broadcast_id: string; email: string; error_reason: string }[] = [];
 
-    // Send in batches of 10 with 1s delay between batches
+    // Send in batches of 10 with 150ms delay between batches (pooled connections)
     const BATCH_SIZE = 10;
     for (let i = 0; i < usersWithNames.length; i += BATCH_SIZE) {
       const batch = usersWithNames.slice(i, i + BATCH_SIZE);
@@ -1754,6 +1777,11 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
       results.forEach((r, idx) => {
         if (r.status === 'fulfilled') {
           sent++;
+          if (r.value?.provider === 'gmail') {
+            sentViaGmail++;
+          } else {
+            sentViaBrevo++;
+          }
         } else {
           failed++;
           const reason = r.reason?.message || 'Unknown error';
@@ -1761,9 +1789,8 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
           failureRows.push({ broadcast_id: broadcastId, email: batch[idx].email, error_reason: reason });
         }
       });
-      // Delay between batches to avoid rate limiting
       if (i + BATCH_SIZE < usersWithNames.length) {
-        await new Promise((r) => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 150));
       }
     }
 
@@ -1772,9 +1799,9 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
       await supabase.from('broadcast_failures').insert(failureRows);
     }
 
-    // In-app notifications
-    if (sendInAppNotification) {
-      const targetUsers = usersWithNames.filter(u => u.id);
+    // In-app notifications (only once on the first chunk)
+    if (sendInAppNotification && isFirstChunk) {
+      const targetUsers = allUsersWithNames.filter(u => u.id);
 
       if (targetUsers.length > 0) {
         const notifications = targetUsers.map((u) => {
@@ -1797,17 +1824,27 @@ router.post('/broadcast', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    await supabase.from('upsa_admin_notifications').insert({
-      title: isIndividual ? '📧 Individual Email Sent' : '📧 Broadcast Email Sent',
-      message: `Subject: "${subject}" — Sent to ${sent}/${usersWithNames.length} ${isIndividual ? 'recipient(s)' : 'students'}. ${failed > 0 ? `${failed} failed.` : ''}`,
-      type: 'info',
-    });
+    const finalSent = (Number(cumulativeSent) || 0) + sent;
+    const finalFailed = (Number(cumulativeFailed) || 0) + failed;
+
+    if (isLastChunk) {
+      await supabase.from('upsa_admin_notifications').insert({
+        title: isIndividual ? '📧 Individual Email Sent' : '📧 Broadcast Email Sent',
+        message: `Subject: "${subject}" — Sent to ${finalSent}/${totalAudience} ${isIndividual ? 'recipient(s)' : 'students'}. ${finalFailed > 0 ? `${finalFailed} failed.` : ''}`,
+        type: 'info',
+      });
+    }
 
     res.status(200).json({
-      message: 'Broadcast complete.',
-      total: usersWithNames.length,
+      message: hasMore ? 'Chunk complete.' : 'Broadcast complete.',
+      total: totalAudience,
+      chunkCount: usersWithNames.length,
       sent,
+      sentViaBrevo,
+      sentViaGmail,
       failed,
+      hasMore,
+      nextOffset: hasMore ? offset + limit : null,
       broadcastId,
       errors: errors.slice(0, 10)
     });

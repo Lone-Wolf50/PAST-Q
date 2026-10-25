@@ -1,14 +1,110 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import { redis } from './redis';
 
 dotenv.config();
 
 const FROM_BREVO = process.env.EMAIL_FROM || 'PastQ <noreply@pastqhub.com>';
 const FROM_GMAIL = `PastQ <${process.env.EMAIL_USER || process.env.SMTP_USER || 'sayonaraa340@gmail.com'}>`;
 
+// Brevo Free Tier allows 300 emails/day. However, Brevo's SMTP relay (`smtp-relay.brevo.com`)
+// still returns `250 OK` after the 300th email and silently drops subsequent messages in its queue.
+// We track daily Brevo usage (in Redis + memory fallback) and proactively switch to Gmail SMTP at 290/day.
+const BREVO_DAILY_SAFE_LIMIT = Number(process.env.BREVO_DAILY_LIMIT) || 290;
+let memoryDayKey = '';
+let memoryBrevoCount = 0;
+
+function getTodayKey(): string {
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  return `brevo:daily_sent:${yyyy}-${mm}-${dd}`;
+}
+
+async function tryReserveBrevoSlot(): Promise<boolean> {
+  const key = getTodayKey();
+  if (memoryDayKey !== key) {
+    memoryDayKey = key;
+    memoryBrevoCount = 0;
+  }
+  // Synchronously reserve in memory first so concurrent Promise.allSettled calls cannot race past the limit
+  if (memoryBrevoCount >= BREVO_DAILY_SAFE_LIMIT) {
+    return false;
+  }
+  memoryBrevoCount++;
+
+  if (redis) {
+    try {
+      const next = await redis.incr(key);
+      if (next === 1) {
+        await redis.expire(key, 86400);
+      }
+      memoryBrevoCount = Math.max(memoryBrevoCount, next);
+      if (next > BREVO_DAILY_SAFE_LIMIT) {
+        await redis.decr(key);
+        return false;
+      }
+    } catch {
+      // ignore redis errors and rely on memory counter
+    }
+  }
+  return true;
+}
+
+async function releaseBrevoSlot(): Promise<void> {
+  const key = getTodayKey();
+  if (memoryDayKey === key && memoryBrevoCount > 0) {
+    memoryBrevoCount--;
+  }
+  if (redis) {
+    try {
+      await redis.decr(key);
+    } catch {
+      // ignore redis errors
+    }
+  }
+}
+
+// Reusable pooled transporters so bulk broadcasts don't open hundreds of separate TLS handshakes
+let brevoPool: nodemailer.Transporter | null = null;
+let gmailPool: nodemailer.Transporter | null = null;
+
+function getBrevoTransporter(user: string, pass: string): nodemailer.Transporter {
+  if (!brevoPool) {
+    const port = Number(process.env.BREVO_SMTP_PORT) || 587;
+    brevoPool = nodemailer.createTransport({
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 300,
+      host: process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com',
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+  }
+  return brevoPool;
+}
+
+function getGmailTransporter(user: string, pass: string): nodemailer.Transporter {
+  if (!gmailPool) {
+    const port = Number(process.env.EMAIL_PORT) || 465;
+    gmailPool = nodemailer.createTransport({
+      pool: true,
+      maxConnections: 3,
+      maxMessages: 200,
+      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+  }
+  return gmailPool;
+}
+
 /**
- * Helper to send email with Brevo SMTP as primary and Gmail SMTP as fallback.
- * If both fail, it throws an error.
+ * Helper to send email with Brevo SMTP as primary (up to daily quota limit)
+ * and Gmail SMTP as automatic fallback.
  */
 export const sendMailWithFallback = async (options: {
   to: string;
@@ -16,24 +112,18 @@ export const sendMailWithFallback = async (options: {
   html: string;
   text?: string;
   replyTo?: string;
-}) => {
+}): Promise<{ provider: 'brevo' | 'gmail' }> => {
   const brevoUser = process.env.BREVO_SMTP_USER?.trim();
   const brevoPass = process.env.BREVO_SMTP_PASS?.trim();
 
   let sentViaBrevo = false;
   let brevoError: any = null;
 
-  if (brevoUser && brevoPass) {
+  const brevoSlotReserved = Boolean(brevoUser && brevoPass) && (await tryReserveBrevoSlot());
+
+  if (brevoSlotReserved) {
     try {
-      const brevoTransporter = nodemailer.createTransport({
-        host: process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com',
-        port: Number(process.env.BREVO_SMTP_PORT) || 587,
-        secure: Number(process.env.BREVO_SMTP_PORT) === 465,
-        auth: {
-          user: brevoUser,
-          pass: brevoPass,
-        },
-      });
+      const brevoTransporter = getBrevoTransporter(brevoUser!, brevoPass!);
 
       await brevoTransporter.sendMail({
         from: FROM_BREVO,
@@ -46,18 +136,19 @@ export const sendMailWithFallback = async (options: {
 
       sentViaBrevo = true;
       console.log(`Email to ${options.to} sent successfully via Brevo SMTP.`);
+      return { provider: 'brevo' };
     } catch (err: any) {
       brevoError = err;
+      await releaseBrevoSlot();
       console.warn(`Failed to send email via Brevo SMTP to ${options.to}. Error: ${err.message || err}. Falling back to Gmail SMTP...`);
     }
   } else {
-    console.warn(`Brevo SMTP credentials not fully configured. Skipping Brevo and falling back to Gmail SMTP...`);
+    console.log(`Brevo daily limit (${BREVO_DAILY_SAFE_LIMIT}) reached or credentials missing — using Gmail SMTP fallback for ${options.to}...`);
   }
 
   if (!sentViaBrevo) {
-    // Try Gmail fallback
-    const gmailUser = process.env.EMAIL_USER || process.env.SMTP_USER || 'sayonaraa340@gmail.com';
-    const gmailPass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+    const gmailUser = (process.env.EMAIL_USER || process.env.SMTP_USER || 'sayonaraa340@gmail.com').trim();
+    const gmailPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS)?.trim();
 
     if (!gmailPass) {
       const configError = new Error('Gmail SMTP password not configured for fallback.');
@@ -65,15 +156,7 @@ export const sendMailWithFallback = async (options: {
       throw brevoError || configError;
     }
 
-    const gmailTransporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: Number(process.env.EMAIL_PORT) || 465,
-      secure: Number(process.env.EMAIL_PORT) === 465,
-      auth: {
-        user: gmailUser,
-        pass: gmailPass,
-      },
-    });
+    const gmailTransporter = getGmailTransporter(gmailUser, gmailPass);
 
     try {
       await gmailTransporter.sendMail({
@@ -85,12 +168,14 @@ export const sendMailWithFallback = async (options: {
         replyTo: options.replyTo,
       });
       console.log(`Email to ${options.to} sent successfully via Gmail SMTP.`);
+      return { provider: 'gmail' };
     } catch (gmailErr: any) {
       console.error(`Failed to send email via Gmail SMTP fallback to ${options.to}. Error: ${gmailErr.message || gmailErr}`);
-      // Throw combined or final error
-      throw new Error(`Email delivery failed. Brevo error: ${brevoError?.message || 'not configured'}. Gmail error: ${gmailErr.message || gmailErr}`);
+      throw new Error(`Email delivery failed. Brevo error: ${brevoError?.message || 'daily quota reached'}. Gmail error: ${gmailErr.message || gmailErr}`);
     }
   }
+
+  return { provider: 'brevo' };
 };
 
 /**
@@ -128,7 +213,7 @@ export const sendOtpEmail = async (to: string, otp: string, type: 'verify' | 're
     </html>
   `;
 
-  await sendMailWithFallback({
+  return await sendMailWithFallback({
     to,
     subject,
     html,
@@ -160,7 +245,7 @@ export const sendGeneralEmail = async (to: string, subject: string, title: strin
     </html>
   `;
 
-  await sendMailWithFallback({
+  return await sendMailWithFallback({
     to,
     subject,
     html,

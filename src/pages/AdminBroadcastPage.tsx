@@ -18,7 +18,16 @@ const AdminBroadcastPage = () => {
   const [individualBody, setIndividualBody] = useState(() => localStorage.getItem('individual_draft_body') || '');
 
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ total: number; sent: number; failed: number; errors?: string[]; broadcastId?: string } | null>(null);
+  const [progress, setProgress] = useState<{ processed: number; total: number; sent: number; failed: number } | null>(null);
+  const [result, setResult] = useState<{
+    total: number;
+    sent: number;
+    sentViaBrevo?: number;
+    sentViaGmail?: number;
+    failed: number;
+    errors?: string[];
+    broadcastId?: string;
+  } | null>(null);
   const [error, setError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendInAppNotification, setSendInAppNotification] = useState(false);
@@ -170,6 +179,7 @@ const AdminBroadcastPage = () => {
   const handleSend = async () => {
     setConfirmOpen(false);
     setSending(true);
+    setProgress(null);
     setError('');
     setResult(null);
 
@@ -179,21 +189,91 @@ const AdminBroadcastPage = () => {
 
     try {
       const token = localStorage.getItem('admin_token')!;
-      const payload: any = {
-        subject: activeSubject,
-        title: activeTitle,
-        body: activeBody,
-        sendInAppNotification
-      };
+
       if (mode === 'individual') {
-        payload.recipients = recipients;
+        const data = await apiFetch('/hq-management/broadcast', {
+          method: 'POST',
+          token,
+          body: {
+            subject: activeSubject,
+            title: activeTitle,
+            body: activeBody,
+            sendInAppNotification,
+            recipients,
+          },
+        });
+        setResult({
+          total: data.total,
+          sent: data.sent,
+          sentViaBrevo: data.sentViaBrevo,
+          sentViaGmail: data.sentViaGmail,
+          failed: data.failed,
+          errors: data.errors,
+          broadcastId: data.broadcastId,
+        });
+      } else {
+        // Chunked broadcast mode (50 students per request) so large audiences never hit Vercel's 60s function timeout
+        const CHUNK_SIZE = 50;
+        let offset = 0;
+        let hasMore = true;
+        let sharedBroadcastId: string | undefined;
+        let totalAudience = 0;
+        let cumulativeSent = 0;
+        let cumulativeBrevo = 0;
+        let cumulativeGmail = 0;
+        let cumulativeFailed = 0;
+        const collectedErrors: string[] = [];
+
+        while (hasMore) {
+          const data = await apiFetch('/hq-management/broadcast', {
+            method: 'POST',
+            token,
+            body: {
+              subject: activeSubject,
+              title: activeTitle,
+              body: activeBody,
+              sendInAppNotification: offset === 0 ? sendInAppNotification : false,
+              offset,
+              limit: CHUNK_SIZE,
+              broadcastId: sharedBroadcastId,
+              cumulativeSent,
+              cumulativeFailed,
+            },
+          });
+
+          sharedBroadcastId = data.broadcastId || sharedBroadcastId;
+          totalAudience = data.total ?? totalAudience;
+          cumulativeSent += data.sent || 0;
+          cumulativeBrevo += data.sentViaBrevo || 0;
+          cumulativeGmail += data.sentViaGmail || 0;
+          cumulativeFailed += data.failed || 0;
+          if (Array.isArray(data.errors)) {
+            collectedErrors.push(...data.errors);
+          }
+
+          const processed = Math.min(offset + (data.chunkCount || CHUNK_SIZE), totalAudience);
+          setProgress({
+            processed,
+            total: totalAudience,
+            sent: cumulativeSent,
+            failed: cumulativeFailed,
+          });
+
+          hasMore = Boolean(data.hasMore);
+          offset += CHUNK_SIZE;
+        }
+
+        setResult({
+          total: totalAudience,
+          sent: cumulativeSent,
+          sentViaBrevo: cumulativeBrevo,
+          sentViaGmail: cumulativeGmail,
+          failed: cumulativeFailed,
+          errors: collectedErrors.slice(0, 10),
+          broadcastId: sharedBroadcastId,
+        });
       }
-      const data = await apiFetch('/hq-management/broadcast', {
-        method: 'POST',
-        token,
-        body: payload,
-      });
-      setResult({ total: data.total, sent: data.sent, failed: data.failed, errors: data.errors, broadcastId: data.broadcastId });
+
       // Save the last sent message fields so retry can re-use them
       setLastSentSubject(activeSubject);
       setLastSentTitle(activeTitle);
@@ -213,6 +293,7 @@ const AdminBroadcastPage = () => {
       setError(err.message || 'Failed to send broadcast.');
     } finally {
       setSending(false);
+      setProgress(null);
     }
   };
 
@@ -619,6 +700,11 @@ const AdminBroadcastPage = () => {
                 <div className="bg-theme-base/50 border border-emerald-500/10 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-emerald-400">{result.sent}</p>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-theme-muted mt-1">Sent</p>
+                  {(result.sentViaBrevo !== undefined || result.sentViaGmail !== undefined) && result.sent > 0 && (
+                    <p className="text-[9px] text-theme-muted mt-1">
+                      {result.sentViaBrevo || 0} Brevo · {result.sentViaGmail || 0} Gmail
+                    </p>
+                  )}
                 </div>
                 <div className="bg-theme-base/50 border border-red-500/10 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-red-400">{result.failed}</p>
@@ -663,14 +749,28 @@ const AdminBroadcastPage = () => {
           {sending && (
             <div className="bg-theme-surface/50 border border-theme-border rounded-2xl p-8 text-center animate-in fade-in">
               <Loader2 className="w-10 h-10 text-indigo-400 animate-spin mx-auto mb-4" />
-              <p className="text-sm font-semibold text-theme-primary">Sending emails...</p>
+              <p className="text-sm font-semibold text-theme-primary">
+                {progress && progress.total > 0
+                  ? `Sending emails... (${progress.processed} / ${progress.total})`
+                  : 'Sending emails...'}
+              </p>
               <p className="text-xs text-theme-muted mt-2">
                 {mode === 'individual'
                   ? `Sending to ${recipients.length} recipient(s)...`
-                  : 'This may take a few minutes depending on the number of students.'}
+                  : progress && progress.total > 0
+                  ? `Sent: ${progress.sent} · Failed: ${progress.failed}`
+                  : 'Preparing student batches...'}
               </p>
-              <div className="mt-4 w-48 mx-auto h-1 bg-theme-base rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+              <div className="mt-4 w-56 mx-auto h-1.5 bg-theme-base rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                  style={{
+                    width:
+                      progress && progress.total > 0
+                        ? `${Math.min(100, Math.round((progress.processed / progress.total) * 100))}%`
+                        : '20%',
+                  }}
+                />
               </div>
             </div>
           )}
