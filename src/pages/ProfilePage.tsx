@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   User, Mail, CreditCard, LogOut, ShieldAlert, Bell, Camera,
   Sparkles, X as CloseIcon, Zap, MessageSquare,
   Target, Flame, ChevronRight, CheckCircle2,
   Award, Eye, Crown, Timer, CalendarDays, Shield,
   GraduationCap, Compass, Waves, Trophy, Bug, Moon, Sun, Ghost, Medal, Gem, Activity, BookOpen, Lock,
-  Upload, FileText, Clock
+  Upload, FileText, Clock, ChevronDown, ChevronUp, History
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -115,6 +115,27 @@ const ProfilePage = () => {
   // Exam upload state
   const [showExamUpload, setShowExamUpload] = useState(false);
   const [examSubmissions, setExamSubmissions] = useState<any[]>([]);
+  const [showPastSubmissions, setShowPastSubmissions] = useState(false);
+
+  // Auto-archive window: keep reviewed submissions visible for 24 hours
+  const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const activeSubmissions = useMemo(() => {
+    const cutoff = Date.now() - ACTIVE_WINDOW_MS;
+    return examSubmissions.filter((sub: any) => {
+      if (sub.status === 'pending') return true;
+      const refTime = new Date(sub.reviewed_at || sub.submitted_at).getTime();
+      return refTime > cutoff;
+    });
+  }, [examSubmissions]);
+
+  const pastSubmissions = useMemo(() => {
+    const cutoff = Date.now() - ACTIVE_WINDOW_MS;
+    return examSubmissions.filter((sub: any) => {
+      if (sub.status === 'pending') return false;
+      const refTime = new Date(sub.reviewed_at || sub.submitted_at).getTime();
+      return refTime <= cutoff;
+    });
+  }, [examSubmissions]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -662,15 +683,19 @@ const ProfilePage = () => {
           </button>
         </div>
 
-        {/* My Submissions */}
-        {examSubmissions.length > 0 && (
+        {/* Active Submissions */}
+        {activeSubmissions.length > 0 && (
           <div className="rounded-2xl bg-theme-surface/60 border border-theme-border/50 overflow-hidden backdrop-blur-sm">
             <div className="px-5 py-3.5 border-b border-theme-border/30 flex items-center justify-between">
               <span className="text-[10px] font-extrabold text-theme-muted uppercase tracking-widest">My Submissions</span>
-              <span className="text-[10px] font-bold text-indigo-400">{examSubmissions.length}</span>
+              <span className="text-[10px] font-bold text-indigo-400">
+                {activeSubmissions.filter((s: any) => s.status === 'pending').length > 0
+                  ? `${activeSubmissions.filter((s: any) => s.status === 'pending').length} Under Review`
+                  : `${activeSubmissions.length} Active`}
+              </span>
             </div>
             <div className="divide-y divide-theme-border/30">
-              {examSubmissions.slice(0, 5).map((sub: any) => {
+              {activeSubmissions.map((sub: any) => {
                 const statusMap: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
                   pending: { label: 'Under Review', color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', icon: <Clock className="w-3 h-3" /> },
                   approved: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: <CheckCircle2 className="w-3 h-3" /> },
@@ -706,6 +731,91 @@ const ProfilePage = () => {
                 );
               })}
             </div>
+
+            {/* History toggle inside active card if older submissions exist */}
+            {pastSubmissions.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowPastSubmissions((prev) => !prev)}
+                  className="w-full px-5 py-2.5 bg-theme-surface/40 hover:bg-theme-surface border-t border-theme-border/30 text-[11px] font-semibold text-theme-muted hover:text-theme-primary flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-indigo-400" />
+                    {showPastSubmissions ? 'Hide past history' : `View past history (${pastSubmissions.length})`}
+                  </span>
+                  {showPastSubmissions ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+                {showPastSubmissions && (
+                  <div className="divide-y divide-theme-border/20 bg-theme-surface/30">
+                    {pastSubmissions.map((sub: any) => {
+                      const isApproved = sub.status === 'approved';
+                      return (
+                        <div key={sub.id} className="px-5 py-2.5 flex items-center gap-3 opacity-70 hover:opacity-100 transition-opacity">
+                          <div className="w-7 h-7 rounded-lg bg-theme-surface-2/40 flex items-center justify-center shrink-0">
+                            <FileText className="w-3.5 h-3.5 text-theme-muted" />
+                          </div>
+                          <div className="flex-grow min-w-0">
+                            <p className="text-xs font-medium text-theme-secondary truncate">
+                              {sub.subject_name || sub.course_code || 'Exam Paper'}
+                            </p>
+                            <p className="text-[9px] text-theme-muted">
+                              {new Date(sub.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                              {isApproved && <span className="text-emerald-400 ml-1.5 font-bold">Approved (+{sub.premium_hours || 24}hrs)</span>}
+                              {sub.status === 'rejected' && <span className="text-red-400 ml-1.5">Not approved</span>}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* When no active submissions, but past submissions exist */}
+        {activeSubmissions.length === 0 && pastSubmissions.length > 0 && (
+          <div className="rounded-2xl bg-theme-surface/40 border border-theme-border/40 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPastSubmissions((prev) => !prev)}
+              className="w-full px-5 py-3 flex items-center justify-between text-xs font-semibold text-theme-muted hover:text-theme-primary transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-indigo-400" />
+                <span>Past Submissions</span>
+                <span className="text-[10px] font-bold text-theme-muted/60 bg-theme-surface-2 px-2 py-0.5 rounded-full">
+                  {pastSubmissions.length}
+                </span>
+              </div>
+              {showPastSubmissions ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+            {showPastSubmissions && (
+              <div className="divide-y divide-theme-border/20 border-t border-theme-border/30 bg-theme-surface/20">
+                {pastSubmissions.map((sub: any) => {
+                  const isApproved = sub.status === 'approved';
+                  return (
+                    <div key={sub.id} className="px-5 py-2.5 flex items-center gap-3 opacity-80 hover:opacity-100 transition-opacity">
+                      <div className="w-7 h-7 rounded-lg bg-theme-surface-2/40 flex items-center justify-center shrink-0">
+                        <FileText className="w-3.5 h-3.5 text-theme-muted" />
+                      </div>
+                      <div className="flex-grow min-w-0">
+                        <p className="text-xs font-medium text-theme-secondary truncate">
+                          {sub.subject_name || sub.course_code || 'Exam Paper'}
+                        </p>
+                        <p className="text-[9px] text-theme-muted">
+                          {new Date(sub.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                          {isApproved && <span className="text-emerald-400 ml-1.5 font-bold">Approved (+{sub.premium_hours || 24}hrs)</span>}
+                          {sub.status === 'rejected' && <span className="text-red-400 ml-1.5">Not approved</span>}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
