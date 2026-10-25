@@ -96,6 +96,9 @@ const BOT_COMMANDS = [
   { command: 'health', description: 'Server health and uptime check' },
   { command: 'help', description: 'Show all available commands' },
   { command: 'restore', description: 'Restore a deleted account (approve appeal)' },
+  { command: 'approve', description: 'Approve a student exam submission' },
+  { command: 'reject', description: 'Reject a student exam submission' },
+  { command: 'pending', description: 'List pending exam submissions' },
 ];
 
 // ── Initialize ──────────────────────────────────────────────────────────────
@@ -421,6 +424,12 @@ function registerCommands(bot: Bot) {
       `/fallbacks [clear] — AI failover logs`,
       `/cron [retry|test] — Cron retry & weekly digest`,
       `/cache [user <id>|flush] — Redis session cache`,
+      ``,
+      `📸 *Exam Submissions*`,
+      `/pending — List pending exam papers`,
+      `/approve <id> — Approve & grant 24hrs premium`,
+      `/reject <id> <reason> — Reject with reason`,
+      ``,
       `/help — Show this command menu`,
     ].join('\n'), { parse_mode: 'Markdown' });
   });
@@ -1609,6 +1618,303 @@ function registerCommands(bot: Bot) {
       lines.push(`_Tip: Type \`/fallbacks clear\` to clear resolved logs._`);
       await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
     } catch (err: any) {
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // EXAM SUBMISSION REVIEW COMMANDS
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  // /approve <short_id> — Approve a student exam submission
+  bot.command('approve', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /approve from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized.');
+      return;
+    }
+
+    const shortId = (typeof ctx.match === 'string' ? ctx.match.trim() : '').split(' ')[0];
+    if (!shortId) {
+      await ctx.reply('⚠️ *Usage:* `/approve <submission_id>`\n*Example:* `/approve a1b2c3d4`', { parse_mode: 'Markdown' });
+      return;
+    }
+
+    try {
+      // Fetch the submission
+      const { data: sub, error: subErr } = await supabase
+        .from('upsa_exam_submissions')
+        .select('*')
+        .eq('short_id', shortId)
+        .single();
+
+      if (subErr || !sub) {
+        await ctx.reply(`❌ Submission \`${esc(shortId)}\` not found.`, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      if (sub.status === 'approved') {
+        await ctx.reply(`ℹ️ Submission \`${esc(shortId)}\` is already approved.`, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      if (sub.status === 'rejected') {
+        await ctx.reply(`ℹ️ Submission \`${esc(shortId)}\` was previously rejected. To re-approve it, first reverse manually in the DB.`, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      // Fetch student
+      const { data: student, error: studentErr } = await supabase
+        .from('upsa_users')
+        .select('id, email, full_name, plan, original_plan, temp_plan_expires_at')
+        .eq('id', sub.user_id)
+        .single();
+
+      if (studentErr || !student) {
+        await ctx.reply(`❌ Student user not found for this submission.`);
+        return;
+      }
+
+      // ── Grant 24hrs premium via temp-plan system ───────────────────────
+      const PREMIUM_HOURS = 24;
+      const premiumPlan = 'basic';
+      let newExpiry: Date;
+
+      if (student.temp_plan_expires_at && new Date(student.temp_plan_expires_at) > new Date()) {
+        // Stack on existing temp plan
+        newExpiry = new Date(new Date(student.temp_plan_expires_at).getTime() + PREMIUM_HOURS * 60 * 60 * 1000);
+      } else {
+        newExpiry = new Date(Date.now() + PREMIUM_HOURS * 60 * 60 * 1000);
+      }
+
+      const originalPlan = student.original_plan || student.plan || 'free';
+
+      await supabase.from('upsa_users')
+        .update({
+          plan: premiumPlan,
+          original_plan: originalPlan,
+          temp_plan_expires_at: newExpiry.toISOString(),
+        })
+        .eq('id', student.id);
+
+      // Increment approved_submissions_count
+      try {
+        const rpcResult = await supabase.rpc('increment_column', {
+          table_name: 'upsa_users',
+          column_name: 'approved_submissions_count',
+          row_id: student.id,
+        });
+        if (rpcResult.error) throw rpcResult.error;
+      } catch {
+        // Fallback: manual update if RPC doesn't exist
+        const { data: currentUser } = await supabase
+          .from('upsa_users')
+          .select('approved_submissions_count')
+          .eq('id', student.id)
+          .single();
+        const currentCount = currentUser?.approved_submissions_count || 0;
+        await supabase.from('upsa_users')
+          .update({ approved_submissions_count: currentCount + 1 })
+          .eq('id', student.id);
+      }
+
+      // Update submission record
+      await supabase.from('upsa_exam_submissions')
+        .update({
+          status: 'approved',
+          premium_hours: PREMIUM_HOURS,
+          premium_plan: premiumPlan,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('short_id', shortId);
+
+      // Invalidate session cache so student sees the new plan immediately
+      await invalidateCachedSession(student.id).catch(() => {});
+
+      // Send approval email
+      const expiryStr = newExpiry.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      try {
+        await sendGeneralEmail(
+          student.email,
+          '🎉 Your exam paper was approved!',
+          'Exam Paper Approved',
+          `Great news! Your exam paper submission has been verified and approved.\n\n` +
+          `📄 Subject: ${sub.subject_name || 'N/A'}\n` +
+          `📅 Year: ${sub.year || 'N/A'} | Semester: ${sub.semester || 'N/A'}\n\n` +
+          `🎁 Reward: You've earned ${PREMIUM_HOURS} hours of ${premiumPlan.toUpperCase()} plan access!\n` +
+          `⏰ Premium active until: ${expiryStr}\n\n` +
+          `Keep contributing exam papers to earn more premium time. Thank you for helping the PastQ community! 🙏`
+        );
+      } catch (emailErr: any) {
+        console.warn('[Telegram] Approval email failed:', emailErr.message);
+      }
+
+      // Also create a student notification
+      try {
+        await supabase.from('upsa_notifications').insert({
+          user_id: student.id,
+          title: 'Exam paper approved! 🎉',
+          message: `Your exam paper "${sub.subject_name || 'Submission'}" was approved! You earned ${PREMIUM_HOURS} hours of premium access.`,
+          type: 'success',
+        });
+      } catch { /* non-fatal */ }
+
+      await ctx.reply([
+        `✅ *Approved!*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `• Student: ${esc(student.full_name || student.email)}`,
+        `• Subject: ${esc(sub.subject_name || 'Unknown')}`,
+        `• Reward: ${PREMIUM_HOURS}hrs ${premiumPlan.toUpperCase()}`,
+        `• Premium until: ${expiryStr}`,
+        `• Email notification sent ✉️`,
+      ].join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      console.error('[Telegram] /approve error:', err.message);
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // /reject <short_id> <reason> — Reject a student exam submission
+  bot.command('reject', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /reject from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized.');
+      return;
+    }
+
+    const raw = typeof ctx.match === 'string' ? ctx.match.trim() : '';
+    const spaceIdx = raw.indexOf(' ');
+    const shortId = spaceIdx > 0 ? raw.substring(0, spaceIdx) : raw;
+    const reason = spaceIdx > 0 ? raw.substring(spaceIdx + 1).trim() : '';
+
+    if (!shortId) {
+      await ctx.reply('⚠️ *Usage:* `/reject <submission_id> <reason>`\n*Example:* `/reject a1b2c3d4 Image is too blurry`', { parse_mode: 'Markdown' });
+      return;
+    }
+
+    try {
+      const { data: sub, error: subErr } = await supabase
+        .from('upsa_exam_submissions')
+        .select('*')
+        .eq('short_id', shortId)
+        .single();
+
+      if (subErr || !sub) {
+        await ctx.reply(`❌ Submission \`${esc(shortId)}\` not found.`, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      if (sub.status !== 'pending') {
+        await ctx.reply(`ℹ️ Submission \`${esc(shortId)}\` is already ${sub.status}.`, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const adminNotes = reason || 'No reason provided.';
+
+      // Update submission
+      await supabase.from('upsa_exam_submissions')
+        .update({
+          status: 'rejected',
+          admin_notes: adminNotes,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('short_id', shortId);
+
+      // Send rejection email
+      const { data: student } = await supabase
+        .from('upsa_users')
+        .select('id, email, full_name')
+        .eq('id', sub.user_id)
+        .single();
+
+      if (student) {
+        try {
+          await sendGeneralEmail(
+            student.email,
+            'Exam paper submission update',
+            'Submission Not Approved',
+            `Your exam paper submission was reviewed but not approved.\n\n` +
+            `📄 Subject: ${sub.subject_name || 'N/A'}\n` +
+            `❌ Reason: ${adminNotes}\n\n` +
+            `Please try again with a clearer photo or a different exam paper. ` +
+            `Make sure the text is readable and the paper is well-lit.`
+          );
+        } catch (emailErr: any) {
+          console.warn('[Telegram] Rejection email failed:', emailErr.message);
+        }
+
+        // Student notification
+        try {
+          await supabase.from('upsa_notifications').insert({
+            user_id: student.id,
+            title: 'Exam paper not approved',
+            message: `Your submission "${sub.subject_name || 'Submission'}" was not approved. Reason: ${adminNotes}`,
+            type: 'warning',
+          });
+        } catch { /* non-fatal */ }
+      }
+
+      await ctx.reply([
+        `❌ *Rejected*`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `• Student: ${esc(student?.full_name || sub.user_email)}`,
+        `• Subject: ${esc(sub.subject_name || 'Unknown')}`,
+        `• Reason: ${esc(adminNotes)}`,
+        `• Email notification sent ✉️`,
+      ].join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      console.error('[Telegram] /reject error:', err.message);
+      await ctx.reply(`⚠️ Error: ${err.message}`);
+    }
+  });
+
+  // /pending — List all pending exam submissions
+  bot.command('pending', async (ctx: Context) => {
+    const name = ctx.from?.first_name || 'Admin';
+    console.log(`[Telegram] 📥 Command /pending from ${name} (${ctx.chatId})`);
+    if (!isAuthorized(ctx.chatId)) {
+      await ctx.reply('⛔ Unauthorized.');
+      return;
+    }
+
+    try {
+      const { data: pending, error } = await supabase
+        .from('upsa_exam_submissions')
+        .select('short_id, user_email, subject_name, course_code, year, semester, exam_type, submitted_at')
+        .eq('status', 'pending')
+        .order('submitted_at', { ascending: true })
+        .limit(20);
+
+      if (error) throw error;
+
+      if (!pending || pending.length === 0) {
+        await ctx.reply('✅ *No pending exam submissions!* All caught up. 🎉', { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const lines = [
+        `📋 *Pending Exam Submissions (${pending.length})*`,
+        `━━━━━━━━━━━━━━━━━━`,
+      ];
+
+      pending.forEach((s: any, i: number) => {
+        const subjectLine = s.subject_name || s.course_code || 'Unknown';
+        const dateLine = new Date(s.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        lines.push(`${i + 1}. \`${s.short_id}\` — ${esc(subjectLine)}`);
+        lines.push(`   📧 ${esc(s.user_email)} • ${dateLine}`);
+        if (s.year || s.semester) {
+          lines.push(`   📅 ${s.year || '?'} | Sem ${s.semester || '?'} | ${s.exam_type || 'Exam'}`);
+        }
+      });
+
+      lines.push('');
+      lines.push('_Use `/approve <id>` or `/reject <id> reason` to review._');
+
+      await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      console.error('[Telegram] /pending error:', err.message);
       await ctx.reply(`⚠️ Error: ${err.message}`);
     }
   });

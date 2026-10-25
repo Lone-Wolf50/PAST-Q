@@ -12,6 +12,7 @@
   "dependencies": {
     "@sentry/react": "^10.53.1",
     "@supabase/supabase-js": "^2.106.0",
+    "jspdf": "^4.2.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",

@@ -20,6 +20,7 @@ import streaksRouter from './routes/streaks';
 import quizRouter from './routes/quiz';
 import cronRouter from './routes/cron';
 import telegramRouter from './routes/telegram-webhook';
+import examSubmissionsRouter from './routes/exam-submissions';
 import { supabase } from './lib/supabase';
 import { redis } from './lib/redis';
 import './lib/cron';
@@ -85,6 +86,10 @@ app.use((_req, res, next) => {
 // Allow larger payloads on the AI chat route for base64 encoded PDF uploads
 app.use('/api/ai/chat', express.json({ limit: '15mb' }));
 app.use('/api/ai/chat', express.urlencoded({ limit: '15mb', extended: true }));
+
+// Allow larger payloads for exam paper submissions (up to 10MB PDF + multipart overhead)
+app.use('/api/exam-submissions', express.json({ limit: '15mb' }));
+app.use('/api/exam-submissions', express.urlencoded({ limit: '15mb', extended: true }));
 
 // Limit global JSON payloads to 1MB. Admin file uploads use multer (memory storage)
 // on specific routes and bypass this limit — they are not affected.
@@ -209,6 +214,7 @@ app.use('/api/streaks', streaksRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/cron', cronRouter);
 app.use('/api/telegram', telegramRouter);
+app.use('/api/exam-submissions', examSubmissionsRouter);
 
 // ── 404 Handler ────────────────────────────────────────────────────────────────
 app.use((req, res) => {

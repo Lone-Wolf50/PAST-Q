@@ -4,12 +4,14 @@ import {
   Sparkles, X as CloseIcon, Zap, MessageSquare,
   Target, Flame, ChevronRight, CheckCircle2,
   Award, Eye, Crown, Timer, CalendarDays, Shield,
-  GraduationCap, Compass, Waves, Trophy, Bug, Moon, Sun, Ghost, Medal, Gem, Activity, BookOpen, Lock
+  GraduationCap, Compass, Waves, Trophy, Bug, Moon, Sun, Ghost, Medal, Gem, Activity, BookOpen, Lock,
+  Upload, FileText, Clock
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { clsx } from 'clsx';
+import ExamUploadModal from '../components/ExamUploadModal';
 
 // ─── Reusable Row Component ───────────────────────────────────────────────────
 
@@ -110,6 +112,10 @@ const ProfilePage = () => {
   const [quizStats, setQuizStats] = useState<any>(null);
   const [badges, setBadges] = useState<any[]>([]);
 
+  // Exam upload state
+  const [showExamUpload, setShowExamUpload] = useState(false);
+  const [examSubmissions, setExamSubmissions] = useState<any[]>([]);
+
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -143,11 +149,26 @@ const ProfilePage = () => {
       } catch { /* silent */ }
     };
 
+    const fetchExamSubmissions = async () => {
+      try {
+        const res = await apiFetch('/exam-submissions', { token: token || undefined });
+        setExamSubmissions(res.submissions || []);
+      } catch { /* silent */ }
+    };
+
     fetchProfile();
     fetchQuizStats();
+    fetchExamSubmissions();
     const cached = sessionStorage.getItem('streak_count');
     if (cached) setStreak(parseInt(cached, 10));
   }, []);
+
+  const refreshSubmissions = async () => {
+    try {
+      const res = await apiFetch('/exam-submissions', { token: token || undefined });
+      setExamSubmissions(res.submissions || []);
+    } catch { /* silent */ }
+  };
 
   const handleRemoveAvatar = () => {
     setAvatarUrl('');
@@ -613,6 +634,82 @@ const ProfilePage = () => {
         </div>
       </SettingsSection>
 
+      {/* ── Earn Premium — Exam Upload ─────────────────────────────────── */}
+      <div className="w-full">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-theme-muted px-1 mb-2">
+          Earn Premium
+        </p>
+
+        {/* Upload CTA */}
+        <div className="rounded-2xl bg-gradient-to-br from-indigo-500/8 via-purple-500/5 to-transparent border border-indigo-500/20 p-5 mb-3">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/15 border border-indigo-500/25 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/10">
+              <Camera className="w-5.5 h-5.5 text-indigo-400" />
+            </div>
+            <div className="flex-grow">
+              <p className="text-sm font-bold text-theme-primary">Upload Exam Papers</p>
+              <p className="text-[11px] text-theme-muted mt-0.5 leading-relaxed">
+                Snap photos of your past papers and earn <span className="font-bold text-indigo-400">24hrs premium</span> per approved paper!
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowExamUpload(true)}
+            className="w-full mt-4 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-indigo-500/15 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Upload Paper
+          </button>
+        </div>
+
+        {/* My Submissions */}
+        {examSubmissions.length > 0 && (
+          <div className="rounded-2xl bg-theme-surface/60 border border-theme-border/50 overflow-hidden backdrop-blur-sm">
+            <div className="px-5 py-3.5 border-b border-theme-border/30 flex items-center justify-between">
+              <span className="text-[10px] font-extrabold text-theme-muted uppercase tracking-widest">My Submissions</span>
+              <span className="text-[10px] font-bold text-indigo-400">{examSubmissions.length}</span>
+            </div>
+            <div className="divide-y divide-theme-border/30">
+              {examSubmissions.slice(0, 5).map((sub: any) => {
+                const statusMap: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
+                  pending: { label: 'Under Review', color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', icon: <Clock className="w-3 h-3" /> },
+                  approved: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: <CheckCircle2 className="w-3 h-3" /> },
+                  rejected: { label: 'Not Approved', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', icon: <ShieldAlert className="w-3 h-3" /> },
+                };
+                const statusConfig = statusMap[sub.status] || { label: sub.status, color: 'text-theme-muted', bg: 'bg-theme-surface', icon: null };
+
+                return (
+                  <div key={sub.id} className="px-5 py-3.5 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-theme-surface-2/60 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4 text-theme-muted" />
+                    </div>
+                    <div className="flex-grow min-w-0">
+                      <p className="text-sm font-semibold text-theme-primary truncate">
+                        {sub.subject_name || sub.course_code || 'Exam Paper'}
+                      </p>
+                      <p className="text-[10px] text-theme-muted mt-0.5">
+                        {sub.year && `${sub.year}`}{sub.semester && ` · Sem ${sub.semester}`}
+                        {!sub.year && !sub.semester && new Date(sub.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        {sub.status === 'approved' && sub.premium_hours > 0 && (
+                          <span className="text-indigo-400 font-bold ml-1.5">+{sub.premium_hours}hrs ✨</span>
+                        )}
+                      </p>
+                      {sub.status === 'rejected' && sub.admin_notes && (
+                        <p className="text-[10px] text-red-400/80 mt-0.5 truncate">Reason: {sub.admin_notes}</p>
+                      )}
+                    </div>
+                    <div className={clsx('flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-wide border shrink-0', statusConfig.bg, statusConfig.color)}>
+                      {statusConfig.icon}
+                      {statusConfig.label}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── Account & Settings ───────────────────────────────────────────── */}
       <SettingsSection label="Account">
         <SettingsRow
@@ -736,6 +833,14 @@ const ProfilePage = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Exam Upload Modal ─────────────────────────────────────────────── */}
+      {showExamUpload && (
+        <ExamUploadModal
+          onClose={() => setShowExamUpload(false)}
+          onSuccess={refreshSubmissions}
+        />
       )}
 
     </div>

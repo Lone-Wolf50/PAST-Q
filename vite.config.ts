@@ -38,5 +38,8 @@ export default defineConfig({
       }
     },
     chunkSizeWarningLimit: 1000
+  },
+  optimizeDeps: {
+    exclude: ['jspdf']
   }
 })
