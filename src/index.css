@@ -32,68 +32,178 @@
 /* ── CSS Variables for Dark/Light Theme ───────────────────────────────────── */
 :root {
   color-scheme: dark;
-  --bg-base: #09090b;
-  --bg-surface: #18181b;
-  --bg-surface-2: #27272a;
-  --border: #27272a;
-  --border-hover: #3f3f46;
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --glow-a: rgba(255, 255, 255, 0.03);
-  --glow-b: rgba(255, 255, 255, 0.02);
 
-  /* Premium Glassmorphic Design Variables */
-  --glass-bg: rgba(24, 24, 27, 0.8);
-  --glass-bg-hover: rgba(39, 39, 42, 0.8);
-  --glass-border: #27272a;
-  --glass-border-hover: #3f3f46;
-  --glass-inner-shadow: rgba(255, 255, 255, 0.04);
+  /* Lumina OLED LMS Color Palette (Colors Only) */
+  --surface: #131313;
+  --surface-dim: #131313;
+  --surface-bright: #393939;
+  --surface-container-lowest: #0e0e0e;
+  --surface-container-low: #1c1b1b;
+  --surface-container: #201f1f;
+  --surface-container-high: #2a2a2a;
+  --surface-container-highest: #353534;
+  --on-surface: #e5e2e1;
+  --on-surface-variant: #c6c5d2;
+  --inverse-surface: #e5e2e1;
+  --inverse-on-surface: #313030;
+  --outline: #8f909b;
+  --outline-variant: #454650;
+  --surface-tint: #b8c4ff;
+  --primary: #c9d1ff;
+  --on-primary: #1a2b6a;
+  --primary-container: #a5b4fc;
+  --on-primary-container: #354484;
+  --inverse-primary: #4b5a9c;
+  --secondary: #62dcad;
+  --on-secondary: #003827;
+  --secondary-container: #18a479;
+  --on-secondary-container: #003121;
+  --tertiary: #d8cdff;
+  --on-tertiary: #332664;
+  --tertiary-container: #bdaef5;
+  --on-tertiary-container: #4c3f7e;
+  --error: #ffb4ab;
+  --on-error: #690005;
+  --error-container: #93000a;
+  --on-error-container: #ffdad6;
+  --primary-fixed: #dde1ff;
+  --primary-fixed-dim: #b8c4ff;
+  --on-primary-fixed: #001354;
+  --on-primary-fixed-variant: #334282;
+  --secondary-fixed: #80f9c8;
+  --secondary-fixed-dim: #62dcad;
+  --on-secondary-fixed: #002115;
+  --on-secondary-fixed-variant: #00513a;
+  --tertiary-fixed: #e7deff;
+  --tertiary-fixed-dim: #ccbeff;
+  --on-tertiary-fixed: #1e0e4e;
+  --on-tertiary-fixed-variant: #4a3d7c;
+  --background: #131313;
+  --on-background: #e5e2e1;
+  --surface-variant: #353534;
+
+  /* App Theme Token Mapping -> Exact Lumina OLED LMS Colors */
+  --bg-base: #131313;
+  --bg-surface: #1c1b1b;
+  --bg-surface-2: #2a2a2a;
+  --border: #454650;
+  --border-hover: #8f909b;
+  --text-primary: #e5e2e1;
+  --text-secondary: #c6c5d2;
+  --text-muted: #8f909b;
+  --glow-a: rgba(201, 209, 255, 0.08);
+  --glow-b: rgba(98, 220, 173, 0.06);
+
+  /* Remap Tailwind Accent Colors to Lumina OLED LMS Palette in Dark Mode */
+  --color-indigo-200: #dde1ff;
+  --color-indigo-300: #c9d1ff;
+  --color-indigo-400: #c9d1ff;
+  --color-indigo-500: #a5b4fc;
+  --color-indigo-600: #b8c4ff;
+  --color-purple-300: #e7deff;
+  --color-purple-400: #d8cdff;
+  --color-purple-500: #bdaef5;
+  --color-violet-300: #e7deff;
+  --color-violet-400: #d8cdff;
+  --color-violet-500: #bdaef5;
+  --color-emerald-300: #80f9c8;
+  --color-emerald-400: #62dcad;
+  --color-emerald-500: #18a479;
+  --color-blue-400: #b8c4ff;
+  --color-blue-500: #a5b4fc;
+  --color-red-400: #ffb4ab;
+  --color-red-500: #ffb4ab;
+
+  /* Premium Glassmorphic Design Variables (Lumina OLED Tonal Stacking) */
+  --glass-bg: rgba(28, 27, 27, 0.88);
+  --glass-bg-hover: rgba(42, 42, 42, 0.94);
+  --glass-border: #454650;
+  --glass-border-hover: #8f909b;
+  --glass-inner-shadow: rgba(229, 226, 225, 0.05);
   
-  --glass-user-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
-  --glass-user-border: rgba(99, 102, 241, 0.25);
-  --glass-user-text: #fafafa;
+  --glass-user-bg: linear-gradient(135deg, rgba(165, 180, 252, 0.20) 0%, rgba(216, 205, 255, 0.12) 100%);
+  --glass-user-border: rgba(201, 209, 255, 0.35);
+  --glass-user-text: #e5e2e1;
   
-  --glass-ai-bg: rgba(24, 24, 27, 0.6);
-  --glass-ai-border: #27272a;
-  --glass-ai-text: #e4e4e7;
+  --glass-ai-bg: rgba(32, 31, 31, 0.85);
+  --glass-ai-border: #454650;
+  --glass-ai-text: #e5e2e1;
   
-  --glass-sidebar-bg: rgba(9, 9, 11, 0.85);
-  --glass-header-bg: rgba(9, 9, 11, 0.75);
-  --glass-footer-bg: rgba(9, 9, 11, 0.6);
+  --glass-sidebar-bg: rgba(14, 14, 14, 0.92);
+  --glass-header-bg: rgba(28, 27, 27, 0.65);
+  --glass-footer-bg: rgba(14, 14, 14, 0.85);
 }
 
 :root.light {
   color-scheme: light;
-  --bg-base: #f5f6fa;
-  --bg-surface: rgba(255, 255, 255, 0.45);
-  --bg-surface-2: rgba(255, 255, 255, 0.65);
-  --border: rgba(99, 102, 241, 0.12);
-  --border-hover: rgba(99, 102, 241, 0.25);
-  --text-primary: #0f172a;
-  --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
-  --glow-a: rgba(99, 102, 241, 0.10);
-  --glow-b: rgba(139, 92, 246, 0.08);
+
+  /* Inspired by Soft Pastel LMS Light Palette (Sky Blue #73b0f4, Pastel Lavender #eedcfb, Pastel Sky #cde8fe, Pastel Pink #fceaf6, Cool Ice Canvas #eaf1f8) */
+  --surface: #ffffff;
+  --surface-dim: #e2e8ed;
+  --surface-bright: #ffffff;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f4f8fc;
+  --surface-container: #eaf1f8;
+  --surface-container-high: #dde7f0;
+  --surface-container-highest: #d0deeb;
+  --on-surface: #1b2533;
+  --on-surface-variant: #4c637a;
+  --primary: #73b0f4;
+  --primary-container: #cde8fe;
+  --secondary: #52a788;
+  --secondary-container: #e2e8ed;
+  --tertiary: #9d65d8;
+  --tertiary-container: #eedcfb;
+  --pastel-pink: #fceaf6;
+
+  --bg-base: #eaf1f8;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #e2ebf3;
+  --border: rgba(115, 176, 244, 0.28);
+  --border-hover: rgba(115, 176, 244, 0.50);
+  --text-primary: #1b2533;
+  --text-secondary: #4c637a;
+  --text-muted: #7c92a8;
+  --glow-a: rgba(238, 220, 251, 0.65);
+  --glow-b: rgba(205, 232, 254, 0.65);
+
+  /* Remap Tailwind Accent Colors to Soft Pastel LMS Palette in Light Mode */
+  --color-indigo-200: #cde8fe;
+  --color-indigo-300: #73b0f4;
+  --color-indigo-400: #4a90e2;
+  --color-indigo-500: #73b0f4;
+  --color-indigo-600: #5a9cf0;
+  --color-purple-300: #eedcfb;
+  --color-purple-400: #9d65d8;
+  --color-purple-500: #b882f0;
+  --color-violet-300: #eedcfb;
+  --color-violet-400: #9d65d8;
+  --color-violet-500: #b882f0;
+  --color-emerald-300: #b5e5d3;
+  --color-emerald-400: #469c82;
+  --color-emerald-500: #52a788;
+  --color-blue-400: #4a90e2;
+  --color-blue-500: #73b0f4;
+  --color-pink-400: #d474b3;
 
   /* Premium Glassmorphic Design Variables */
-  --glass-bg: rgba(255, 255, 255, 0.45);
-  --glass-bg-hover: rgba(255, 255, 255, 0.70);
-  --glass-border: rgba(99, 102, 241, 0.12);
-  --glass-border-hover: rgba(99, 102, 241, 0.25);
-  --glass-inner-shadow: rgba(255, 255, 255, 0.6);
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-bg-hover: rgba(255, 255, 255, 0.96);
+  --glass-border: rgba(115, 176, 244, 0.28);
+  --glass-border-hover: rgba(115, 176, 244, 0.50);
+  --glass-inner-shadow: rgba(255, 255, 255, 0.95);
   
-  --glass-user-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%);
-  --glass-user-border: rgba(99, 102, 241, 0.25);
-  --glass-user-text: #1e1b4b;
+  --glass-user-bg: linear-gradient(135deg, rgba(205, 232, 254, 0.85) 0%, rgba(238, 220, 251, 0.75) 100%);
+  --glass-user-border: rgba(115, 176, 244, 0.45);
+  --glass-user-text: #1b2533;
   
-  --glass-ai-bg: rgba(255, 255, 255, 0.65);
-  --glass-ai-border: rgba(99, 102, 241, 0.08);
-  --glass-ai-text: #1e293b;
+  --glass-ai-bg: rgba(255, 255, 255, 0.92);
+  --glass-ai-border: rgba(115, 176, 244, 0.24);
+  --glass-ai-text: #1b2533;
   
-  --glass-sidebar-bg: rgba(245, 246, 250, 0.6);
-  --glass-header-bg: rgba(245, 246, 250, 0.55);
-  --glass-footer-bg: rgba(245, 246, 250, 0.5);
+  --glass-sidebar-bg: rgba(234, 241, 248, 0.90);
+  --glass-header-bg: rgba(205, 232, 254, 0.55);
+  --glass-footer-bg: rgba(234, 241, 248, 0.85);
 }
 
 /* Enable smooth transitions globally ONLY when changing themes */
@@ -196,26 +306,61 @@
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.02);
   }
 
-  /* Mobile nav bar — adapts to light/dark */
-  .glass-nav-mobile {
-    background: var(--bg-surface);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid var(--border);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.10);
+  /* ThemeToggle-inspired glass shell & thumb utilities */
+  .theme-toggle-shell {
+    background: rgba(18, 18, 18, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
   }
 
-  /* Glass header bar — for sticky top navigation */
+  :root.light .theme-toggle-shell {
+    background: rgba(219, 234, 254, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .theme-toggle-thumb {
+    background: rgba(28, 27, 27, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
+    transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  :root.light .theme-toggle-thumb {
+    background: rgba(255, 255, 255, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Mobile nav bar — matches ThemeToggle shell */
+  .glass-nav-mobile {
+    background: rgba(18, 18, 18, 0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Glass header bar — matches ThemeToggle shell */
   .glass-header-premium {
-    background: var(--glass-header-bg);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border-bottom: 1px solid var(--border);
+    background: rgba(18, 18, 18, 0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  :root.light .glass-header-premium {
+    background: rgba(219, 234, 254, 0.55);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
   }
 
   :root.light .glass-nav-mobile {
-    background: rgba(255,255,255,0.85);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.95);
+    background: rgba(219, 234, 254, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05), 0 8px 28px rgba(115, 176, 244, 0.15);
   }
 
   .glass-button {
@@ -660,28 +805,51 @@
     margin-top: 0 !important;
   }
 
-  /* ── Desktop Cool Hover Expanding Navbar ─────────────────────────────────── */
+  /* ── Desktop & Tablet ThemeToggle-Style Expanding Navbar ────────────────── */
   .desktop-cool-nav {
     display: flex;
     position: relative;
-    gap: 25px;
+    gap: 8px;
     align-items: center;
+    padding: 4px 6px;
+    border-radius: 9999px;
+    background: rgba(18, 18, 18, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  :root.light .desktop-cool-nav {
+    background: rgba(219, 234, 254, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
   }
 
   .desktop-cool-nav .nav-item {
     position: relative;
     list-style: none;
-    width: 36px;
-    height: 36px;
-    background: var(--bg-surface-2);
-    border: 1px solid var(--border);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    border-radius: 60px;
+    width: 38px;
+    height: 32px;
+    padding: 3px;
+    background: rgba(18, 18, 18, 0.50);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 9999px;
     cursor: pointer;
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: width 0.5s, box-shadow 0.5s, background-color 0.5s, border-color 0.5s;
+    transition: width 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.35s ease,
+                background-color 0.35s ease,
+                border-color 0.35s ease;
+  }
+
+  :root.light .desktop-cool-nav .nav-item {
+    background: rgba(219, 234, 254, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.60);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
   }
 
   /* Make the inner link cover the full pill area so the whole button is clickable */
@@ -693,47 +861,61 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    border-radius: 60px;
+    border-radius: 9999px;
   }
 
+  /* Inner Frosted Thumb (matches ThemeToggle sliding thumb) */
   .desktop-cool-nav .nav-item::before {
     content: "";
     position: absolute;
-    inset: 0;
-    border-radius: 60px;
-    background: linear-gradient(45deg, var(--i), var(--j));
-    opacity: 0;
-    transition: 0.5s;
+    inset: 3px;
+    border-radius: 9999px;
+    background: rgba(28, 27, 27, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    opacity: 1;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  :root.light .desktop-cool-nav .nav-item::before {
+    background: rgba(255, 255, 255, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
 
   .desktop-cool-nav .nav-item::after {
     content: "";
     position: absolute;
-    top: 6px;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 60px;
-    background: linear-gradient(45deg, var(--i), var(--j));
-    transition: 0.5s;
-    filter: blur(12px);
+    inset: 0;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(165, 180, 252, 0.25), transparent 70%);
+    transition: 0.4s;
+    filter: blur(8px);
     z-index: -1;
     opacity: 0;
   }
 
+  :root.light .desktop-cool-nav .nav-item::after {
+    background: radial-gradient(circle, rgba(115, 176, 244, 0.35), transparent 70%);
+  }
+
   .desktop-cool-nav .nav-item:hover {
-    width: 130px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0);
-    border-color: transparent;
-    background-color: transparent;
+    width: 122px;
   }
 
   .desktop-cool-nav .nav-item:hover::before {
-    opacity: 1;
+    background: rgba(42, 42, 42, 0.92);
+    border-color: rgba(165, 180, 252, 0.35);
+  }
+
+  :root.light .desktop-cool-nav .nav-item:hover::before {
+    background: rgba(255, 255, 255, 0.88);
+    border-color: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 2px 8px rgba(115, 176, 244, 0.20);
   }
 
   .desktop-cool-nav .nav-item:hover::after {
-    opacity: 0.5;
+    opacity: 0.7;
   }
 
   .desktop-cool-nav .nav-item .icon-wrapper {
@@ -741,27 +923,26 @@
     justify-content: center;
     align-items: center;
     color: var(--text-secondary);
-    transition: 0.5s;
-    transition-delay: 0.25s;
+    transition: 0.35s ease;
+    transition-delay: 0.15s;
     z-index: 10;
   }
 
   .desktop-cool-nav .nav-item:hover .icon-wrapper {
     transform: scale(0);
-    color: #fff;
     transition-delay: 0s;
   }
 
   .desktop-cool-nav .nav-item .title {
     position: absolute;
-    color: #fff;
+    color: var(--text-primary);
     font-family: 'Poppins', sans-serif;
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     transform: scale(0);
-    transition: 0.5s;
+    transition: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
     transition-delay: 0s;
     z-index: 10;
     white-space: nowrap;
@@ -770,13 +951,28 @@
 
   .desktop-cool-nav .nav-item:hover .title {
     transform: scale(1);
-    transition-delay: 0.25s;
+    transition-delay: 0.15s;
   }
 
   .desktop-cool-nav .nav-item.active-item {
-    border-color: rgba(99, 102, 241, 0.45);
-    box-shadow: 0 0 15px rgba(99, 102, 241, 0.25);
-    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(165, 180, 252, 0.45);
+    box-shadow: 0 0 16px rgba(165, 180, 252, 0.18);
+  }
+
+  .desktop-cool-nav .nav-item.active-item::before {
+    background: rgba(42, 42, 42, 0.95);
+    border-color: rgba(165, 180, 252, 0.45);
+  }
+
+  :root.light .desktop-cool-nav .nav-item.active-item {
+    border-color: rgba(115, 176, 244, 0.55);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04), 0 2px 10px rgba(115, 176, 244, 0.22);
+  }
+
+  :root.light .desktop-cool-nav .nav-item.active-item::before {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(255, 255, 255, 1);
+    box-shadow: 0 2px 6px rgba(115, 176, 244, 0.22);
   }
 }
 
