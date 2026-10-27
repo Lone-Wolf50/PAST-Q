@@ -1413,21 +1413,60 @@ router.delete('/fallbacks', async (_req: AuthRequest, res: Response) => {
 // ── Dashboard Stats ──────────────────
 router.get('/stats', async (req: AuthRequest, res: Response) => {
   try {
-    const range = (req.query.range as string) || 'monthly';
-    let gteDate = new Date();
+    const rawRange = (req.query.range as string) || 'monthly';
+    const range = rawRange === '30d' ? 'monthly' : rawRange;
+    const now = new Date();
+    const gteDate = new Date(now);
 
-    if (range === 'daily') gteDate.setHours(0, 0, 0, 0); // Start of today
-    else if (range === 'weekly') gteDate.setDate(gteDate.getDate() - 7);
-    else if (range === 'yearly') gteDate.setFullYear(gteDate.getFullYear() - 1);
-    else gteDate.setMonth(gteDate.getMonth() - 1); // Default Monthly (30 days)
+    // Pre-generate continuous date buckets so charts always render a complete timeline
+    const bucketKeys: string[] = [];
+    const useDailyBuckets = range === 'daily' || range === 'weekly' || range === 'monthly';
+
+    if (range === 'daily') {
+      // Last 7 days (daily granularity)
+      gteDate.setDate(now.getDate() - 6);
+      gteDate.setHours(0, 0, 0, 0);
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        bucketKeys.push(d.toISOString().split('T')[0]);
+      }
+    } else if (range === 'weekly') {
+      // Last 14 days (daily granularity across 2 weeks)
+      gteDate.setDate(now.getDate() - 13);
+      gteDate.setHours(0, 0, 0, 0);
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        bucketKeys.push(d.toISOString().split('T')[0]);
+      }
+    } else if (range === 'yearly') {
+      // Last 12 months (monthly granularity)
+      gteDate.setFullYear(now.getFullYear() - 1);
+      gteDate.setMonth(now.getMonth() + 1, 1);
+      gteDate.setHours(0, 0, 0, 0);
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        bucketKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`);
+      }
+    } else {
+      // Default: 'monthly' -> Last 30 days (daily granularity)
+      gteDate.setDate(now.getDate() - 29);
+      gteDate.setHours(0, 0, 0, 0);
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        bucketKeys.push(d.toISOString().split('T')[0]);
+      }
+    }
 
     const results = await Promise.all([
       supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', true),
       supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', true).neq('plan', 'free'),
       supabase.from('upsa_papers').select('*', { count: 'exact', head: true }),
       supabase.from('upsa_deleted_accounts').select('*', { count: 'exact', head: true }),
-      supabase.from('upsa_users').select('plan').eq('role', 'student').eq('is_verified', true).neq('plan', 'free'),
-      supabase.from('upsa_transactions').select('amount, status, plan, created_at'), // Fetch all-time transactions with plan
+      supabase.from('upsa_users').select('id, plan, created_at').eq('role', 'student').eq('is_verified', true),
+      supabase.from('upsa_transactions').select('amount, status, plan, created_at'),
       supabase.from('upsa_users').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_verified', false),
       supabase.from('upsa_failed_accounts').select('*', { count: 'exact', head: true }),
     ]);
@@ -1436,48 +1475,56 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     const activePlans = results[1].count || 0;
     const totalPapers = results[2].count || 0;
     const totalDeleted = results[3].count || 0;
-    const planRows = results[4].data || [];
+    const allVerifiedStudents = results[4].data || [];
     const allTransactions = results[5].data || [];
     const unverifiedCount = results[6].count || 0;
-    const failedRegistrationAttempts = results[7].count || 0;
     const totalFailed = unverifiedCount;
 
     const planBreakdown = { basic: 0, plus: 0, pro: 0 };
-    planRows.forEach((u: any) => {
-      if (u.plan in planBreakdown) planBreakdown[u.plan as keyof typeof planBreakdown]++;
+    const userPlanMap = new Map<string, string>();
+    allVerifiedStudents.forEach((u: any) => {
+      const p = (u.plan || 'free').toLowerCase();
+      userPlanMap.set(u.id, p);
+      if (p in planBreakdown) planBreakdown[p as keyof typeof planBreakdown]++;
     });
 
-    // 1. Calculate All-Time KPIs for the top cards
+    // 1. Calculate All-Time KPIs and All-Time Revenue Breakdown fallback
     let totalRevenue = 0;
     let failedTransactions = 0;
+    const allTimeRevenueByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
+
     allTransactions.forEach((t: any) => {
-      if (t.status === 'success') totalRevenue += Number(t.amount) || 0;
+      if (t.status === 'success') {
+        const amt = Number(t.amount) || 0;
+        totalRevenue += amt;
+        const p = t.plan?.toLowerCase();
+        if (p && p in allTimeRevenueByPlan) {
+          allTimeRevenueByPlan[p] += amt;
+        }
+      }
       if (t.status === 'failed') failedTransactions++;
     });
 
-    // 2. Filter transactions in-memory by range for charts
+    // 2. Initialize continuous sales buckets with 0
+    const salesByPeriod: Record<string, number> = {};
+    bucketKeys.forEach(k => { salesByPeriod[k] = 0; });
+
+    const revenueBreakdownByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
+
+    // Filter transactions in-memory by range for charts
     const filteredTransactions = allTransactions.filter((t: any) => {
       return new Date(t.created_at) >= gteDate;
     });
 
-    // Process sales data for charts using filtered transactions
-    const salesByPeriod: Record<string, number> = {};
-    const revenueBreakdownByPlan: Record<string, number> = { basic: 0, plus: 0, pro: 0 };
-
     filteredTransactions.forEach((t: any) => {
       if (t.status === 'success') {
-        let periodKey: string;
         const d = new Date(t.created_at);
-
-        if (range === 'daily' || range === 'weekly') {
-          periodKey = d.toISOString().split('T')[0]; // Daily
-        } else {
-          periodKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`; // Monthly
-        }
+        const periodKey = useDailyBuckets
+          ? d.toISOString().split('T')[0]
+          : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 
         salesByPeriod[periodKey] = (salesByPeriod[periodKey] || 0) + (Number(t.amount) || 0);
 
-        // Revenue by plan
         const p = t.plan?.toLowerCase();
         if (p && p in revenueBreakdownByPlan) {
           revenueBreakdownByPlan[p] += Number(t.amount) || 0;
@@ -1485,62 +1532,74 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       }
     });
 
-    // AI Usage Stats (Join with users to get plan)
+    // If range has no transactions yet but all-time has revenue, show all-time breakdown in Pie
+    const hasRangeRevenue = Object.values(revenueBreakdownByPlan).some(v => v > 0);
+    const effectiveRevenueByPlan = hasRangeRevenue ? revenueBreakdownByPlan : allTimeRevenueByPlan;
+
+    // AI Usage Stats
     const { data: aiStats } = await supabase
       .from('upsa_ai_queries')
-      .select('user_id, upsa_users(plan)')
-      .gte('created_at', gteDate.toISOString());
+      .select('user_id, created_at, upsa_users(plan)');
 
     const aiUsageByPlan: Record<string, number> = { free: 0, basic: 0, plus: 0, pro: 0 };
+    const allTimeAiUsageByPlan: Record<string, number> = { free: 0, basic: 0, plus: 0, pro: 0 };
+
     (aiStats || []).forEach((q: any) => {
-      const plan = q.upsa_users?.plan?.toLowerCase();
-      if (plan && plan in aiUsageByPlan) {
-        aiUsageByPlan[plan]++;
+      const joinedPlan = Array.isArray(q.upsa_users) ? q.upsa_users[0]?.plan : q.upsa_users?.plan;
+      const plan = (joinedPlan || userPlanMap.get(q.user_id) || 'free').toLowerCase();
+      if (plan in allTimeAiUsageByPlan) {
+        allTimeAiUsageByPlan[plan]++;
+        if (!q.created_at || new Date(q.created_at) >= gteDate) {
+          aiUsageByPlan[plan]++;
+        }
       }
     });
+
+    const hasRangeAiUsage = Object.values(aiUsageByPlan).some(v => v > 0);
+    const effectiveAiUsageByPlan = hasRangeAiUsage ? aiUsageByPlan : allTimeAiUsageByPlan;
 
     const salesChartData = Object.keys(salesByPeriod).sort().map(key => ({
       date: key,
       revenue: salesByPeriod[key]
     }));
 
-    // User Growth by Plan (Signups)
-    const { data: usersForGrowth } = await supabase
-      .from('upsa_users')
-      .select('created_at, plan')
-      .eq('role', 'student')
-      .eq('is_verified', true)
-      .gte('created_at', gteDate.toISOString())
-      .order('created_at');
-
-    const growthByPeriod: Record<string, any> = {};
-    (usersForGrowth || []).forEach((u: any) => {
-      const d = new Date(u.created_at);
-      let periodKey: string;
-      if (range === 'daily' || range === 'weekly') {
-        periodKey = d.toISOString().split('T')[0]; // Daily granularity
-      } else {
-        periodKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`; // Monthly granularity
-      }
-
-      if (!growthByPeriod[periodKey]) {
-        growthByPeriod[periodKey] = { date: periodKey, free: 0, basic: 0, plus: 0, pro: 0 };
-      }
-      const planKey = u.plan.toLowerCase() as 'free' | 'basic' | 'plus' | 'pro';
-      if (planKey in growthByPeriod[periodKey]) {
-        growthByPeriod[periodKey][planKey]++;
-      }
+    // User Growth by Plan (Signups) with continuous buckets and baseline cumulative counts
+    const growthByPeriod: Record<string, { date: string; free: number; basic: number; plus: number; pro: number }> = {};
+    bucketKeys.forEach(k => {
+      growthByPeriod[k] = { date: k, free: 0, basic: 0, plus: 0, pro: 0 };
     });
 
-    const growthChartDataArr = Object.values(growthByPeriod).sort((a: any, b: any) => a.date.localeCompare(b.date));
-
-    // Make it cumulative
     let cumulativeFree = 0;
     let cumulativeBasic = 0;
     let cumulativePlus = 0;
     let cumulativePro = 0;
 
-    const cumulativeGrowthData = growthChartDataArr.map((d: any) => {
+    allVerifiedStudents.forEach((u: any) => {
+      const planKey = (u.plan || 'free').toLowerCase() as 'free' | 'basic' | 'plus' | 'pro';
+      const createdDate = u.created_at ? new Date(u.created_at) : new Date(0);
+
+      if (createdDate < gteDate) {
+        if (planKey === 'free') cumulativeFree++;
+        else if (planKey === 'basic') cumulativeBasic++;
+        else if (planKey === 'plus') cumulativePlus++;
+        else if (planKey === 'pro') cumulativePro++;
+      } else {
+        const periodKey = useDailyBuckets
+          ? createdDate.toISOString().split('T')[0]
+          : `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}-01`;
+
+        if (!growthByPeriod[periodKey]) {
+          growthByPeriod[periodKey] = { date: periodKey, free: 0, basic: 0, plus: 0, pro: 0 };
+        }
+        if (planKey in growthByPeriod[periodKey]) {
+          growthByPeriod[periodKey][planKey]++;
+        }
+      }
+    });
+
+    const growthChartDataArr = Object.values(growthByPeriod).sort((a, b) => a.date.localeCompare(b.date));
+
+    const cumulativeGrowthData = growthChartDataArr.map((d) => {
       cumulativeFree += d.free;
       cumulativeBasic += d.basic;
       cumulativePlus += d.plus;
@@ -1566,8 +1625,8 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       activeSubscribers: activePlans,
       salesChartData,
       growthChartData: cumulativeGrowthData,
-      revenueByPlan: revenueBreakdownByPlan,
-      aiUsageByPlan,
+      revenueByPlan: effectiveRevenueByPlan,
+      aiUsageByPlan: effectiveAiUsageByPlan,
     });
   } catch (err: any) {
 

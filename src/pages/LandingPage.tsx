@@ -430,7 +430,7 @@ const LandingPage = () => {
         {/* Cinematic gradient overlay — adapts to Lumina OLED Dark & Soft Pastel Light */}
         <div
           className={clsx(
-            "absolute inset-0 pointer-events-none transition-colors duration-500",
+            "absolute inset-0 pointer-events-none",
             isDark
               ? "bg-gradient-to-b from-[#131313]/85 via-[#131313]/55 to-[#131313]"
               : "bg-gradient-to-b from-[#eaf1f8]/85 via-[#eaf1f8]/65 to-[#eaf1f8]"

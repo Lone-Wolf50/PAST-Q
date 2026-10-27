@@ -36,7 +36,7 @@ const AdminDashboard = () => {
   });
   const [deletionsSearch, setDeletionsSearch] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [timeRange, setTimeRange] = useState('30d');
+  const [timeRange, setTimeRange] = useState('monthly');
   const [globalAiBlock, setGlobalAiBlock] = useState(false);
   const [globalBanner, setGlobalBanner] = useState('');
   const [globalBannerActive, setGlobalBannerActive] = useState(false);
@@ -156,22 +156,151 @@ const AdminDashboard = () => {
   ], [stats]);
 
   const pieData = useMemo(() => [
-    { name: 'Active Students', value: stats?.totalStudents || 0 },
-    { name: 'Deleted Accounts', value: stats?.totalDeleted || 0 },
+    { name: 'Active Students', value: Number(stats?.totalStudents) || 0, color: '#6366f1' },
+    { name: 'Deleted Accounts', value: Number(stats?.totalDeleted) || 0, color: '#f43f5e' },
   ], [stats]);
+
+  const retentionTotal = useMemo(() => pieData.reduce((acc, item) => acc + item.value, 0), [pieData]);
+  const retentionChartData = useMemo(
+    () => retentionTotal > 0 ? pieData : [{ name: 'No Users Yet', value: 1, color: 'rgba(156, 163, 175, 0.2)', isPlaceholder: true }],
+    [pieData, retentionTotal]
+  );
 
   const revenueByPlanData = useMemo(() => [
-    { name: 'Basic', value: stats?.revenueByPlan?.basic || 0, color: '#10b981' },
-    { name: 'Plus', value: stats?.revenueByPlan?.plus || 0, color: '#6366f1' },
-    { name: 'Pro', value: stats?.revenueByPlan?.pro || 0, color: '#f59e0b' },
+    { name: 'Basic', value: Number(stats?.revenueByPlan?.basic) || 0, color: '#10b981' },
+    { name: 'Plus', value: Number(stats?.revenueByPlan?.plus) || 0, color: '#6366f1' },
+    { name: 'Pro', value: Number(stats?.revenueByPlan?.pro) || 0, color: '#f59e0b' },
   ], [stats]);
 
+  const revenueByPlanTotal = useMemo(() => revenueByPlanData.reduce((acc, item) => acc + item.value, 0), [revenueByPlanData]);
+  const revenuePieChartData = useMemo(
+    () => revenueByPlanTotal > 0 ? revenueByPlanData : [{ name: 'No Revenue Yet', value: 1, color: 'rgba(156, 163, 175, 0.2)', isPlaceholder: true }],
+    [revenueByPlanData, revenueByPlanTotal]
+  );
+
   const aiUsageData = useMemo(() => [
-    { name: 'Free', value: stats?.aiUsageByPlan?.free || 0, color: '#9ca3af' },
-    { name: 'Basic', value: stats?.aiUsageByPlan?.basic || 0, color: '#10b981' },
-    { name: 'Plus', value: stats?.aiUsageByPlan?.plus || 0, color: '#6366f1' },
-    { name: 'Pro', value: stats?.aiUsageByPlan?.pro || 0, color: '#f59e0b' },
+    { name: 'Free', value: Number(stats?.aiUsageByPlan?.free) || 0, color: '#9ca3af' },
+    { name: 'Basic', value: Number(stats?.aiUsageByPlan?.basic) || 0, color: '#10b981' },
+    { name: 'Plus', value: Number(stats?.aiUsageByPlan?.plus) || 0, color: '#6366f1' },
+    { name: 'Pro', value: Number(stats?.aiUsageByPlan?.pro) || 0, color: '#f59e0b' },
   ], [stats]);
+
+  const aiUsageTotal = useMemo(() => aiUsageData.reduce((acc, item) => acc + item.value, 0), [aiUsageData]);
+  const aiUsagePieChartData = useMemo(
+    () => aiUsageTotal > 0 ? aiUsageData : [{ name: 'No Queries Yet', value: 1, color: 'rgba(156, 163, 175, 0.2)', isPlaceholder: true }],
+    [aiUsageData, aiUsageTotal]
+  );
+
+  const defaultTimelineKeys = useMemo(() => {
+    const now = new Date();
+    const keys: string[] = [];
+    if (timeRange === 'daily') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        keys.push(d.toISOString().split('T')[0]);
+      }
+    } else if (timeRange === 'weekly') {
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        keys.push(d.toISOString().split('T')[0]);
+      }
+    } else if (timeRange === 'yearly') {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`);
+      }
+    } else {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        keys.push(d.toISOString().split('T')[0]);
+      }
+    }
+    return keys;
+  }, [timeRange]);
+
+  const normalizeDateKey = useCallback((rawDate: string) => {
+    if (!rawDate) return '';
+    if (/^\d{4}-\d{2}$/.test(rawDate)) return `${rawDate}-01`;
+    return rawDate;
+  }, []);
+
+  const salesChartData = useMemo(() => {
+    const raw: any[] = stats?.salesChartData || [];
+    const map = new Map<string, number>();
+    defaultTimelineKeys.forEach(k => map.set(k, 0));
+    raw.forEach(item => {
+      const k = normalizeDateKey(String(item.date || ''));
+      if (k) map.set(k, (map.get(k) || 0) + (Number(item.revenue) || 0));
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, revenue]) => ({ date, revenue }));
+  }, [stats?.salesChartData, defaultTimelineKeys, normalizeDateKey]);
+
+  const growthChartData = useMemo(() => {
+    const raw: any[] = stats?.growthChartData || [];
+    if (raw.length >= 2) {
+      return raw.map(item => ({
+        date: normalizeDateKey(String(item.date || '')),
+        free: Number(item.free) || 0,
+        basic: Number(item.basic) || 0,
+        plus: Number(item.plus) || 0,
+        pro: Number(item.pro) || 0,
+      }));
+    }
+    const map = new Map<string, { free: number; basic: number; plus: number; pro: number }>();
+    defaultTimelineKeys.forEach(k => map.set(k, { free: 0, basic: 0, plus: 0, pro: 0 }));
+    raw.forEach(item => {
+      const k = normalizeDateKey(String(item.date || ''));
+      if (k) {
+        map.set(k, {
+          free: Number(item.free) || 0,
+          basic: Number(item.basic) || 0,
+          plus: Number(item.plus) || 0,
+          pro: Number(item.pro) || 0,
+        });
+      }
+    });
+    let last = { free: 0, basic: 0, plus: 0, pro: 0 };
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, counts]) => {
+        if (counts.free || counts.basic || counts.plus || counts.pro) {
+          last = counts;
+        }
+        return { date, ...last };
+      });
+  }, [stats?.growthChartData, defaultTimelineKeys, normalizeDateKey]);
+
+  const formatAxisDate = useCallback((val: string) => {
+    if (!val) return '';
+    const normalized = /^\d{4}-\d{2}$/.test(val) ? `${val}-01` : val;
+    const parts = normalized.split('-').map(Number);
+    const d = parts.length === 3 && !parts.some(isNaN)
+      ? new Date(parts[0], parts[1] - 1, parts[2])
+      : new Date(val);
+    if (isNaN(d.getTime())) return String(val);
+    return timeRange === 'yearly'
+      ? d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+      : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }, [timeRange]);
+
+  const formatTooltipDate = useCallback((val: any) => {
+    if (!val) return '';
+    const str = String(val);
+    const normalized = /^\d{4}-\d{2}$/.test(str) ? `${str}-01` : str;
+    const parts = normalized.split('-').map(Number);
+    const d = parts.length === 3 && !parts.some(isNaN)
+      ? new Date(parts[0], parts[1] - 1, parts[2])
+      : new Date(str);
+    if (isNaN(d.getTime())) return str;
+    return timeRange === 'yearly'
+      ? d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+      : d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+  }, [timeRange]);
 
   return (
     <div className="min-h-screen bg-transparent flex font-sans">
@@ -332,51 +461,49 @@ const AdminDashboard = () => {
                 </div>
               </div>
               
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stats?.salesChartData || []}>
+              <div className="h-64 w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                  <BarChart data={salesChartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                     <defs>
                       <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#6366f1" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#818cf8" stopOpacity={0.8}/>
+                        <stop offset="100%" stopColor="#818cf8" stopOpacity={0.75}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} opacity={0.1} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-main)" vertical={false} />
                     <XAxis 
                       dataKey="date" 
-                      stroke="#4b5563" 
+                      stroke="var(--text-muted)" 
                       fontSize={10} 
                       axisLine={false}
                       tickLine={false}
-                      tick={{ fill: '#9ca3af' }}
-                      tickFormatter={(val) => {
-                        const d = new Date(val);
-                        return (timeRange === 'daily' || timeRange === 'weekly')
-                          ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-                          : d.toLocaleDateString(undefined, { month: 'short' });
-                      }}
+                      minTickGap={16}
+                      tick={{ fill: 'var(--text-muted)' }}
+                      tickFormatter={formatAxisDate}
                     />
                     <YAxis 
-                      stroke="#4b5563" 
+                      stroke="var(--text-muted)" 
                       fontSize={10} 
                       axisLine={false}
                       tickLine={false}
-                      tick={{ fill: '#9ca3af' }}
+                      allowDecimals={false}
+                      tick={{ fill: 'var(--text-muted)' }}
                     />
                     <Tooltip 
-                      cursor={{ fill: 'rgba(0, 102, 255, 0.05)' }}
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', fontSize: '11px', fontWeight: 'bold', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
-                      itemStyle={{ color: '#38bdf8' }}
-                      labelFormatter={(val) => new Date(val).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                      cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }}
+                      contentStyle={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border-main)', borderRadius: '1rem', color: 'var(--text-primary)', fontSize: '11px', fontWeight: 'bold', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.2)' }}
+                      itemStyle={{ color: '#6366f1' }}
+                      labelFormatter={formatTooltipDate}
                       formatter={(val: any) => [`GH₵${Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Revenue']}
                     />
                     <Bar 
                       dataKey="revenue" 
+                      fill="url(#barGradient)"
                       radius={[6, 6, 0, 0]}
-                      barSize={timeRange === '30d' ? 12 : 30}
+                      maxBarSize={timeRange === 'monthly' ? 14 : 28}
                     >
-                      {(stats?.salesChartData || []).map((_: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} fillOpacity={0.8} />
+                      {salesChartData.map((_: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} fillOpacity={0.85} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -390,26 +517,33 @@ const AdminDashboard = () => {
                 <h2 className="text-lg font-semibold text-theme-primary">Student Retention</h2>
                 <p className="text-sm text-theme-muted">Active vs Deleted Accounts</p>
               </div>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-64 w-full min-w-0 relative">
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl font-bold text-theme-primary">{retentionTotal.toLocaleString()}</span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-theme-muted">Total Users</span>
+                </div>
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <PieChart>
                     <Pie
-                      data={pieData}
+                      data={retentionChartData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={0}
-                      outerRadius={80}
-                      paddingAngle={0}
+                      innerRadius={54}
+                      outerRadius={82}
+                      paddingAngle={retentionTotal > 0 ? 3 : 0}
                       dataKey="value"
                       stroke="none"
                     >
-                      {pieData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      {retentionChartData.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
-                    />
+                    {retentionTotal > 0 && (
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border-main)', borderRadius: '1rem', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 600, boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.2)' }}
+                        itemStyle={{ color: 'var(--text-primary)' }}
+                      />
+                    )}
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -431,27 +565,34 @@ const AdminDashboard = () => {
                 <h2 className="text-lg font-semibold text-theme-primary">Revenue Breakdown</h2>
                 <p className="text-sm text-theme-muted">GH₵ by Subscription Tier</p>
               </div>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-64 w-full min-w-0 relative">
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-base font-bold text-theme-primary">GH₵{revenueByPlanTotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-theme-muted">Tier Total</span>
+                </div>
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <PieChart>
                     <Pie
-                      data={revenueByPlanData}
+                      data={revenuePieChartData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={0}
-                      outerRadius={80}
-                      paddingAngle={0}
+                      innerRadius={54}
+                      outerRadius={82}
+                      paddingAngle={revenueByPlanTotal > 0 ? 3 : 0}
                       dataKey="value"
                       stroke="none"
                     >
-                      {revenueByPlanData.map((entry, index) => (
+                      {revenuePieChartData.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', border: 'none' }}
-                      formatter={(val: any) => `GH₵${Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    />
+                    {revenueByPlanTotal > 0 && (
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border-main)', borderRadius: '1rem', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 600 }}
+                        itemStyle={{ color: 'var(--text-primary)' }}
+                        formatter={(val: any) => `GH₵${Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      />
+                    )}
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -471,26 +612,33 @@ const AdminDashboard = () => {
                 <h2 className="text-lg font-semibold text-theme-primary">AI Query Distribution</h2>
                 <p className="text-sm text-theme-muted">Total queries by Tier</p>
               </div>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-64 w-full min-w-0 relative">
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl font-bold text-theme-primary">{aiUsageTotal.toLocaleString()}</span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-theme-muted">AI Queries</span>
+                </div>
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <PieChart>
                     <Pie
-                      data={aiUsageData}
+                      data={aiUsagePieChartData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={0}
-                      outerRadius={80}
-                      paddingAngle={0}
+                      innerRadius={54}
+                      outerRadius={82}
+                      paddingAngle={aiUsageTotal > 0 ? 3 : 0}
                       dataKey="value"
                       stroke="none"
                     >
-                      {aiUsageData.map((entry, index) => (
+                      {aiUsagePieChartData.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', border: 'none' }}
-                    />
+                    {aiUsageTotal > 0 && (
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border-main)', borderRadius: '1rem', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 600 }}
+                        itemStyle={{ color: 'var(--text-primary)' }}
+                      />
+                    )}
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -511,46 +659,40 @@ const AdminDashboard = () => {
               <h2 className="text-lg font-semibold text-theme-primary">User Acquisition by Plan</h2>
               <p className="text-sm text-theme-muted">Signups per subscription tier</p>
             </div>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats?.growthChartData || []}>
+            <div className="h-80 w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                <AreaChart data={growthChartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="colorFree" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#9ca3af" stopOpacity={0.1}/><stop offset="95%" stopColor="#9ca3af" stopOpacity={0}/></linearGradient>
-                    <linearGradient id="colorBasic" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
-                    <linearGradient id="colorPlus" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient>
-                    <linearGradient id="colorPro" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorFree" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#9ca3af" stopOpacity={0.2}/><stop offset="95%" stopColor="#9ca3af" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorBasic" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorPlus" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorPro" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} opacity={0.1} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-main)" vertical={false} />
                   <XAxis 
                     dataKey="date" 
-                    stroke="#4b5563" 
+                    stroke="var(--text-muted)" 
                     fontSize={10} 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: '#9ca3af' }}
-                    tickFormatter={(val) => {
-                      const d = new Date(val);
-                      return (timeRange === 'daily' || timeRange === 'weekly')
-                        ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-                        : d.toLocaleDateString(undefined, { month: 'short' });
-                    }}
+                    minTickGap={16}
+                    tick={{ fill: 'var(--text-muted)' }}
+                    tickFormatter={formatAxisDate}
                   />
-                  <YAxis stroke="#4b5563" fontSize={10} axisLine={false} tickLine={false} tick={{ fill: '#9ca3af' }} />
+                  <YAxis stroke="var(--text-muted)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} tick={{ fill: 'var(--text-muted)' }} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '1rem', color: '#fff', fontSize: '11px' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border-main)', borderRadius: '1rem', color: 'var(--text-primary)', fontSize: '11px' }}
                     itemStyle={{ fontWeight: 'bold' }}
+                    labelFormatter={formatTooltipDate}
                   />
                   <Legend verticalAlign="top" height={36} iconType="circle" />
-                  <Area type="monotone" dataKey="free" stroke="#9ca3af" fillOpacity={1} fill="url(#colorFree)" strokeWidth={3} />
-                  <Area type="monotone" dataKey="basic" stroke="#10b981" fillOpacity={1} fill="url(#colorBasic)" strokeWidth={3} />
-                  <Area type="monotone" dataKey="plus" stroke="#6366f1" fillOpacity={1} fill="url(#colorPlus)" strokeWidth={3} />
-                  <Area type="monotone" dataKey="pro" stroke="#f59e0b" fillOpacity={1} fill="url(#colorPro)" strokeWidth={3} />
+                  <Area type="monotone" name="Free" dataKey="free" stroke="#9ca3af" fillOpacity={1} fill="url(#colorFree)" strokeWidth={2.5} />
+                  <Area type="monotone" name="Basic" dataKey="basic" stroke="#10b981" fillOpacity={1} fill="url(#colorBasic)" strokeWidth={2.5} />
+                  <Area type="monotone" name="Plus" dataKey="plus" stroke="#6366f1" fillOpacity={1} fill="url(#colorPlus)" strokeWidth={2.5} />
+                  <Area type="monotone" name="Pro" dataKey="pro" stroke="#f59e0b" fillOpacity={1} fill="url(#colorPro)" strokeWidth={2.5} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(0, 1fr))' }}>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

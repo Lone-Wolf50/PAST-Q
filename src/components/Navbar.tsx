@@ -82,7 +82,7 @@ const Navbar = () => {
       <div className="sticky top-0 z-50 w-full px-3 md:px-6 pt-2.5 pb-1.5">
         <nav
           className={clsx(
-            "w-full flex items-center justify-between px-3.5 md:px-6 py-2.5 md:py-3 max-w-7xl mx-auto rounded-full transition-all duration-300",
+            "w-full flex items-center justify-between px-3.5 md:px-6 py-2.5 md:py-3 max-w-7xl mx-auto rounded-full",
             shellClass
           )}
           style={{
@@ -96,11 +96,11 @@ const Navbar = () => {
             <Link
               to="/"
               className={clsx(
-                "flex items-center gap-2 pl-1 pr-3 py-1 rounded-full transition-all duration-300 group",
+                "flex items-center gap-2 pl-1 pr-3 py-1 rounded-full group",
                 thumbClass
               )}
             >
-              <div className="relative flex items-center justify-center w-7 h-7 rounded-full overflow-hidden border border-indigo-400/30 group-hover:border-indigo-300 transition-all duration-500 shadow-[0_0_12px_rgba(165,180,252,0.35)] bg-theme-surface">
+              <div className="relative flex items-center justify-center w-7 h-7 rounded-full overflow-hidden border border-indigo-400/30 group-hover:border-indigo-300 shadow-[0_0_12px_rgba(165,180,252,0.35)] bg-theme-surface">
                 <img src="/pwa-icon-512.png" alt="PastQ Logo" className="w-full h-full object-cover" />
               </div>
               <span className="text-base md:text-lg font-bold tracking-tight text-theme-primary">
@@ -127,7 +127,7 @@ const Navbar = () => {
                         <span className="icon-wrapper">
                           <Icon
                             className={clsx(
-                              "w-4 h-4 transition-colors duration-300",
+                              "w-4 h-4",
                               isActive
                                 ? (isDark ? "text-[#a5b4fc]" : "text-[#5b9bd5]")
                                 : (isDark ? "text-indigo-200/75" : "text-slate-600")
@@ -151,7 +151,7 @@ const Navbar = () => {
                     <span className="icon-wrapper">
                       <BrainCircuit
                         className={clsx(
-                          "w-4 h-4 transition-colors duration-300",
+                          "w-4 h-4",
                           location.pathname === '/ask-ai'
                             ? (isDark ? "text-[#a5b4fc]" : "text-[#5b9bd5]")
                             : (isDark ? "text-amber-400/90" : "text-indigo-500")
@@ -174,7 +174,7 @@ const Navbar = () => {
                 <Link
                   to="/notifications"
                   className={clsx(
-                    "relative flex items-center justify-center w-11 h-8 rounded-full p-1 transition-all duration-300 hover:scale-105 active:scale-95",
+                    "relative flex items-center justify-center w-11 h-8 rounded-full p-1 transition-transform hover:scale-105 active:scale-95",
                     shellClass
                   )}
                   style={{
@@ -186,13 +186,13 @@ const Navbar = () => {
                 >
                   <div
                     className={clsx(
-                      "flex items-center justify-center w-full h-6 rounded-full transition-all duration-300",
+                      "flex items-center justify-center w-full h-6 rounded-full",
                       location.pathname === '/notifications' ? activeThumbClass : thumbClass
                     )}
                   >
                     <Bell
                       className={clsx(
-                        "w-3.5 h-3.5 transition-colors duration-300",
+                        "w-3.5 h-3.5",
                         location.pathname === '/notifications'
                           ? (isDark ? "text-[#a5b4fc]" : "text-[#5b9bd5]")
                           : (isDark ? "text-indigo-200" : "text-slate-600")
@@ -210,7 +210,7 @@ const Navbar = () => {
                 <Link
                   to="/profile"
                   className={clsx(
-                    "hidden md:flex items-center h-8 rounded-full p-1 transition-all duration-300 hover:scale-[1.02]",
+                    "hidden md:flex items-center h-8 rounded-full p-1 transition-transform hover:scale-[1.02]",
                     shellClass
                   )}
                   style={{
@@ -221,7 +221,7 @@ const Navbar = () => {
                 >
                   <div
                     className={clsx(
-                      "flex items-center gap-2 h-6 pl-1 pr-2.5 rounded-full transition-all duration-300",
+                      "flex items-center gap-2 h-6 pl-1 pr-2.5 rounded-full",
                       location.pathname === '/profile' ? activeThumbClass : thumbClass
                     )}
                   >
@@ -243,7 +243,7 @@ const Navbar = () => {
                 <Link
                   to="/login"
                   className={clsx(
-                    "flex items-center h-8 rounded-full p-1 transition-all duration-300 hover:scale-105",
+                    "flex items-center h-8 rounded-full p-1 transition-transform hover:scale-105",
                     shellClass
                   )}
                   style={{
@@ -259,7 +259,7 @@ const Navbar = () => {
                 <Link
                   to="/register"
                   className={clsx(
-                    "hidden sm:flex items-center h-8 rounded-full p-1 transition-all duration-300 hover:scale-105",
+                    "hidden sm:flex items-center h-8 rounded-full p-1 transition-transform hover:scale-105",
                     shellClass
                   )}
                   style={{
@@ -283,7 +283,7 @@ const Navbar = () => {
         <div className="md:hidden fixed bottom-0 left-0 w-full z-50 px-3 pb-3.5 pt-2 pointer-events-none">
           <div
             className={clsx(
-              "pointer-events-auto relative flex items-center justify-between px-2.5 py-2 rounded-full transition-all duration-300",
+              "pointer-events-auto relative flex items-center justify-between px-2.5 py-2 rounded-full",
               shellClass
             )}
             style={{
@@ -306,20 +306,20 @@ const Navbar = () => {
                     {/* ThemeToggle-style icon pill */}
                     <div
                       className={clsx(
-                        "relative flex items-center justify-center w-12 h-7 rounded-full p-1 transition-all duration-300",
+                        "relative flex items-center justify-center w-12 h-7 rounded-full p-1",
                         shellClass
                       )}
                       style={{ borderWidth: '1px' }}
                     >
                       <div
                         className={clsx(
-                          "flex items-center justify-center w-full h-5 rounded-full transition-all duration-300",
+                          "flex items-center justify-center w-full h-5 rounded-full",
                           isActive ? activeThumbClass : thumbClass
                         )}
                       >
                         <Icon
                           className={clsx(
-                            "w-3.5 h-3.5 shrink-0 transition-colors duration-300",
+                            "w-3.5 h-3.5 shrink-0",
                             isActive
                               ? (isDark ? "text-[#a5b4fc]" : "text-[#5b9bd5]")
                               : (isDark ? "text-indigo-200/75" : "text-slate-600")
@@ -329,7 +329,7 @@ const Navbar = () => {
                     </div>
                     <span
                       className={clsx(
-                        "text-[9px] min-[360px]:text-[10px] font-semibold tracking-tight whitespace-nowrap transition-colors",
+                        "text-[9px] min-[360px]:text-[10px] font-semibold tracking-tight whitespace-nowrap",
                         isActive
                           ? (isDark ? "text-[#a5b4fc]" : "text-[#4a89dc]")
                           : "text-theme-secondary"
@@ -347,7 +347,7 @@ const Navbar = () => {
               <Link
                 to="/ask-ai"
                 className={clsx(
-                  "relative flex items-center justify-center w-14 h-10 rounded-full p-1 transition-all duration-300 hover:scale-105 active:scale-95",
+                  "relative flex items-center justify-center w-14 h-10 rounded-full p-1 transition-transform hover:scale-105 active:scale-95",
                   shellClass
                 )}
                 style={{
@@ -358,13 +358,13 @@ const Navbar = () => {
               >
                 <div
                   className={clsx(
-                    "flex items-center justify-center w-full h-full rounded-full transition-all duration-300",
+                    "flex items-center justify-center w-full h-full rounded-full",
                     location.pathname === '/ask-ai' ? activeThumbClass : thumbClass
                   )}
                 >
                   <BrainCircuit
                     className={clsx(
-                      "w-5 h-5 relative z-10 transition-colors duration-300",
+                      "w-5 h-5 relative z-10",
                       location.pathname === '/ask-ai'
                         ? (isDark ? "text-[#a5b4fc]" : "text-[#5b9bd5]")
                         : (isDark ? "text-amber-400" : "text-indigo-500")
@@ -396,14 +396,14 @@ const Navbar = () => {
                     {/* ThemeToggle-style icon pill */}
                     <div
                       className={clsx(
-                        "relative flex items-center justify-center w-12 h-7 rounded-full p-1 transition-all duration-300",
+                        "relative flex items-center justify-center w-12 h-7 rounded-full p-1",
                         shellClass
                       )}
                       style={{ borderWidth: '1px' }}
                     >
                       <div
                         className={clsx(
-                          "flex items-center justify-center w-full h-5 rounded-full transition-all duration-300",
+                          "flex items-center justify-center w-full h-5 rounded-full",
                           isActive ? activeThumbClass : thumbClass
                         )}
                       >
@@ -414,7 +414,7 @@ const Navbar = () => {
                         ) : (
                           <Icon
                             className={clsx(
-                              "w-3.5 h-3.5 shrink-0 transition-colors duration-300",
+                              "w-3.5 h-3.5 shrink-0",
                               isActive
                                 ? (isDark ? "text-[#a5b4fc]" : "text-[#5b9bd5]")
                                 : (isDark ? "text-indigo-200/75" : "text-slate-600")
@@ -428,7 +428,7 @@ const Navbar = () => {
                     </div>
                     <span
                       className={clsx(
-                        "text-[9px] min-[360px]:text-[10px] font-semibold tracking-tight whitespace-nowrap transition-colors",
+                        "text-[9px] min-[360px]:text-[10px] font-semibold tracking-tight whitespace-nowrap",
                         isActive
                           ? (isDark ? "text-[#a5b4fc]" : "text-[#4a89dc]")
                           : "text-theme-secondary"
