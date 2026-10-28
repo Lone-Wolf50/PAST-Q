@@ -355,6 +355,13 @@ const AskAIPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadedFileText, setUploadedFileText] = useState<string>(() => {
+    try {
+      return localStorage.getItem('pastq_ai_uploaded_file_text') || '';
+    } catch {
+      return '';
+    }
+  });
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintenanceMsg, setMaintenanceMsg] = useState('');
   const [showConfirmReset, setShowConfirmReset] = useState(false);
@@ -590,6 +597,13 @@ const AskAIPage = () => {
   const loadConversation = async (conv: Conversation) => {
     setActiveConversationId(conv.id);
     setSidebarOpen(false);
+    const savedConvFileText = localStorage.getItem(`pastq_conv_file_text_${conv.id}`) || '';
+    setUploadedFileText(savedConvFileText);
+    if (savedConvFileText) {
+      localStorage.setItem('pastq_ai_uploaded_file_text', savedConvFileText);
+    } else {
+      localStorage.removeItem('pastq_ai_uploaded_file_text');
+    }
     try {
       const res = await apiFetch(`/ai/conversations/${conv.id}`, { token: token! });
       const loaded: Message[] = (res.messages ?? []).map((m: any) => ({
@@ -610,9 +624,12 @@ const AskAIPage = () => {
     try {
       await apiFetch(`/ai/conversations/${convId}`, { method: 'DELETE', token: token! });
       setConversations(prev => prev.filter(c => c.id !== convId));
+      localStorage.removeItem(`pastq_conv_file_text_${convId}`);
       if (activeConversationId === convId) {
         setActiveConversationId(null);
         setMessages(INITIAL_MESSAGES);
+        setUploadedFileText('');
+        localStorage.removeItem('pastq_ai_uploaded_file_text');
         // Also clear any paper→conv mapping that pointed to this conversation
         if (activePaperId) {
           localStorage.removeItem(`pastq_paper_conv_${activePaperId}`);
@@ -632,9 +649,11 @@ const AskAIPage = () => {
     setInput('');
     setSelectedFile(null);
     setSelectedFileName('');
+    setUploadedFileText('');
     setSidebarOpen(false);
     localStorage.setItem('pastq_ai_messages', JSON.stringify([freshWelcome]));
     localStorage.removeItem('pastq_ai_active_conv');
+    localStorage.removeItem('pastq_ai_uploaded_file_text');
     // Clear the paper-specific conv mapping so the next visit creates a fresh conversation
     if (activePaperId) {
       localStorage.removeItem(`pastq_paper_conv_${activePaperId}`);
@@ -687,7 +706,15 @@ const AskAIPage = () => {
             const parts = result.split(',');
             if (parts.length === 2) {
               fileDataStr = parts[1];
-              mimeTypeStr = selectedFile.type || 'application/pdf';
+              const ext = selectedFile.name.split('.').pop()?.toLowerCase();
+              mimeTypeStr = selectedFile.type || (
+                ext === 'txt' ? 'text/plain' :
+                ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+                ext === 'doc' ? 'application/msword' :
+                ext === 'pptx' ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' :
+                ext === 'ppt' ? 'application/vnd.ms-powerpoint' :
+                'application/pdf'
+              );
             }
             resolve();
           };
@@ -750,10 +777,19 @@ const AskAIPage = () => {
           history,
           fileData: fileDataStr || undefined,
           fileMimeType: mimeTypeStr || undefined,
+          uploadedFileText: (!fileDataStr && !activePaperId && uploadedFileText) ? uploadedFileText : undefined,
           paperId: activePaperId || undefined,
           conversationId: convId || undefined,
         },
       });
+
+      if (res?.extractedFileText) {
+        setUploadedFileText(res.extractedFileText);
+        localStorage.setItem('pastq_ai_uploaded_file_text', res.extractedFileText);
+        if (convId) {
+          localStorage.setItem(`pastq_conv_file_text_${convId}`, res.extractedFileText);
+        }
+      }
 
       // Backend signals a quota or fallback failure error via structured JSON (not an exception)
       if (res?.error === 'quota_exceeded' || res?.error === 'all_engines_failed') {
@@ -872,8 +908,10 @@ const AskAIPage = () => {
   const confirmReset = () => {
     const freshWelcome = getWelcomeMessage(username);
     setMessages([freshWelcome]);
+    setUploadedFileText('');
     localStorage.setItem('pastq_ai_messages', JSON.stringify([freshWelcome]));
     localStorage.removeItem('pastq_ai_active_conv');
+    localStorage.removeItem('pastq_ai_uploaded_file_text');
     setShowConfirmReset(false);
   };
 
@@ -1359,7 +1397,7 @@ const AskAIPage = () => {
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 className="hidden"
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
               />
 
               <div className="absolute right-2.5 bottom-2 flex items-center gap-1">

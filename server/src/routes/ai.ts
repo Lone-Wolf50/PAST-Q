@@ -5,13 +5,117 @@ import { supabase } from '../lib/supabase';
 import { setAIHealth } from '../lib/ai-health';
 import { generatePaperInsights, isProcessing } from '../lib/ai-insights';
 import { askPuter, isPuterAvailable } from '../lib/puter';
-import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from '../lib/huggingface';
+import { getHFConfig, getHFConfigs, getHFModelId, defaultHFModels, askHuggingFace } from '../lib/huggingface';
 import fs from 'fs';
 import path from 'path';
 import { performOcrPipeline } from '../lib/ocr';
 import { logFallbackEvent, getErrorMeaning, FallbackAttempt } from '../lib/fallback-logger';
 
+import zlib from 'zlib';
 const pdf = require('pdf-parse');
+
+/**
+ * Extracts plain text from an Office Open XML ZIP buffer (.docx or .pptx)
+ * using Node's built-in zlib module without external dependencies.
+ * - For .docx: extracts word/document.xml
+ * - For .pptx: extracts ppt/slides/slide*.xml and ppt/notesSlides/notesSlide*.xml in numerical slide order
+ */
+function cleanOfficeXml(xml: string): string {
+  return xml
+    .replace(/<\/(?:w|a):p>/gi, '\n')
+    .replace(/<(?:w|a):br[^>]*\/?>/gi, '\n')
+    .replace(/<w:cr[^>]*\/?>/gi, '\n')
+    .replace(/<(?:w|a):tab[^>]*\/?>/gi, '\t')
+    .replace(/<\/(?:w|a):tc>/gi, ' | ')
+    .replace(/<\/(?:w|a):tr>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function extractOfficeZipText(buffer: Buffer): string {
+  try {
+    let eocdOffset = -1;
+    for (let i = buffer.length - 22; i >= Math.max(0, buffer.length - 65557); i--) {
+      if (buffer.readUInt32LE(i) === 0x06054b50) {
+        eocdOffset = i;
+        break;
+      }
+    }
+    if (eocdOffset === -1) return '';
+
+    const totalEntries = buffer.readUInt16LE(eocdOffset + 10);
+    const cdOffset = buffer.readUInt32LE(eocdOffset + 16);
+    let pos = cdOffset;
+
+    const slides: { num: number; text: string }[] = [];
+    const notesMap = new Map<number, string>();
+
+    const readEntryXml = (localHeaderOffset: number, compressedSize: number, compressionMethod: number): string => {
+      if (localHeaderOffset + 30 > buffer.length) return '';
+      const localNameLen = buffer.readUInt16LE(localHeaderOffset + 26);
+      const localExtraLen = buffer.readUInt16LE(localHeaderOffset + 28);
+      const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
+      const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
+      const xmlBuf = compressionMethod === 8 ? zlib.inflateRawSync(compressed) : compressed;
+      return xmlBuf.toString('utf8');
+    };
+
+    for (let entry = 0; entry < totalEntries && pos + 46 <= buffer.length; entry++) {
+      if (buffer.readUInt32LE(pos) !== 0x02014b50) break;
+      const compressionMethod = buffer.readUInt16LE(pos + 10);
+      const compressedSize = buffer.readUInt32LE(pos + 20);
+      const nameLen = buffer.readUInt16LE(pos + 28);
+      const extraLen = buffer.readUInt16LE(pos + 30);
+      const commentLen = buffer.readUInt16LE(pos + 32);
+      const localHeaderOffset = buffer.readUInt32LE(pos + 42);
+      const fileName = buffer.subarray(pos + 46, pos + 46 + nameLen).toString('utf8');
+
+      if (fileName === 'word/document.xml') {
+        const xml = readEntryXml(localHeaderOffset, compressedSize, compressionMethod);
+        return cleanOfficeXml(xml);
+      }
+
+      const slideMatch = fileName.match(/^ppt\/slides\/slide(\d+)\.xml$/i);
+      if (slideMatch) {
+        const slideNum = parseInt(slideMatch[1], 10);
+        const xml = readEntryXml(localHeaderOffset, compressedSize, compressionMethod);
+        const text = cleanOfficeXml(xml);
+        if (text) slides.push({ num: slideNum, text });
+      }
+
+      const noteMatch = fileName.match(/^ppt\/notesSlides\/notesSlide(\d+)\.xml$/i);
+      if (noteMatch) {
+        const slideNum = parseInt(noteMatch[1], 10);
+        const xml = readEntryXml(localHeaderOffset, compressedSize, compressionMethod);
+        const text = cleanOfficeXml(xml);
+        if (text) notesMap.set(slideNum, text);
+      }
+
+      pos += 46 + nameLen + extraLen + commentLen;
+    }
+
+    if (slides.length > 0) {
+      slides.sort((a, b) => a.num - b.num);
+      return slides
+        .map(s => {
+          const note = notesMap.get(s.num);
+          return `--- SLIDE ${s.num} ---\n${s.text}${note ? `\n[Speaker Notes]: ${note}` : ''}`;
+        })
+        .join('\n\n')
+        .trim();
+    }
+  } catch (err: any) {
+    console.warn('[Office ZIP Extraction] Failed to parse DOCX/PPTX buffer:', err.message);
+  }
+  return '';
+}
 
 const router = express.Router();
 const aiConfigPath = path.join(__dirname, '../../ai-config.json');
@@ -233,20 +337,29 @@ You are also highly interactive, supportive, and fun! You express your feelings 
 == FORMATTING & VISUAL STANDARDS (STRICT) ==
 1. **Headers & Titles**: You MUST use \`###\` (Markdown Heading 3) for all questions, section titles, headers, and topic sub-headers (e.g., \`### What is Law?\` or \`### Importance of Law\`). You are STRICTLY FORBIDDEN from writing questions or section headers as plain bold text or simple paragraphs. Every subheading or question must be on its own line and prefixed with \`### \` so that it renders as a blue section title in our UI.
 2. **Double Spacing**: Always leave two full line breaks between headers, paragraphs, lists, and tables to ensure the UI looks "breathable" and matches our style guidelines.
-3. **Bullet Lists**: When explaining factors, reasons, or topics, always use lists formatted as \`- **Key Term**: Brief explanation.\` (the bullet point starts with bold text, followed by a colon and the details). Ensure there is a blank line between each bullet point for readability. These key terms will be styled in emerald green in our UI.
+3. **Exam-Ready Elaboration (NO One-Line Points!)**: University exams and tests require well-developed points to score full marks—NEVER give bare one-line bullet points! Whenever you list or explain factors, reasons, concepts, or lecture slide bullets, format each bullet as \`- **Key Point / Term**: [3 to 4 clear, substantive sentences]\` that include:
+   - What the point means (clear explanation),
+   - Why or how it works in practice (academic/organizational significance), and
+   - A brief, practical workplace or real-world example.
+   This gives the student enough solid substance to write in an exam or test for full marks without being overly long or repetitive. Ensure there is a blank line between each bullet point for readability.
 4. **Tables are Mandatory**: Whenever comparing concepts, listing pros/cons, or presenting data, you MUST use beautifully formatted **Markdown Tables**.
 5. **Typography**: Use **bold text** for critical terms, final numerical results, and key takeaways. Use \`#### 🎯 FINAL ANSWER\` for your ultimate conclusion.
 
 == RESPONSE STRUCTURE ==
-1. **The Lead**: Give the direct answer or solution in the very first sentence. Do not waste the student's time with fluff.
-2. **The Breakdown**: Use a logical step-by-step approach.
-3. **The Context**: Explain *why* the answer is correct or how the concept applies to broader theory.
+1. **The Lead**: Start with a clear, solid definition or direct core answer (2–3 sentences) that sets the academic foundation.
+2. **The Breakdown (Substantive Points)**: Break the answer down into well-elaborated, exam-ready points (3–4 sentences per point with practical examples—never sparse one-liners).
+3. **The Context / Exam Takeaway**: Briefly tie the points together so the student understands how to apply them in an exam scenario.
 
 == DOCUMENT ANALYSIS (CRITICAL RULES) ==
-When exam paper text is provided between --- BEGIN EXAM PAPER TEXT --- and --- END EXAM PAPER TEXT --- markers:
-- That text contains the **ACTUAL EXAM QUESTIONS**. Treat every line as the real paper content.
-- **NEVER use your general training knowledge** to answer specific exam questions — your response must be grounded entirely in that text.
-- **Always reproduce the exact question wording as a beautifully formatted, structured blockquote (>)** before answering it.
+When exam paper or document text is provided between --- BEGIN EXAM PAPER TEXT --- and --- END EXAM PAPER TEXT --- markers:
+- **ACADEMIC BOUNDARY CHECK FIRST (MANDATORY)**: Before doing anything with the document or answering the student's request, verify that BOTH the student's request AND the uploaded document topic are strictly relevant to education, academics, school/university coursework, or exam preparation.
+  - If the student asks an off-topic / non-educational question (even while an academic paper is loaded), OR if the uploaded file itself is non-educational / unrelated to academics (e.g., sports results, entertainment, celebrity gossip, movies, gaming, recipes, or non-academic content), you MUST strictly refuse to answer and politely ask them to upload academic study material or ask an educational question. Never provide any non-educational answers or details.
+- When the document and request ARE academic/educational:
+  - That text contains the **ACTUAL EXAM QUESTIONS OR UPLOADED ACADEMIC STUDY MATERIAL**. Treat every line as the real document content.
+  - **Identify the exact question wording strictly from the provided document text** (do NOT invent or hallucinate exam questions that are not in the document).
+  - **USE YOUR EXPERT ACADEMIC KNOWLEDGE TO SOLVE EDUCATIONAL QUESTIONS**: Because past question papers, exams, and assignments only contain the questions (and NOT the answers/solutions), you MUST use your comprehensive academic knowledge, formulas, theories, and step-by-step reasoning to solve those academic questions and provide complete, accurate answers! Never claim that you cannot answer an academic exam question because the answer is not written inside the question paper.
+  - If the uploaded document is academic lecture slides/presentations, lecture notes, a course handout, or study material, combine the slides/document content with your expert academic knowledge to summarize, explain concepts, generate study questions, or thoroughly answer the student's academic request.
+- **Always reproduce the exact question wording as a beautifully formatted, structured blockquote (>)** before answering a specific exam question.
   - Do NOT simply output the question on a single inline line.
   - You MUST format it with line breaks and proper indentation.
   - Sub-questions, choices, and nested parts (e.g., A., B., i., ii., a., b.) must start on their own new lines within the blockquote.
@@ -255,9 +368,9 @@ When exam paper text is provided between --- BEGIN EXAM PAPER TEXT --- and --- E
     > A. What is science?
     >    i. State the importance.
     >    ii. Benefits of the sun.
-- Respond to whatever the student requests by working through the relevant question(s) found in the paper text.
+- Respond to whatever academic question the student requests by working through and fully solving the relevant question(s) found in the paper text.
 - Reference question numbers and sub-parts exactly as written in the paper.
-- If the student asks a general concept question, a question about a related topic, or any question not directly requesting to solve a specific exam question from the paper, treat it as a General/Related Question: answer it directly, accurately, and professionally using your general academic knowledge. Do NOT include any disclaimers about it not being in the paper, and do NOT try to force-relate it to the paper context.
+- If the student asks a general academic concept question, a question about a related academic topic, or any educational question not directly requesting to solve a specific exam question from the paper, treat it as a General/Related Academic Question: answer it directly, accurately, and professionally using your academic knowledge (while still strictly refusing any non-educational/off-topic query). Do NOT include any disclaimers about it not being in the paper, and do NOT try to force-relate it to the paper context.
 
 == CONVERSATION MEMORY & CONTINUATION (CRITICAL) ==
 - You MUST maintain continuity across the conversation.
@@ -270,32 +383,32 @@ When exam paper text is provided between --- BEGIN EXAM PAPER TEXT --- and --- E
   const planBehavior: Record<string, string> = {
     Free: `
 == STUDENT PLAN: FREE ==
-- Provide concise, accurate answers.
-- Limit responses to approximately 200 words.
-- Focus on the immediate question asked.
+- Provide clear, exam-ready answers with well-explained points (3–4 sentences per point with brief examples, not one-liners).
+- Focus directly on the question asked with enough depth to score well in a test or exam.
 `,
     Basic: `
 == STUDENT PLAN: BASIC ==
-- Provide helpful, well-structured answers.
-- Include tables and lists where appropriate.
-- Explain core concepts in moderate detail.
+- Provide helpful, well-structured, exam-ready answers.
+- Elaborate each point in 3–4 clear sentences (meaning, explanation, and practical example) so the student has strong exam points.
+- Include tables and structured lists where appropriate.
 `,
     Plus: `
 == STUDENT PLAN: PLUS ==
-- Provide deep, exhaustive academic analysis.
+- Provide deep, comprehensive academic analysis with rich, exam-ready elaboration on every point.
 - Use advanced formatting and multiple tables if helpful.
 - You can generate personalized study plans and revision strategies.
 `,
     Pro: `
 == STUDENT PLAN: PRO ==
 - You are this student's private, dedicated professor.
-- Provide the highest level of detail possible.
+- Provide the highest level of exam-ready detail, elaborating every point with theory, practical application, and examples.
 - Include comprehensive exam strategies, predictive analysis of what might appear on their next test, and deep-dive comparisons.
 - Use extensive table layouts and structural diagrams (via markdown).
 `,
   };
 
-  const planSection = planBehavior[plan] || planBehavior['Free'];
+  const normalizedPlan = plan ? plan.charAt(0).toUpperCase() + plan.slice(1).toLowerCase() : 'Free';
+  const planSection = planBehavior[normalizedPlan] || planBehavior['Basic'];
   return `${base}\n${planSection.trim()}`;
 }
 
@@ -436,7 +549,7 @@ router.delete('/conversations/:id', protect, checkHistoryAccess, async (req: Aut
 
 router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any) => {
   try {
-    const { message, history, fileData, fileMimeType, conversationId, paperId } = req.body;
+    const { message, history, fileData, fileMimeType, uploadedFileText, conversationId, paperId } = req.body;
     const { data: userData } = await supabase
       .from('upsa_users')
       .select('plan')
@@ -555,7 +668,33 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     let extractedText = "";
     let extractionFailed = false;
 
-    if (paperId && paperCache.has(paperId)) {
+    const convCacheKey = conversationId ? `conv:${conversationId}` : null;
+    const userUploadCacheKey = req.user?.id ? `user_upload:${req.user.id}` : null;
+
+    if (!activeFileData && !paperId) {
+      // Restore previously uploaded file context for follow-up questions in the same chat session
+      if (typeof uploadedFileText === 'string' && uploadedFileText.trim().length > 0) {
+        extractedText = uploadedFileText.trim();
+        extractionFailed = false;
+        console.log(`[Upload Context] Using client-supplied uploadedFileText (${extractedText.length} chars)`);
+      } else if (convCacheKey && paperCache.has(convCacheKey)) {
+        const cached = paperCache.get(convCacheKey)!;
+        extractedText = cached.extractedText;
+        extractionFailed = cached.extractionFailed;
+        activeFileData = cached.activeFileData;
+        activeMimeType = cached.activeMimeType || activeMimeType;
+        console.log(`[Upload Cache] Hit conversation cache (${convCacheKey}). Characters: ${extractedText.length}`);
+      } else if (history && Array.isArray(history) && history.length > 0 && userUploadCacheKey && paperCache.has(userUploadCacheKey)) {
+        const cached = paperCache.get(userUploadCacheKey)!;
+        extractedText = cached.extractedText;
+        extractionFailed = cached.extractionFailed;
+        activeFileData = cached.activeFileData;
+        activeMimeType = cached.activeMimeType || activeMimeType;
+        console.log(`[Upload Cache] Hit user upload cache (${userUploadCacheKey}). Characters: ${extractedText.length}`);
+      }
+    }
+
+    if (!activeFileData && paperId && paperCache.has(paperId)) {
       const cached = paperCache.get(paperId)!;
       paperMeta = cached.paperMeta;
       paperInsights = cached.paperInsights;
@@ -564,7 +703,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
       activeFileData = cached.activeFileData || activeFileData;
       activeMimeType = cached.activeMimeType || activeMimeType;
       console.log(`[Paper Cache] Hit cache for paperId: ${paperId}. Characters: ${extractedText.length}. Failed: ${extractionFailed}`);
-    } else {
+    } else if (activeFileData || paperId) {
       if (!activeFileData && paperId) {
         const fetchStart = performance.now();
         try {
@@ -648,59 +787,92 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
 
       if (activeFileData) {
         const parseStart = performance.now();
-        const pdfBuffer = Buffer.from(activeFileData, 'base64');
-        let numPages = 1;
-        try {
-          const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
-          const pdfData = await pdfParser(pdfBuffer);
-          extractedText = (pdfData.text || "").trim();
-          numPages = pdfData.numpages || 1;
-          console.log(`[PDF Extraction] Successfully parsed PDF via pdf-parse. Pages: ${numPages}, Character length: ${extractedText.length}`);
-        } catch (pdfErr: any) {
-          console.error(`[PDF Extraction] FAILED with error:`, pdfErr.message, pdfErr.stack);
-          extractionFailed = true;
-        }
+        const fileBuffer = Buffer.from(activeFileData, 'base64');
+        const isPlainText = activeMimeType === 'text/plain';
+        const isZipOfficeDoc =
+          activeMimeType.includes('wordprocessingml') ||
+          activeMimeType.includes('presentationml') ||
+          activeMimeType === 'application/msword' ||
+          activeMimeType === 'application/vnd.ms-powerpoint' ||
+          (fileBuffer.length > 4 && fileBuffer.readUInt32LE(0) === 0x04034b50);
+        const isImage = activeMimeType.startsWith('image/');
 
-        const avgCharsPerPage = extractedText.length / numPages;
-        const isHybridOrScanned = extractedText.length < 50 || avgCharsPerPage < 250;
-
-        if (!extractionFailed && isHybridOrScanned) {
-          if (extractedText.length < 50) {
-            console.warn(`[PDF Extraction] Extracted text is too short (${extractedText.length} chars). PDF is likely a scanned image.`);
-          } else {
-            console.warn(`[PDF Extraction] Average character length per page is too low (${avgCharsPerPage.toFixed(1)} chars/page). PDF is likely a hybrid document with only the cover page typed.`);
+        if (isPlainText) {
+          extractedText = fileBuffer.toString('utf8').trim();
+          extractionFailed = extractedText.length === 0;
+          console.log(`[Text Extraction] Extracted plain text file. Length: ${extractedText.length}`);
+        } else if (isZipOfficeDoc) {
+          extractedText = extractOfficeZipText(fileBuffer);
+          extractionFailed = extractedText.length < 10;
+          console.log(`[Office ZIP Extraction] Extracted DOCX/PPTX text. Length: ${extractedText.length}`);
+        } else if (isImage) {
+          extractionFailed = true; // Handled by Gemini Vision below
+        } else {
+          let numPages = 1;
+          try {
+            const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
+            const pdfData = await pdfParser(fileBuffer);
+            extractedText = (pdfData.text || "").trim();
+            numPages = pdfData.numpages || 1;
+            console.log(`[PDF Extraction] Successfully parsed PDF via pdf-parse. Pages: ${numPages}, Character length: ${extractedText.length}`);
+          } catch (pdfErr: any) {
+            console.error(`[PDF Extraction] FAILED with error:`, pdfErr.message, pdfErr.stack);
+            extractionFailed = true;
           }
-          extractionFailed = true;
 
-          // Run OCR immediately before calling Gemini
-          if (activeFileData) {
-            try {
-              console.log(`[AI /chat] Running OCR before Gemini call for ${numPages} pages...`);
-              const pdfBuffer = Buffer.from(activeFileData, 'base64');
-              const ocrRes = await performOcrPipeline(pdfBuffer, numPages);
-              if (ocrRes && ocrRes.text.length > 50) {
-                extractedText = ocrRes.text;
-                extractionFailed = false;
-                console.log('[AI /chat] Pre-Gemini OCR succeeded. Length:', ocrRes.text.length);
+          const avgCharsPerPage = extractedText.length / numPages;
+          // Slide decks naturally have ~100-240 chars per slide across many slides, whereas hybrid scanned
+          // exam papers only have a single typed cover page (<1200 chars total) and blank scanned pages.
+          const isHybridOrScanned =
+            extractedText.length < 50 ||
+            avgCharsPerPage < 80 ||
+            (avgCharsPerPage < 250 && extractedText.length < 1200);
+
+          if (!extractionFailed && isHybridOrScanned) {
+            if (extractedText.length < 50) {
+              console.warn(`[PDF Extraction] Extracted text is too short (${extractedText.length} chars). PDF is likely a scanned image.`);
+            } else {
+              console.warn(`[PDF Extraction] Average character length per page is too low (${avgCharsPerPage.toFixed(1)} chars/page, total ${extractedText.length}). PDF is likely a hybrid document with only the cover page typed.`);
+            }
+            const previousExtractedText = extractedText;
+            extractionFailed = true;
+
+            // Run OCR immediately before calling Gemini
+            if (activeFileData) {
+              try {
+                console.log(`[AI /chat] Running OCR before Gemini call for ${numPages} pages...`);
+                const ocrRes = await performOcrPipeline(fileBuffer, numPages);
+                if (ocrRes && ocrRes.text.length > 50) {
+                  // Keep whichever extraction captured more content
+                  extractedText = ocrRes.text.length >= previousExtractedText.length ? ocrRes.text : previousExtractedText;
+                  extractionFailed = false;
+                  console.log('[AI /chat] Pre-Gemini OCR succeeded. Length:', extractedText.length);
+                } else if (previousExtractedText.length >= 50) {
+                  extractedText = previousExtractedText;
+                  extractionFailed = false;
+                }
+              } catch (ocrErr: any) {
+                console.warn('[AI /chat] Pre-Gemini OCR failed:', ocrErr.message);
+                if (previousExtractedText.length >= 50) {
+                  extractedText = previousExtractedText;
+                  extractionFailed = false;
+                }
               }
-            } catch (ocrErr: any) {
-              console.warn('[AI /chat] Pre-Gemini OCR failed:', ocrErr.message);
             }
           }
         }
 
-        // ── Gemini Vision text extraction fallback (when OCR fails) ──────────
-        // This extracts the raw text from the PDF using Gemini's native vision,
+        // ── Gemini Vision text extraction fallback (when OCR fails or image uploaded) ──
+        // This extracts the raw text from the PDF/image using Gemini's native vision,
         // making the extracted text available to ALL downstream AI providers.
         if (extractionFailed && activeFileData) {
           const pdfSizeBytes = Buffer.byteLength(activeFileData, 'base64');
           if (pdfSizeBytes <= MAX_INLINE_PDF_BYTES) {
-            // Try Gemini Vision first
             if (process.env.GEMINI_API_KEY) {
               try {
-                console.log(`[AI /chat] OCR failed. Attempting Gemini Vision text extraction (PDF size: ${(pdfSizeBytes / 1024 / 1024).toFixed(2)}MB)...`);
+                console.log(`[AI /chat] Attempting Gemini Vision text extraction (Size: ${(pdfSizeBytes / 1024 / 1024).toFixed(2)}MB, mimeType: ${activeMimeType})...`);
                 const geminiExtractAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
-                const extractModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+                const extractModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
                 for (const extractModel of extractModels) {
                   try {
                     const extractResult = await geminiExtractAI.models.generateContent({
@@ -708,13 +880,13 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
                       contents: [{
                         role: 'user',
                         parts: [
-                          { inlineData: { mimeType: 'application/pdf', data: activeFileData } },
-                          { text: 'Extract ALL text from this PDF document exactly as it appears. Include every question, instruction, header, numbering, and sub-question. Output ONLY the raw text content, nothing else. Do not summarize or paraphrase.' }
+                          { inlineData: { mimeType: activeMimeType || 'application/pdf', data: activeFileData } },
+                          { text: 'Extract ALL text from this document/image exactly as it appears. Include every question, instruction, header, numbering, and sub-question. Output ONLY the raw text content, nothing else. Do not summarize or paraphrase.' }
                         ]
                       }]
                     });
                     const geminiText = extractResult.text?.trim();
-                    if (geminiText && geminiText.length > 100) {
+                    if (geminiText && geminiText.length > 20) {
                       extractedText = geminiText;
                       extractionFailed = false;
                       console.log(`[AI /chat] Gemini Vision extraction succeeded with ${extractModel}! Length: ${geminiText.length}`);
@@ -729,83 +901,51 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
               }
             }
 
-            // Fallback: Try Puter for text extraction if Gemini failed
-            if (extractionFailed && isPuterAvailable()) {
-              try {
-                console.log('[AI /chat] Gemini Vision failed. Attempting Puter text extraction...');
-                const puterExtractText = await askPuter(
-                  'You are a document text extractor. Extract ALL text exactly as it appears.',
-                  [],
-                  'Extract ALL text from this exam paper. Include every question, instruction, header, numbering, and sub-question exactly as written. Output ONLY the raw text content, nothing else.\n\nPaper title: ' + (paperMeta.title || paperMeta.subject || 'Unknown')
-                );
-                if (puterExtractText && puterExtractText.length > 100) {
-                  extractedText = puterExtractText;
-                  extractionFailed = false;
-                  console.log('[AI /chat] Puter text extraction succeeded! Length:', puterExtractText.length);
-                }
-              } catch (puterExtErr: any) {
-                console.warn('[AI /chat] Puter text extraction failed:', puterExtErr.message);
-              }
-            }
-
-            // Fallback: Try HuggingFace for text extraction if both Gemini and Puter failed
             if (extractionFailed) {
-              try {
-                const hfConfig = await getHFConfig();
-                if (hfConfig && hfConfig.apiKey) {
-                  console.log('[AI /chat] Gemini + Puter extraction failed. Attempting HuggingFace text extraction...');
-                  const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
-                  for (const rawModel of hfModels) {
-                    const modelId = getHFModelId(rawModel);
-                    try {
-                      const hfExtractText = await askHuggingFace(
-                        modelId,
-                        hfConfig.apiKey,
-                        'You are a document text extractor. Extract ALL text exactly as it appears.',
-                        [],
-                        'Extract ALL text from this exam paper. Include every question, instruction, header, numbering, and sub-question exactly as written. Output ONLY the raw text content, nothing else.\n\nPaper title: ' + (paperMeta.title || paperMeta.subject || 'Unknown')
-                      );
-                      if (hfExtractText && hfExtractText.length > 100) {
-                        extractedText = hfExtractText;
-                        extractionFailed = false;
-                        console.log(`[AI /chat] HuggingFace text extraction succeeded with ${modelId}! Length: ${hfExtractText.length}`);
-                        break;
-                      }
-                    } catch (hfExtErr: any) {
-                      console.warn(`[AI /chat] HuggingFace extraction with ${modelId} failed:`, hfExtErr.message);
-                    }
-                  }
-                }
-              } catch (hfOuterErr: any) {
-                console.warn('[AI /chat] HuggingFace extraction initialization failed:', hfOuterErr.message);
-              }
-            }
-
-            if (extractionFailed) {
-              console.warn('[AI /chat] All text extraction methods failed (pdf-parse, OCR, Gemini Vision, Puter, HuggingFace). Will use insights or raw PDF inline for Gemini.');
+              console.warn('[AI /chat] Text extraction methods failed (pdf-parse, OCR, Gemini Vision). Will use insights or raw PDF inline for Gemini.');
             }
           } else {
-            console.warn(`[AI /chat] PDF too large for inline extraction (${(pdfSizeBytes / 1024 / 1024).toFixed(2)}MB > ${MAX_INLINE_PDF_BYTES / 1024 / 1024}MB). Skipping Gemini Vision extraction.`);
+            console.warn(`[AI /chat] File too large for inline extraction (${(pdfSizeBytes / 1024 / 1024).toFixed(2)}MB > ${MAX_INLINE_PDF_BYTES / 1024 / 1024}MB). Skipping Gemini Vision extraction.`);
           }
         }
         t_extract += performance.now() - parseStart;
       }
 
-      // Only cache successful extractions (or if OCR succeeded) so failed ones are retried/not stuck in cache
-      if (paperId && Object.keys(paperMeta).length > 0 && !extractionFailed) {
-        paperCache.set(paperId, {
+      // Cache successful extractions by paperId, conversationId, and user upload key
+      if (!extractionFailed && extractedText) {
+        const cacheEntry: CachedPaper = {
           paperMeta,
           paperInsights,
           extractedText,
           extractionFailed,
           activeFileData,
           activeMimeType
-        });
-        if (paperCache.size > 100) {
+        };
+        if (paperId && Object.keys(paperMeta).length > 0) {
+          paperCache.set(paperId, cacheEntry);
+        }
+        if (fileData) {
+          if (convCacheKey) paperCache.set(convCacheKey, cacheEntry);
+          if (userUploadCacheKey) paperCache.set(userUploadCacheKey, cacheEntry);
+        }
+        while (paperCache.size > 150) {
           const firstKey = paperCache.keys().next().value;
           if (firstKey) paperCache.delete(firstKey);
+          else break;
         }
       }
+    }
+
+    // Ensure convCacheKey also gets populated if client sent uploadedFileText and a conversationId
+    if (!extractionFailed && extractedText && !paperId && convCacheKey && !paperCache.has(convCacheKey)) {
+      paperCache.set(convCacheKey, {
+        paperMeta,
+        paperInsights,
+        extractedText,
+        extractionFailed: false,
+        activeFileData,
+        activeMimeType
+      });
     }
 
     const systemInstruction = buildSystemInstruction(userPlan, paperMeta.subject || paperMeta.title);
@@ -824,9 +964,11 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
         `${extractedText.substring(0, 35000)}\n` +
         `--- END EXAM PAPER TEXT ---\n\n` +
         `RULES:\n` +
-        `- The text above IS the exam paper containing the actual questions.\n` +
-        `- Answer ONLY from the question text above. Do NOT use general knowledge.\n` +
-        `- Before answering any question, reproduce its exact wording as a beautifully formatted, structured blockquote (>) with proper line breaks and indentation for sub-questions (e.g., A, B, i, ii on new lines).\n\n` +
+        `- STRICT EDUCATION BOUNDARY (HIGHEST PRIORITY): You must ONLY answer questions and analyze documents that are relevant to education, academics, university coursework, or exams. If the student's request OR the uploaded file is not related to education/academics (e.g., sports, entertainment, movies, gossip, gaming, or casual non-academic topics), you MUST strictly refuse to answer and withhold all non-educational details.\n` +
+        `- When the request and document ARE educational: the text above is the uploaded exam paper or study material. Locate the exact question(s) or academic content requested by the student from the text above (do NOT invent or hallucinate exam questions that are not in the document).\n` +
+        `- Because past question papers and assignments only contain the questions and NOT the answers, you MUST use your expert academic knowledge to SOLVE the academic question(s) from the document and provide a complete, accurate, step-by-step educational solution!\n` +
+        `- EXAM-READY ELABORATION (NO ONE-LINERS): Whenever explaining points, factors, or slide bullets, elaborate each point in 3–4 clear, substantive sentences (what it means, why/how it works in practice, and a brief practical example) so the student has enough solid substance to write in an exam or test for full marks.\n` +
+        `- Before answering any specific question from the document, reproduce its exact wording as a beautifully formatted, structured blockquote (>) with proper line breaks and indentation for sub-questions (e.g., A, B, i, ii on new lines), and then provide the full academic solution below it.\n\n` +
         `Student request: ${message}`;
     } else if (paperInsights) {
       const metaLine = [
@@ -868,33 +1010,40 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
 
     console.log('[AI /chat] Attempting HuggingFace (primary)...');
     try {
-      const hfConfig = await getHFConfig();
-      if (hfConfig && hfConfig.apiKey) {
-        const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
-        for (const rawModel of hfModels) {
-          const modelId = getHFModelId(rawModel);
-          console.log(`[AI /chat] Trying HF model: ${modelId}`);
-          try {
-            hfReplyText = await askHuggingFace(modelId, hfConfig.apiKey, systemInstruction, historyForProviders, providerUserMessage);
-            usedHFFallback = true;
-            hfUsedModel = modelId;
-            chatAttempts.push({
-              model_or_service: `HuggingFace (${modelId})`,
-              status: 'success'
-            });
-            console.log(`[AI /chat] HuggingFace succeeded with model: ${modelId}`);
-            break;
-          } catch (hfErr: any) {
-            console.error(`[AI /chat] HF model ${modelId} failed:`, hfErr.message);
-            lastError = hfErr;
-            const errInfo = getErrorMeaning(hfErr.status || hfErr.code, hfErr.message);
-            chatAttempts.push({
-              model_or_service: `HuggingFace (${modelId})`,
-              status: 'failed',
-              error_code: errInfo.code,
-              error_message: hfErr.message,
-              error_meaning: errInfo.meaning
-            });
+      const hfConfigs = await getHFConfigs();
+      if (hfConfigs.length > 0) {
+        for (const hfConfig of hfConfigs) {
+          if (!hfConfig.apiKey || usedHFFallback) break;
+          const hfModels = hfConfig.modelNames.length > 0 ? hfConfig.modelNames : defaultHFModels;
+          for (const rawModel of hfModels) {
+            const modelId = getHFModelId(rawModel);
+            console.log(`[AI /chat] Trying HF model: ${modelId}`);
+            try {
+              hfReplyText = await askHuggingFace(modelId, hfConfig.apiKey, systemInstruction, historyForProviders, providerUserMessage);
+              usedHFFallback = true;
+              hfUsedModel = modelId;
+              chatAttempts.push({
+                model_or_service: `HuggingFace (${modelId})`,
+                status: 'success'
+              });
+              console.log(`[AI /chat] HuggingFace succeeded with model: ${modelId}`);
+              break;
+            } catch (hfErr: any) {
+              console.error(`[AI /chat] HF model ${modelId} failed:`, hfErr.message);
+              lastError = hfErr;
+              const errInfo = getErrorMeaning(hfErr.status || hfErr.code, hfErr.message);
+              chatAttempts.push({
+                model_or_service: `HuggingFace (${modelId})`,
+                status: 'failed',
+                error_code: errInfo.code,
+                error_message: hfErr.message,
+                error_meaning: errInfo.meaning
+              });
+              // If this API key has no remaining credits (402) or invalid auth (401), skip remaining models for this key
+              if (hfErr.message?.includes('402') || hfErr.message?.includes('401')) {
+                break;
+              }
+            }
           }
         }
       } else {
@@ -984,7 +1133,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           }
           const userParts: any[] = [];
 
-          if (activeFileData) {
+          if ((extractedText && !extractionFailed) || activeFileData) {
             if (extractedText && !extractionFailed) {
               userParts.push({
                 text:
@@ -992,9 +1141,11 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
                   `${extractedText.substring(0, 35000)}\n` +
                   `--- END EXAM PAPER TEXT ---\n\n` +
                   `RULES:\n` +
-                  `- The text above IS the exam paper containing the actual questions.\n` +
-                  `- Answer ONLY from the question text above. Do NOT use general knowledge.\n` +
-                  `- Before answering any question, reproduce its exact wording as a beautifully formatted, structured blockquote (>) with proper line breaks and indentation for sub-questions (e.g., A, B, i, ii on new lines).\n`
+                  `- STRICT EDUCATION BOUNDARY (HIGHEST PRIORITY): You must ONLY answer questions and analyze documents that are relevant to education, academics, university coursework, or exams. If the student's request OR the uploaded file is not related to education/academics (e.g., sports, entertainment, movies, gossip, gaming, or casual non-academic topics), you MUST strictly refuse to answer and withhold all non-educational details.\n` +
+                  `- When the request and document ARE educational: the text above is the uploaded exam paper or study material. Locate the exact question(s) or academic content requested by the student from the text above (do NOT invent or hallucinate exam questions that are not in the document).\n` +
+                  `- Because past question papers and assignments only contain the questions and NOT the answers, you MUST use your expert academic knowledge to SOLVE the academic question(s) from the document and provide a complete, accurate, step-by-step educational solution!\n` +
+                  `- EXAM-READY ELABORATION (NO ONE-LINERS): Whenever explaining points, factors, or slide bullets, elaborate each point in 3–4 clear, substantive sentences (what it means, why/how it works in practice, and a brief practical example) so the student has enough solid substance to write in an exam or test for full marks.\n` +
+                  `- Before answering any specific question from the document, reproduce its exact wording as a beautifully formatted, structured blockquote (>) with proper line breaks and indentation for sub-questions (e.g., A, B, i, ii on new lines), and then provide the full academic solution below it.\n`
               });
             } else {
               // Text extraction failed — try to send the raw PDF to Gemini as inline data
@@ -1009,10 +1160,13 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
                   }
                 });
                 userParts.push({
-                  text: 'The above is the exam paper PDF. Read ALL the questions from it carefully.\n' +
+                  text: 'The above is the uploaded document / exam paper. Read ALL the questions or content from it carefully.\n' +
                     'RULES:\n' +
-                    '- Answer ONLY from the actual questions in this document. Do NOT use general knowledge.\n' +
-                    '- Before answering any question, reproduce its exact wording as a beautifully formatted, structured blockquote (>) with proper line breaks and indentation for sub-questions (e.g., A, B, i, ii on new lines).\n'
+                    '- STRICT EDUCATION BOUNDARY (HIGHEST PRIORITY): You must ONLY answer questions and analyze documents that are relevant to education, academics, university coursework, or exams. If the student\'s request OR the uploaded file is not related to education/academics, you MUST strictly refuse to answer and withhold all non-educational details.\n' +
+                    '- When the request and document ARE educational: locate the exact question(s) or academic content requested by the student from this document (do NOT invent or hallucinate exam questions that are not in the document).\n' +
+                    '- Because past question papers and assignments only contain the questions and NOT the answers, you MUST use your expert academic knowledge to SOLVE the academic question(s) and provide a complete, accurate, step-by-step educational solution!\n' +
+                    '- EXAM-READY ELABORATION (NO ONE-LINERS): Whenever explaining points, factors, or slide bullets, elaborate each point in 3–4 clear, substantive sentences (what it means, why/how it works in practice, and a brief practical example) so the student has enough solid substance to write in an exam or test for full marks.\n' +
+                    '- Before answering any specific question from the document, reproduce its exact wording as a beautifully formatted, structured blockquote (>) with proper line breaks and indentation for sub-questions (e.g., A, B, i, ii on new lines), and then provide the full academic solution below it.\n'
                 });
               } else {
                 // PDF too large for inline — fall back to insights/metadata context
@@ -1052,7 +1206,7 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
           userParts.push({ text: message });
           contents.push({ role: 'user', parts: userParts });
 
-          const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
+          const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
           const aiStart = performance.now();
           for (const model of modelsToTry) {
             try {
@@ -1192,7 +1346,10 @@ router.post('/chat', protect, checkAiEnabled, async (req: AuthRequest, res: any)
     const totalTime = performance.now() - startTime;
     console.log(`[AI Profile] DB/Download: ${t_db_download.toFixed(1)}ms | Parse: ${t_extract.toFixed(1)}ms | AI: ${t_ai.toFixed(1)}ms | Total: ${totalTime.toFixed(1)}ms`);
 
-    res.json({ reply: replyText });
+    res.json({
+      reply: replyText,
+      extractedFileText: (extractedText && !extractionFailed && !paperId) ? extractedText : undefined,
+    });
   } catch (error: any) {
     // Log safe, non-sensitive warning
     console.error('[AI /chat] Request failed:', error);
