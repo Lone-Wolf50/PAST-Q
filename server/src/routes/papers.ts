@@ -387,6 +387,40 @@ router.post('/:id/view', protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ── STREAM PAPER PDF BINARY (CORS-Safe Proxy for Mobile/Canvas PDF Viewer) ───
+router.get('/:id/stream', protect, async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const { data: paper, error: paperError } = await supabase
+      .from('upsa_papers')
+      .select('file_url')
+      .eq('id', id)
+      .single();
+
+    if (paperError || !paper || !paper.file_url) {
+      res.status(404).json({ error: 'Paper not found.' });
+      return;
+    }
+
+    const fileResponse = await fetch(paper.file_url);
+    if (!fileResponse.ok) {
+      res.status(502).json({ error: 'Failed to retrieve the PDF file from storage.' });
+      return;
+    }
+
+    const arrayBuffer = await fileResponse.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${id}.pdf"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to stream paper PDF.' });
+  }
+});
+
 
 
 // ── GET ALL SUBJECTS (authenticated, includes paper count) ────────────────────

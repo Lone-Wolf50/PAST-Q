@@ -11,6 +11,7 @@ import { apiFetch, apiDownload } from '../lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import ReportModal from '../components/ReportModal';
+import PdfPaperViewer from '../components/PdfPaperViewer';
 import { AlertModal } from '../components/ui/AlertModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 
@@ -227,7 +228,7 @@ const PaperViewerPage = () => {
   const subjectCode = paper.upsa_subjects?.code || paper.code;
 
   return (
-    <div className="w-full flex-grow flex flex-col px-4 md:px-8 max-w-7xl mx-auto py-6 h-[calc(100vh-72px)] overflow-hidden">
+    <div className="w-full flex-grow flex flex-col px-4 md:px-8 max-w-7xl mx-auto py-4 md:py-6 lg:h-[calc(100vh-72px)] lg:overflow-hidden">
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 shrink-0">
@@ -321,15 +322,16 @@ const PaperViewerPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0 overflow-y-auto lg:overflow-visible pb-10 lg:pb-0 scrollbar-hide">
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 lg:min-h-0 pb-6 lg:pb-0">
 
         {/* ── Document Viewer ─────────────────────────────────────────────── */}
-        <div className="flex-[1.5] flex flex-col min-h-[400px] lg:min-h-0 bg-theme-surface border border-theme-border rounded-[2rem] overflow-hidden shadow-xl relative group">
+        <div className="flex-[1.5] flex flex-col h-[75svh] min-h-[480px] lg:h-auto lg:min-h-0 bg-theme-surface border border-theme-border rounded-[2rem] overflow-hidden shadow-xl relative group">
           {viewUrl ? (
-            <iframe
-              src={`${viewUrl}#toolbar=0`}
-              title={`Document viewer for ${subjectName}`}
-              className="w-full h-full bg-white"
+            <PdfPaperViewer
+              paperId={id!}
+              viewUrl={viewUrl}
+              title={subjectName || paper.title || 'Past Paper'}
+              token={token || undefined}
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-6 p-12 text-center bg-theme-surface-2/30">
@@ -350,7 +352,7 @@ const PaperViewerPage = () => {
 
           {/* Answer Key Badge Overlay */}
           {paper.has_answers && (
-            <div className="absolute bottom-4 left-4 right-4 bg-emerald-500/90 backdrop-blur-md text-white px-4 py-3 rounded-2xl flex items-center gap-3 shadow-lg border border-emerald-400/20">
+            <div className="absolute bottom-4 left-4 right-4 bg-emerald-500/90 backdrop-blur-md text-white px-4 py-3 rounded-2xl flex items-center gap-3 shadow-lg border border-emerald-400/20 pointer-events-none z-10">
               <AlertCircle size={18} className="shrink-0" />
               <p className="text-[11px] font-bold leading-tight">Official Answer Key Attached • Verified Content</p>
             </div>

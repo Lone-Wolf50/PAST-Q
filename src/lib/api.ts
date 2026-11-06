@@ -216,3 +216,42 @@ export async function apiDownload(path: string, token: string): Promise<Blob> {
 
   return response.blob();
 }
+
+/**
+ * Fetches raw PDF bytes for inline canvas rendering.
+ * 1) Tries the CORS-safe backend stream proxy (/papers/:id/stream).
+ * 2) Falls back to fetching fallbackUrl directly if the proxy route is unavailable.
+ */
+export async function apiStreamPaper(
+  paperId: string,
+  fallbackUrl: string,
+  token?: string
+): Promise<ArrayBuffer> {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  try {
+    const proxyRes = await fetch(`${BASE_URL}/papers/${encodeURIComponent(paperId)}/stream`, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    });
+
+    if (proxyRes.ok) {
+      const contentType = proxyRes.headers.get('content-type') || '';
+      if (contentType.includes('application/pdf') || contentType.includes('octet-stream')) {
+        return await proxyRes.arrayBuffer();
+      }
+    }
+  } catch {
+    // Fall through to direct URL fetch
+  }
+
+  const directRes = await fetch(fallbackUrl);
+  if (!directRes.ok) {
+    throw new Error(`Failed to fetch PDF (${directRes.status})`);
+  }
+  return await directRes.arrayBuffer();
+}
