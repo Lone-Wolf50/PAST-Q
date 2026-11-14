@@ -82,13 +82,20 @@ interface StatPillProps {
   label: string;
   value: string | number;
   color: string;
+  to?: string;
 }
-const StatPill = ({ label, value, color }: StatPillProps) => (
-  <div className="flex flex-col items-center justify-center px-6 py-5 bg-theme-surface/40 border border-theme-border/40 rounded-2xl text-center">
-    <span className={clsx("text-3xl font-black tracking-tight leading-none mb-1", color)}>{value}</span>
-    <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">{label}</span>
-  </div>
-);
+const StatPill = ({ label, value, color, to }: StatPillProps) => {
+  const content = (
+    <div className={clsx(
+      "flex flex-col items-center justify-center px-6 py-5 bg-theme-surface/40 border border-theme-border/40 rounded-2xl text-center",
+      to && "hover:border-indigo-500/40 hover:bg-indigo-500/5 transition-all cursor-pointer"
+    )}>
+      <span className={clsx("text-3xl font-black tracking-tight leading-none mb-1", color)}>{value}</span>
+      <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">{label}</span>
+    </div>
+  );
+  return to ? <Link to={to}>{content}</Link> : content;
+};
 
 const IconMap: Record<string, React.ComponentType<any>> = {
   Flame, Award, Zap, Eye, Crown, Timer, CheckCircle2, Target, ShieldAlert, CalendarDays, Shield, GraduationCap, Compass, Waves, Trophy, Sparkles, Bug, Moon, Sun, Ghost, Medal, Gem, Activity, BookOpen, Lock
@@ -345,6 +352,7 @@ const ProfilePage = () => {
             label="Global Rank"
             value={quizStats?.rank ? `#${quizStats.rank}` : '—'}
             color="text-amber-400"
+            to="/leaderboard"
           />
           <StatPill
             label="Accuracy"

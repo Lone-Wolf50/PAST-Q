@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
+import { redis } from '../lib/redis';
 import { protect, AuthRequest } from '../middleware/auth';
 import { Response } from 'express';
 
@@ -59,6 +60,14 @@ router.post('/ping', protect, async (req: AuthRequest, res: Response) => {
       .from('upsa_users')
       .update({ streak_count: newStreak, streak_last_date: today })
       .eq('id', userId);
+
+    if (redis) {
+      await Promise.all([
+        redis.del('leaderboard:all_time'),
+        redis.del('leaderboard:weekly'),
+        redis.del('leaderboard:monthly')
+      ]);
+    }
 
     res.status(200).json({ streak: newStreak, isNewDay: true });
   } catch (err) {

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Trophy, Crown, Sparkles, User, Zap, Clock, Flame, Award,
+  Trophy, Sparkles, User, Zap, Clock, Flame, Award,
   BookOpen, Info, ChevronUp, Shield, Target, X, CheckCircle2, BarChart3
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { clsx } from 'clsx';
 import { Modal } from '../components/ui/Modal';
 
@@ -50,11 +52,11 @@ const AnimatedScore = ({ value, delay = 0, className = '' }: { value: number; de
 
 
 // ── Score progress bar ─────────────────────────────────────────────────────────
-const ScoreBar = ({ score, maxScore, rank }: { score: number; maxScore: number; rank: number }) => {
+const ScoreBar = ({ score, maxScore, rank, isDark }: { score: number; maxScore: number; rank: number; isDark: boolean }) => {
   const pct = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
   const color = rank === 1 ? 'from-amber-400 to-amber-600' : rank === 2 ? 'from-slate-300 to-slate-500' : rank === 3 ? 'from-amber-600 to-amber-800' : 'from-indigo-500 to-violet-600';
   return (
-    <div className="flex-1 h-1.5 bg-theme-border/50 rounded-full overflow-hidden">
+    <div className={clsx('flex-1 h-1.5 rounded-full overflow-hidden', isDark ? 'bg-theme-border/50' : 'bg-slate-200/80')}>
       <div
         className={`h-full rounded-full bg-gradient-to-r ${color} transition-all duration-1000 ease-out`}
         style={{ width: `${pct}%` }}
@@ -145,192 +147,154 @@ const RulesContent = () => (
   </div>
 );
 
-// ── Podium Card ────────────────────────────────────────────────────────────────
-const PodiumCard = ({ user, onClick }: { user: LeaderboardEntry; onClick: () => void }) => {
+// ── Podium Item (Open circular avatar + 3D diamond rank badge, no box card) ────
+const PodiumCard = ({
+  user,
+  isDark,
+  isCurrentUser,
+  onClick,
+}: {
+  user: LeaderboardEntry;
+  isDark: boolean;
+  isCurrentUser?: boolean;
+  onClick: () => void;
+}) => {
   const isGold = user.rank === 1;
   const isSilver = user.rank === 2;
-  const isBronze = user.rank === 3;
+  const initial = (user.username || 'S').trim().charAt(0).toUpperCase();
 
-  // Per-rank theming tokens
   const theme = isGold
     ? {
-        outerGlow: 'shadow-[0_0_60px_rgba(245,158,11,0.5),0_0_120px_rgba(245,158,11,0.2)]',
-        cardBorder: 'border-amber-400/40',
-        cardBg: 'bg-gradient-to-b from-[rgba(245,158,11,0.18)] via-[rgba(245,158,11,0.08)] to-[rgba(0,0,0,0.4)]',
-        shimmer: 'from-amber-300/0 via-amber-300/20 to-amber-300/0',
-        innerGlow: 'rgba(245,158,11,0.12)',
-        topLine: 'bg-gradient-to-r from-transparent via-amber-400/60 to-transparent',
-        avatarRing: 'ring-2 ring-amber-400/70',
-        avatarShadow: 'shadow-[0_0_20px_rgba(245,158,11,0.5)]',
-        scoreColor: 'text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.6)]',
-        labelColor: 'text-amber-400/70',
-        squareSize: 'w-32 h-40 sm:w-40 sm:h-48 md:w-44 md:h-56 lg:w-52 lg:h-64',
-        avatarSize: 'w-12 h-12 sm:w-16 sm:h-16 md:w-18 md:h-18 lg:w-22 lg:h-22',
-        scoreSize: 'text-lg sm:text-xl md:text-2xl lg:text-3xl',
-        nameSize: 'text-xs sm:text-sm md:text-sm lg:text-base',
+        outerRing: isDark
+          ? 'border-amber-400/80 bg-amber-500/10 shadow-[0_10px_30px_rgba(245,158,11,0.25)]'
+          : 'border-amber-400 bg-white shadow-[0_10px_28px_rgba(245,158,11,0.20)]',
+        diamondOuter: 'bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 shadow-[0_6px_16px_rgba(245,158,11,0.35)]',
+        diamondInner: 'bg-gradient-to-br from-amber-200 via-amber-300 to-amber-500 border border-white/70 text-amber-950',
+        fallbackBg: isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-800',
+        avatarSize: 'w-22 h-22 sm:w-28 sm:h-28 md:w-32 md:h-32',
+        diamondSize: 'w-8 h-8 sm:w-9 sm:h-9',
+        elevation: 'pb-5 sm:pb-7',
       }
     : isSilver
     ? {
-        outerGlow: 'shadow-[0_0_30px_rgba(148,163,184,0.3),0_0_60px_rgba(148,163,184,0.1)]',
-        cardBorder: 'border-slate-400/35',
-        cardBg: 'bg-gradient-to-b from-[rgba(148,163,184,0.14)] via-[rgba(148,163,184,0.06)] to-[rgba(0,0,0,0.4)]',
-        shimmer: 'from-slate-300/0 via-slate-300/15 to-slate-300/0',
-        innerGlow: 'rgba(148,163,184,0.08)',
-        topLine: 'bg-gradient-to-r from-transparent via-slate-400/50 to-transparent',
-        avatarRing: 'ring-2 ring-slate-400/60',
-        avatarShadow: 'shadow-[0_0_12px_rgba(148,163,184,0.4)]',
-        scoreColor: 'text-slate-300 drop-shadow-[0_0_6px_rgba(148,163,184,0.5)]',
-        labelColor: 'text-slate-400/70',
-        squareSize: 'w-26 h-32 sm:w-32 sm:h-40 md:w-36 md:h-46 lg:w-44 lg:h-54',
-        avatarSize: 'w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16',
-        scoreSize: 'text-sm sm:text-base md:text-lg lg:text-2xl',
-        nameSize: 'text-[10px] sm:text-xs md:text-xs lg:text-sm',
+        outerRing: isDark
+          ? 'border-slate-300/70 bg-slate-400/10 shadow-[0_8px_24px_rgba(148,163,184,0.18)]'
+          : 'border-slate-300 bg-white shadow-[0_8px_22px_rgba(100,116,139,0.14)]',
+        diamondOuter: 'bg-gradient-to-br from-white via-slate-300 to-slate-500 shadow-[0_6px_14px_rgba(100,116,139,0.28)]',
+        diamondInner: 'bg-gradient-to-br from-white via-slate-200 to-slate-300 border border-white/90 text-slate-700',
+        fallbackBg: isDark ? 'bg-indigo-500/20 text-indigo-200' : 'bg-[#dcd3ea] text-slate-800',
+        avatarSize: 'w-18 h-18 sm:w-22 sm:h-22 md:w-26 md:h-26',
+        diamondSize: 'w-7 h-7 sm:w-8 sm:h-8',
+        elevation: 'pb-0',
       }
     : {
-        outerGlow: 'shadow-[0_0_25px_rgba(180,83,9,0.25),0_0_50px_rgba(180,83,9,0.1)]',
-        cardBorder: 'border-amber-700/35',
-        cardBg: 'bg-gradient-to-b from-[rgba(180,83,9,0.14)] via-[rgba(180,83,9,0.06)] to-[rgba(0,0,0,0.4)]',
-        shimmer: 'from-amber-700/0 via-amber-700/12 to-amber-700/0',
-        innerGlow: 'rgba(180,83,9,0.08)',
-        topLine: 'bg-gradient-to-r from-transparent via-amber-700/50 to-transparent',
-        avatarRing: 'ring-2 ring-amber-700/55',
-        avatarShadow: 'shadow-[0_0_10px_rgba(180,83,9,0.35)]',
-        scoreColor: 'text-amber-600 drop-shadow-[0_0_5px_rgba(180,83,9,0.5)]',
-        labelColor: 'text-amber-700/70',
-        squareSize: 'w-26 h-32 sm:w-32 sm:h-40 md:w-36 md:h-46 lg:w-44 lg:h-54',
-        avatarSize: 'w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16',
-        scoreSize: 'text-sm sm:text-base md:text-lg lg:text-2xl',
-        nameSize: 'text-[10px] sm:text-xs md:text-xs lg:text-sm',
+        outerRing: isDark
+          ? 'border-amber-600/75 bg-orange-500/10 shadow-[0_8px_24px_rgba(180,83,9,0.20)]'
+          : 'border-[#b08d74] bg-white shadow-[0_8px_22px_rgba(180,83,9,0.14)]',
+        diamondOuter: 'bg-gradient-to-br from-[#e6ccb2] via-[#b08968] to-[#7f5539] shadow-[0_6px_14px_rgba(127,85,57,0.30)]',
+        diamondInner: 'bg-gradient-to-br from-[#ddb892] via-[#b08968] to-[#9c6644] border border-amber-100/60 text-amber-950',
+        fallbackBg: isDark ? 'bg-orange-500/20 text-orange-200' : 'bg-[#f6d5b0] text-amber-950',
+        avatarSize: 'w-18 h-18 sm:w-22 sm:h-22 md:w-26 md:h-26',
+        diamondSize: 'w-7 h-7 sm:w-8 sm:h-8',
+        elevation: 'pb-0',
       };
 
   return (
-    <div className="flex flex-col items-center">
-      {/* Rank indicator above card */}
-      <div className={clsx('flex flex-col items-center mb-3 h-10', isGold && 'podium-float')}>
-        {isGold && (
-          <div className="relative flex flex-col items-center">
-            {/* Animated golden halo */}
-            <div className="absolute -top-1 w-8 h-8 rounded-full bg-amber-400/20 animate-ping" style={{ animationDuration: '2.5s' }} />
-            <Crown
-              className="relative w-8 h-8 text-amber-400 drop-shadow-[0_0_14px_rgba(245,158,11,1)]"
-            />
+    <div
+      onClick={onClick}
+      className={clsx(
+        'group flex flex-col items-center w-full min-w-0 cursor-pointer transition-transform duration-300 hover:-translate-y-1',
+        theme.elevation
+      )}
+    >
+      {/* Circular Avatar with Outer Ring + 3D Rotated Diamond Badge */}
+      <div className="relative flex items-center justify-center">
+        <div
+          className={clsx(
+            'rounded-full p-1 sm:p-1.5 border-2 transition-transform duration-300 group-hover:scale-[1.03]',
+            theme.outerRing,
+            theme.avatarSize,
+            isCurrentUser && 'ring-2 ring-indigo-500/60'
+          )}
+        >
+          <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
+            {user.avatar_url ? (
+              <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
+            ) : (
+              <div className={clsx('w-full h-full flex items-center justify-center font-semibold', theme.fallbackBg, isGold ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl')}>
+                {initial}
+              </div>
+            )}
           </div>
-        )}
-        {isSilver && (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 via-slate-400 to-slate-600 flex items-center justify-center text-white text-sm font-black shadow-lg shadow-slate-400/30">
-            2
+        </div>
+
+        {/* 3D Beveled Diamond Badge */}
+        <div
+          className={clsx(
+            'absolute -bottom-3 sm:-bottom-3.5 left-1/2 -translate-x-1/2 rotate-45 rounded-lg p-[2.5px] sm:p-[3px] z-10',
+            theme.diamondOuter,
+            theme.diamondSize
+          )}
+        >
+          <div className={clsx('w-full h-full rounded-[5px] flex items-center justify-center', theme.diamondInner)}>
+            <span className="-rotate-45 font-black text-xs sm:text-sm leading-none">
+              {user.rank}
+            </span>
           </div>
-        )}
-        {isBronze && (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 via-amber-700 to-amber-900 flex items-center justify-center text-white text-sm font-black shadow-lg shadow-amber-700/30">
-            3
-          </div>
+        </div>
+      </div>
+
+      {/* Username */}
+      <div className="mt-5 sm:mt-6 w-full flex items-center justify-center gap-1 min-w-0 px-1">
+        <span className="font-bold text-theme-primary text-xs sm:text-sm md:text-base truncate text-center leading-tight group-hover:text-indigo-500 transition-colors">
+          {user.username}
+        </span>
+        {isCurrentUser && (
+          <span className={clsx(
+            'shrink-0 text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full',
+            isDark ? 'bg-indigo-500/25 text-indigo-300' : 'bg-indigo-100 text-indigo-600'
+          )}>
+            You
+          </span>
         )}
       </div>
 
-      {/* The square card */}
-      <div
-        onClick={onClick}
-        className={clsx(
-          'relative flex flex-col items-center justify-center rounded-2xl border backdrop-blur-xl transition-all duration-500 hover:-translate-y-2 cursor-pointer overflow-hidden podium-shimmer',
-          theme.cardBg, theme.cardBorder, theme.squareSize,
-          isGold && 'podium-gold-pulse'
-        )}
-        style={{ boxShadow: isGold ? undefined : `inset 0 1px 0 ${theme.innerGlow}, inset 0 -1px 0 rgba(0,0,0,0.3)` }}
-      >
-        {/* Top metallic highlight line */}
-        <div className={clsx('absolute top-0 left-4 right-4 h-px', theme.topLine)} />
-
-        {/* Diagonal shimmer sweep */}
-        <div
-          className={clsx(
-            'absolute inset-0 bg-gradient-to-br opacity-60 pointer-events-none',
-            theme.shimmer
-          )}
-          style={{ transform: 'skewX(-20deg) scaleX(1.5)', transformOrigin: 'left' }}
+      {/* Score */}
+      <div className="mt-0.5 flex items-baseline justify-center gap-1">
+        <AnimatedScore
+          value={user.score}
+          delay={isGold ? 150 : isSilver ? 350 : 550}
+          className="font-semibold text-theme-secondary text-xs sm:text-sm md:text-base leading-none"
         />
+      </div>
 
-        {/* Gold: extra pulsing glow orb at top */}
-        {isGold && (
-          <div
-            className="absolute -top-6 left-1/2 -translate-x-1/2 w-20 h-20 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.25) 0%, transparent 70%)' }}
-          />
-        )}
-
-        {/* Avatar */}
-        <div
-          className={clsx(
-            'rounded-full overflow-hidden shrink-0 mb-2 relative z-10',
-            theme.avatarRing, theme.avatarSize, theme.avatarShadow
-          )}
-        >
-          {user.avatar_url ? (
-            <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
-          ) : (
-            <div
-              className="w-full h-full flex items-center justify-center"
-              style={{ background: isGold ? 'rgba(245,158,11,0.1)' : isSilver ? 'rgba(148,163,184,0.1)' : 'rgba(180,83,9,0.1)' }}
-            >
-              <User className={clsx('text-theme-muted', isGold ? 'w-8 h-8 md:w-9 h-9' : 'w-6 h-6 md:w-7 h-7')} />
-            </div>
-          )}
-        </div>
-
-        {/* Username */}
-        <span
-          className={clsx(
-            'relative z-10 font-black text-white truncate max-w-full text-center leading-none w-full px-2',
-            theme.nameSize
-          )}
-          style={{ textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}
-        >
-          {user.username}
-        </span>
-
-        {/* Score */}
-        <div className="relative z-10 flex items-baseline gap-1 mt-1.5">
-          <AnimatedScore
-            value={user.score}
-            delay={isGold ? 150 : isSilver ? 350 : 550}
-            className={clsx('font-black leading-none tracking-tight', theme.scoreColor, theme.scoreSize)}
-          />
-          <span className={clsx('text-[9px] font-bold uppercase tracking-widest', theme.labelColor)}>pts</span>
-        </div>
-
-        {/* Badge count & Streak */}
-        <div className="relative z-10 mt-2 flex items-center gap-1.5">
+      {/* Streak / Badges (subtle pill row if present) */}
+      {(user.login_streak > 0 || user.badge_count > 0) && (
+        <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
           {user.login_streak > 0 && (
             <div className={clsx(
-              'flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold',
-              isGold
-                ? 'bg-orange-500/15 border border-orange-400/25 text-orange-300'
-                : isSilver
-                ? 'bg-orange-400/10 border border-orange-400/20 text-orange-300'
-                : 'bg-orange-700/10 border border-orange-700/20 text-orange-500'
+              'flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold border',
+              isDark
+                ? 'bg-orange-500/15 border-orange-400/25 text-orange-300'
+                : 'bg-orange-50 border-orange-200 text-orange-600'
             )}>
-              <Flame className="w-2.5 h-2.5" />
-              {user.login_streak}
+              <Flame className="w-2.5 h-2.5 shrink-0" />
+              {user.login_streak}d
             </div>
           )}
           {user.badge_count > 0 && (
             <div className={clsx(
-              'flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold',
-              isGold
-                ? 'bg-amber-500/15 border border-amber-400/25 text-amber-300'
-                : isSilver
-                ? 'bg-slate-400/10 border border-slate-400/20 text-slate-300'
-                : 'bg-amber-700/10 border border-amber-700/20 text-amber-600'
+              'flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold border',
+              isDark
+                ? 'bg-indigo-500/15 border-indigo-400/25 text-indigo-300'
+                : 'bg-indigo-50 border-indigo-200 text-indigo-600'
             )}>
-              <Sparkles className="w-2.5 h-2.5" />
+              <Sparkles className="w-2.5 h-2.5 shrink-0" />
               {user.badge_count}
             </div>
           )}
         </div>
-
-        {/* Bottom vignette */}
-        <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/30 to-transparent pointer-events-none rounded-b-2xl" />
-      </div>
+      )}
     </div>
   );
 };
@@ -338,7 +302,9 @@ const PodiumCard = ({ user, onClick }: { user: LeaderboardEntry; onClick: () => 
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 const LeaderboardPage = () => {
-  const { token } = useAuth();
+  const { token, user: currentUser } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [period, setPeriod] = useState<'all_time' | 'weekly' | 'monthly'>('all_time');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -394,11 +360,11 @@ const LeaderboardPage = () => {
   const others = leaderboard.slice(3);
   const maxScore = leaderboard[0]?.score || 1;
 
-  // Podium order: Silver (2) | Gold (1) | Bronze (3)
-  const podiumOrder: LeaderboardEntry[] = [];
-  if (top3[1]) podiumOrder.push(top3[1]);
-  if (top3[0]) podiumOrder.push(top3[0]);
-  if (top3[2]) podiumOrder.push(top3[2]);
+  // Podium order: Silver (2) | Gold (1) | Bronze (3) when all 3 exist; otherwise #1, #2
+  const podiumOrder: LeaderboardEntry[] =
+    top3.length === 3
+      ? [top3[1], top3[0], top3[2]]
+      : top3;
 
   const periodLabels: Record<string, string> = {
     all_time: 'All Time',
@@ -513,45 +479,29 @@ const LeaderboardPage = () => {
             </div>
           ) : (
             <>
-              {/* ── PODIUM ─────────────────────────────────────────────────── */}
+              {/* ── PODIUM (Open layout, no outer container box) ───────────── */}
               {top3.length > 0 && (
-                <div className="relative">
-
-                  {/* ── Atmosphere layers ── */}
-                  {/* Wide diffuse ambient */}
-                  <div
-                    className="absolute -inset-8 blur-3xl pointer-events-none rounded-full"
-                    style={{ background: 'radial-gradient(ellipse at center, rgba(245,158,11,0.08) 0%, transparent 70%)' }}
-                  />
-                  {/* Gold spotlight cone from top-center */}
-                  <div
-                    className="absolute left-1/2 -translate-x-1/2 -top-6 w-56 h-56 pointer-events-none"
-                    style={{ background: 'conic-gradient(from 160deg at 50% 0%, transparent 30%, rgba(245,158,11,0.12) 45%, rgba(245,158,11,0.06) 55%, transparent 70%)', borderRadius: '50%' }}
-                  />
-
-                  {/* Frosted glass stage platform */}
-                  <div
-                    className="absolute inset-x-0 bottom-0 rounded-2xl border border-white/5 pointer-events-none"
-                    style={{
-                      top: '60px',
-                      background: 'linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(0,0,0,0.25))',
-                      backdropFilter: 'blur(12px)',
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 60px rgba(0,0,0,0.4)'
-                    }}
-                  />
-
-                  {/* Cards row — items-end so larger gold card naturally rises */}
-                  <div className="relative flex items-end justify-center gap-2 sm:gap-4 md:gap-8 pt-14 pb-6">
-                    {podiumOrder.map((user) => (
-                      <PodiumCard key={user.user_id} user={user} onClick={() => openProfile(user.user_id)} />
-                    ))}
-                  </div>
-
-                  {/* Shimmering base line */}
-                  <div
-                    className="h-px w-full"
-                    style={{ background: 'linear-gradient(to right, transparent, rgba(245,158,11,0.3) 30%, rgba(245,158,11,0.5) 50%, rgba(245,158,11,0.3) 70%, transparent)' }}
-                  />
+                <div
+                  className={clsx(
+                    'w-full max-w-xl mx-auto pt-2 pb-2',
+                    top3.length === 3
+                      ? 'grid grid-cols-3 items-end gap-2 sm:gap-6 md:gap-8'
+                      : 'flex justify-center items-end gap-6 sm:gap-10'
+                  )}
+                >
+                  {podiumOrder.map((entry) => (
+                    <div
+                      key={entry.user_id}
+                      className={top3.length < 3 ? 'flex-1 max-w-[160px] sm:max-w-[190px]' : 'w-full min-w-0'}
+                    >
+                      <PodiumCard
+                        user={entry}
+                        isDark={isDark}
+                        isCurrentUser={currentUser?.id === entry.user_id}
+                        onClick={() => openProfile(entry.user_id)}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -567,71 +517,104 @@ const LeaderboardPage = () => {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    {others.map((user, idx) => (
-                      <div
-                        key={user.user_id}
-                        id={`rank-row-${user.rank}`}
-                        onClick={() => openProfile(user.user_id)}
-                        className="group relative flex items-center gap-4 px-4 md:px-5 py-4 rounded-2xl border border-theme-border/30 bg-gradient-to-r from-theme-surface/10 to-theme-surface/5 backdrop-blur-md hover:from-indigo-500/[0.06] hover:to-violet-500/[0.02] hover:border-indigo-500/30 transition-all duration-300 shadow-md hover:shadow-indigo-500/5 hover:-translate-y-0.5 overflow-hidden cursor-pointer"
-                        style={{ animationDelay: `${idx * 40}ms` }}
-                      >
-                        {/* Glowing ambient line on hover */}
-                        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-indigo-500 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        
-                        {/* Rank number block */}
-                        <div className="w-8 shrink-0 text-center">
-                          <span className="text-sm font-black text-theme-muted group-hover:text-indigo-400 transition-colors drop-shadow-[0_0_10px_rgba(99,102,241,0)] group-hover:drop-shadow-[0_0_10px_rgba(99,102,241,0.4)]">
-                            #{user.rank}
-                          </span>
-                        </div>
+                    {others.map((user, idx) => {
+                      const isMe = currentUser?.id === user.user_id;
+                      return (
+                        <div
+                          key={user.user_id}
+                          id={`rank-row-${user.rank}`}
+                          onClick={() => openProfile(user.user_id)}
+                          className={clsx(
+                            'group relative flex items-center gap-3 sm:gap-4 px-3.5 sm:px-5 py-3.5 sm:py-4 rounded-2xl border backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 overflow-hidden cursor-pointer',
+                            isMe
+                              ? (isDark
+                                  ? 'bg-indigo-500/12 border-indigo-400/50 ring-1 ring-indigo-400/30'
+                                  : 'bg-indigo-50/90 border-indigo-400/60 ring-1 ring-indigo-400/30 shadow-sm')
+                              : (isDark
+                                  ? 'bg-theme-surface/60 border-theme-border/40 hover:bg-theme-surface-2/70 hover:border-indigo-500/40'
+                                  : 'bg-white/90 border-theme-border/70 hover:bg-white hover:border-indigo-400/60 shadow-sm hover:shadow-md')
+                          )}
+                          style={{ animationDelay: `${idx * 40}ms` }}
+                        >
+                          {/* Glowing ambient line on hover */}
+                          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-indigo-500 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-                        {/* Avatar container with premium ring */}
-                        <div className="w-10 h-10 rounded-full p-[1.5px] bg-gradient-to-br from-theme-border/60 to-theme-border/30 group-hover:from-indigo-500/40 group-hover:to-violet-500/40 transition-all duration-300 shrink-0">
-                          <div className="w-full h-full rounded-full overflow-hidden bg-theme-surface-2 flex items-center justify-center">
+                          {/* Rank number block */}
+                          <div className="w-6 sm:w-7 shrink-0 text-center">
+                            <span className="text-xs sm:text-sm font-bold text-theme-primary group-hover:text-indigo-500 transition-colors">
+                              {user.rank}
+                            </span>
+                          </div>
+
+                          {/* Avatar container */}
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-theme-surface-2 flex items-center justify-center shrink-0">
                             {user.avatar_url ? (
                               <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
                             ) : (
-                              <User className="w-4 h-4 text-theme-muted group-hover:text-indigo-400 transition-colors" />
+                              <span className={clsx(
+                                'w-full h-full flex items-center justify-center text-sm font-semibold',
+                                isDark ? 'bg-indigo-500/20 text-indigo-200' : 'bg-[#f6d5b0] text-slate-800'
+                              )}>
+                                {(user.username || 'S').trim().charAt(0).toUpperCase()}
+                              </span>
                             )}
                           </div>
-                        </div>
 
-                        {/* Name + badges + score bar */}
-                        <div className="flex-grow min-w-0 flex flex-col gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm font-bold text-theme-primary truncate group-hover:text-white transition-colors">
-                              {user.username}
+                          {/* Name + badges + score bar */}
+                          <div className="flex-grow min-w-0 flex flex-col gap-1.5 sm:gap-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                              <span className="text-xs sm:text-sm font-bold text-theme-primary truncate group-hover:text-indigo-500 transition-colors">
+                                {user.username}
+                              </span>
+                              {isMe && (
+                                <span className={clsx(
+                                  'shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full',
+                                  isDark ? 'bg-indigo-500/25 text-indigo-300' : 'bg-indigo-100 text-indigo-600'
+                                )}>
+                                  You
+                                </span>
+                              )}
+                              {user.badge_count > 0 && (
+                                <span className={clsx(
+                                  'shrink-0 inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border',
+                                  isDark
+                                    ? 'text-indigo-300 bg-indigo-500/10 border-indigo-500/20'
+                                    : 'text-indigo-600 bg-indigo-50 border-indigo-200'
+                                )}>
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  {user.badge_count}
+                                </span>
+                              )}
+                              {user.login_streak > 0 && (
+                                <span className={clsx(
+                                  'shrink-0 inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border',
+                                  isDark
+                                    ? 'text-orange-300 bg-orange-500/10 border-orange-500/20'
+                                    : 'text-orange-600 bg-orange-50 border-orange-200'
+                                )}>
+                                  <Flame className="w-2.5 h-2.5" />
+                                  {user.login_streak}d
+                                </span>
+                              )}
+                            </div>
+                            {/* Sleek score bar */}
+                            <div className="flex items-center gap-3">
+                              <ScoreBar score={user.score} maxScore={maxScore} rank={user.rank} isDark={isDark} />
+                            </div>
+                          </div>
+
+                          {/* Premium Score display */}
+                          <div className="text-right shrink-0">
+                            <span className="text-xs sm:text-sm font-black text-theme-primary group-hover:text-indigo-500 transition-colors">
+                              {user.score.toLocaleString()}
                             </span>
-                            {user.badge_count > 0 && (
-                              <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] text-indigo-400 font-bold bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.05)] group-hover:shadow-[0_0_10px_rgba(99,102,241,0.15)] transition-shadow">
-                                <Sparkles className="w-2.5 h-2.5 animate-pulse" />
-                                {user.badge_count}
-                              </span>
-                            )}
-                            {user.login_streak > 0 && (
-                              <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] text-orange-400 font-bold bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded-full">
-                                <Flame className="w-2.5 h-2.5" />
-                                {user.login_streak}d
-                              </span>
-                            )}
-                          </div>
-                          {/* Sleek score bar */}
-                          <div className="flex items-center gap-3">
-                            <ScoreBar score={user.score} maxScore={maxScore} rank={user.rank} />
+                            <span className="block text-[8px] font-black text-theme-muted group-hover:text-indigo-500/80 transition-colors uppercase tracking-widest mt-0.5">
+                              PTS
+                            </span>
                           </div>
                         </div>
-
-                        {/* Premium Score display */}
-                        <div className="text-right shrink-0">
-                          <span className="text-sm font-black text-theme-primary group-hover:text-white transition-colors drop-shadow-[0_0_8px_rgba(255,255,255,0)] group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.1)]">
-                            {user.score.toLocaleString()}
-                          </span>
-                          <span className="block text-[8px] font-black text-theme-muted group-hover:text-indigo-400/80 transition-colors uppercase tracking-widest mt-0.5">
-                            PTS
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -654,12 +637,12 @@ const LeaderboardPage = () => {
               <p className="text-sm font-bold text-theme-primary">Ready to compete?</p>
               <p className="text-xs text-theme-muted mt-1 leading-relaxed">Start the Quiz Arena and put your name on this board.</p>
             </div>
-            <a
-              href="/quiz"
+            <Link
+              to="/quiz"
               className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-bold text-xs text-center transition-all cursor-pointer block hover:shadow-lg hover:shadow-indigo-500/20"
             >
               Enter Quiz Arena →
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -677,7 +660,7 @@ const LeaderboardPage = () => {
           {/* Close btn */}
           <button
             onClick={closeProfile}
-            className="absolute top-4 right-4 p-2 rounded-xl hover:bg-white/5 text-theme-muted hover:text-white transition-colors cursor-pointer z-10"
+            className="absolute top-4 right-4 p-2 rounded-xl hover:bg-theme-surface-2 text-theme-muted hover:text-theme-primary transition-colors cursor-pointer z-10"
           >
             <X className="w-4 h-4" />
           </button>
@@ -701,23 +684,36 @@ const LeaderboardPage = () => {
           {profileData && !profileLoading && (() => {
             const { profile, badges } = profileData;
             const planColors: Record<string, string> = {
-              free: 'from-slate-500/20 to-slate-600/10 border-slate-500/30 text-slate-300',
-              pro: 'from-indigo-500/20 to-violet-600/10 border-indigo-500/30 text-indigo-300',
-              premium: 'from-amber-500/20 to-orange-600/10 border-amber-500/30 text-amber-300',
+              free: isDark
+                ? 'bg-slate-500/15 border-slate-500/30 text-slate-300'
+                : 'bg-slate-100 border-slate-300 text-slate-700',
+              basic: isDark
+                ? 'bg-blue-500/15 border-blue-400/30 text-blue-300'
+                : 'bg-blue-50 border-blue-200 text-blue-700',
+              plus: isDark
+                ? 'bg-indigo-500/15 border-indigo-400/30 text-indigo-300'
+                : 'bg-indigo-50 border-indigo-200 text-indigo-700',
+              pro: isDark
+                ? 'bg-amber-500/15 border-amber-400/30 text-amber-300'
+                : 'bg-amber-50 border-amber-200 text-amber-700',
+              premium: isDark
+                ? 'bg-amber-500/15 border-amber-400/30 text-amber-300'
+                : 'bg-amber-50 border-amber-200 text-amber-700',
             };
-            const planStyle = planColors[profile.plan] || planColors.free;
+            const planKey = (profile.plan || 'free').toLowerCase();
+            const planStyle = planColors[planKey] || planColors.free;
 
             return (
               <div className="flex flex-col">
                 {/* Hero banner */}
-                <div className="relative px-6 pt-8 pb-6 flex flex-col items-center gap-4 border-b border-white/[0.06]">
+                <div className="relative px-6 pt-8 pb-6 flex flex-col items-center gap-4 border-b border-theme-border/40">
                   <div
                     className="absolute inset-0 opacity-30 pointer-events-none"
-                    style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.25) 0%, transparent 65%)' }}
+                    style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.22) 0%, transparent 65%)' }}
                   />
 
                   {/* Avatar */}
-                  <div className="relative z-10 w-20 h-20 rounded-2xl ring-2 ring-indigo-500/40 shadow-[0_0_30px_rgba(99,102,241,0.3)] overflow-hidden bg-theme-surface-2 flex items-center justify-center">
+                  <div className="relative z-10 w-20 h-20 rounded-2xl ring-2 ring-indigo-500/40 shadow-[0_0_30px_rgba(99,102,241,0.25)] overflow-hidden bg-theme-surface-2 flex items-center justify-center">
                     {profile.avatar_url ? (
                       <img src={profile.avatar_url} alt={profile.username} className="w-full h-full object-cover" />
                     ) : (
@@ -727,17 +723,20 @@ const LeaderboardPage = () => {
 
                   {/* Name + plan */}
                   <div className="relative z-10 text-center">
-                    <h2 className="text-xl font-black text-white leading-tight">{profile.username}</h2>
-                    <span className={`inline-block mt-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-gradient-to-r border ${planStyle}`}>
+                    <h2 className="text-xl font-black text-theme-primary leading-tight">{profile.username}</h2>
+                    <span className={`inline-block mt-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${planStyle}`}>
                       {profile.plan || 'Free'}
                     </span>
                   </div>
 
                   {/* Global rank badge */}
-                  <div className="relative z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/25">
-                    <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="text-xs font-black text-amber-300">Rank #{profile.rank}</span>
-                    <span className="text-[10px] text-amber-400/60 font-bold">Global</span>
+                  <div className={clsx(
+                    'relative z-10 flex items-center gap-2 px-4 py-2 rounded-full border',
+                    isDark ? 'bg-amber-500/10 border-amber-500/25' : 'bg-amber-50 border-amber-200'
+                  )}>
+                    <Trophy className={clsx('w-3.5 h-3.5', isDark ? 'text-amber-400' : 'text-amber-600')} />
+                    <span className={clsx('text-xs font-black', isDark ? 'text-amber-300' : 'text-amber-700')}>Rank #{profile.rank}</span>
+                    <span className={clsx('text-[10px] font-bold', isDark ? 'text-amber-400/70' : 'text-amber-600/80')}>Global</span>
                   </div>
                 </div>
 
@@ -761,15 +760,15 @@ const LeaderboardPage = () => {
                     >
                       <div className={clsx(
                         'p-1.5 rounded-lg w-fit',
-                        stat.color === 'indigo' && 'bg-indigo-500/15 text-indigo-400',
-                        stat.color === 'emerald' && 'bg-emerald-500/15 text-emerald-400',
-                        stat.color === 'violet' && 'bg-violet-500/15 text-violet-400',
-                        stat.color === 'amber' && 'bg-amber-500/15 text-amber-400',
+                        stat.color === 'indigo' && 'bg-indigo-500/15 text-indigo-500',
+                        stat.color === 'emerald' && 'bg-emerald-500/15 text-emerald-500',
+                        stat.color === 'violet' && 'bg-violet-500/15 text-violet-500',
+                        stat.color === 'amber' && 'bg-amber-500/15 text-amber-500',
                       )}>
                         {stat.icon}
                       </div>
                       <div>
-                        <div className="text-xl font-black text-white">{stat.value}</div>
+                        <div className="text-xl font-black text-theme-primary">{stat.value}</div>
                         <div className="text-[10px] font-bold text-theme-muted uppercase tracking-wider">{stat.label}</div>
                       </div>
                     </div>
@@ -779,9 +778,9 @@ const LeaderboardPage = () => {
                 {/* Badges section */}
                 {badges && badges.length > 0 && (
                   <div className="px-5 pb-6 flex flex-col gap-3">
-                    <div className="flex items-center gap-2 border-t border-white/[0.06] pt-4">
-                      <Award className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                    <div className="flex items-center gap-2 border-t border-theme-border/40 pt-4">
+                      <Award className={clsx('w-3.5 h-3.5', isDark ? 'text-amber-400' : 'text-amber-600')} />
+                      <span className={clsx('text-[10px] font-black uppercase tracking-widest', isDark ? 'text-amber-400' : 'text-amber-600')}>
                         Earned Badges ({badges.length})
                       </span>
                     </div>
@@ -793,7 +792,7 @@ const LeaderboardPage = () => {
                         >
                           <span className="text-xl shrink-0">{badge.icon || '🏅'}</span>
                           <div className="min-w-0">
-                            <div className="text-xs font-bold text-white truncate">{badge.name}</div>
+                            <div className="text-xs font-bold text-theme-primary truncate">{badge.name}</div>
                             <div className="text-[9px] text-theme-muted truncate">{badge.description}</div>
                           </div>
                         </div>
@@ -803,7 +802,7 @@ const LeaderboardPage = () => {
                 )}
 
                 {badges && badges.length === 0 && (
-                  <div className="px-5 pb-6 text-center border-t border-white/[0.06] pt-4">
+                  <div className="px-5 pb-6 text-center border-t border-theme-border/40 pt-4">
                     <p className="text-xs text-theme-muted font-semibold">No badges earned yet — keep competing!</p>
                   </div>
                 )}

@@ -170,6 +170,37 @@ const Navbar = () => {
 
             {isLoggedIn ? (
               <>
+                {/* Mobile Leaderboard Icon — 1-tap access to Top 100 */}
+                <Link
+                  to="/leaderboard"
+                  className={clsx(
+                    "md:hidden relative flex items-center justify-center w-11 h-8 rounded-full p-1 transition-transform hover:scale-105 active:scale-95",
+                    shellClass
+                  )}
+                  style={{
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    borderWidth: '1px',
+                  }}
+                  title="Leaderboard"
+                >
+                  <div
+                    className={clsx(
+                      "flex items-center justify-center w-full h-6 rounded-full",
+                      location.pathname === '/leaderboard' ? activeThumbClass : thumbClass
+                    )}
+                  >
+                    <Trophy
+                      className={clsx(
+                        "w-3.5 h-3.5",
+                        location.pathname === '/leaderboard'
+                          ? (isDark ? "text-[#a5b4fc]" : "text-[#5b9bd5]")
+                          : (isDark ? "text-amber-300" : "text-amber-500")
+                      )}
+                    />
+                  </div>
+                </Link>
+
                 {/* Notification Icon — Styled identically to ThemeToggle */}
                 <Link
                   to="/notifications"
