@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { HelpCircle, AlertTriangle, Shield, Clock, ArrowRight, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy, Bot, X, Loader2 } from 'lucide-react';
+import { HelpCircle, AlertTriangle, Shield, Clock, ArrowRight, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy, Bot, X, Loader2, Search, Zap, Flame } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -9,16 +9,24 @@ import { Link, useSearchParams, useBlocker, useNavigate } from 'react-router-dom
 import remarkGfm from 'remark-gfm';
 
 // Lazy-load ReactMarkdown for performance — only loaded when Cortana drawer opens
-// Lazy-load ReactMarkdown for performance — only loaded when Cortana drawer opens
 const ReactMarkdown = lazy(() => import('react-markdown'));
+
+interface SpeedTier {
+  maxMs: number;
+  bonus: number;
+  label: string;
+}
 
 interface Question {
   id: string;
   body: string;
   category: string;
-  difficulty: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard' | 'Insane' | string;
   options: string[];
   time_limit_seconds: number;
+  reading_time_seconds?: number;
+  base_points?: number;
+  speed_tiers?: SpeedTier[];
 }
 
 function formatAIContentForProse(raw: string): string {
@@ -194,14 +202,33 @@ const QuizPage = () => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [totalQuestions, setTotalQuestions] = useState(10);
   
-  // Subject State
+  // Subject / Course Paper State (all 617 papers)
   const [subjects, setSubjects] = useState<any[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [selectedPaperId, setSelectedPaperId] = useState<string>('');
+  const [subjectSearch, setSubjectSearch] = useState<string>('');
   const [loadingSubjects, setLoadingSubjects] = useState(false);
+
+  const filteredSubjects = subjects.filter((sub) => {
+    const q = subjectSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      sub.name?.toLowerCase().includes(q) ||
+      (sub.code && sub.code.toLowerCase().includes(q)) ||
+      (sub.subject_name && sub.subject_name.toLowerCase().includes(q)) ||
+      (sub.year && String(sub.year).toLowerCase().includes(q)) ||
+      (sub.semester && String(sub.semester).toLowerCase().includes(q))
+    );
+  });
   
-  // Timer State
+  // Timer & Reading Grace State
   const [timeLeft, setTimeLeft] = useState(60);
+  const [readingTimeLeft, setReadingTimeLeft] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const questionDisplayedAtRef = useRef<number>(Date.now());
+  const answerTimerStartedAtRef = useRef<number | null>(null);
+  const prefetchedNextQuestionRef = useRef<Question | null>(null);
+  const sessionBadgesRef = useRef<Set<string>>(new Set());
 
   // Structured Quiz & Exit States
   const [sessionStats, setSessionStats] = useState<any>(null);
@@ -291,19 +318,18 @@ const QuizPage = () => {
     initCustomQuiz();
   }, [token, sessionIdParam]);
 
-  // Load available subjects
+  // Load all available papers (all 617 courses/papers) + subjects fallback
   useEffect(() => {
     if (!token) return;
     const fetchSubjects = async () => {
       setLoadingSubjects(true);
       try {
         const res = await apiFetch('/papers/subjects/all', { token });
-        if (res.subjects) {
-          setSubjects(res.subjects);
-          // Set default subject if subjects exist
-          if (res.subjects.length > 0) {
-            setSelectedSubject(res.subjects[0].name);
-          }
+        const list = (res.papers && res.papers.length > 0) ? res.papers : (res.subjects || []);
+        setSubjects(list);
+        if (list.length > 0) {
+          setSelectedSubject(list[0].name);
+          setSelectedPaperId(list[0].paper_id || '');
         }
       } catch (err) {
         console.error('Error fetching subjects:', err);
@@ -384,18 +410,60 @@ const QuizPage = () => {
     };
   }, []);
 
-  // Timer Tick handler
+  // Helper to compute reading grace seconds for a question based on its length
+  const getReadingSecondsForQuestion = (q: Question): number => {
+    if (typeof q.reading_time_seconds === 'number' && q.reading_time_seconds > 0) {
+      return q.reading_time_seconds;
+    }
+    const text = `${q.body || ''} ${(q.options || []).join(' ')}`.trim();
+    const words = text ? text.split(/\s+/).length : 0;
+    const extra = words > 25 ? Math.ceil((words - 25) / 5) : 0;
+    return Math.min(18, Math.max(4, 4 + extra));
+  };
+
+  // Apply a question to state and initialize its reading grace period + answer timer
+  const applyQuestionToArena = (q: Question, nextIndex?: number) => {
+    const readingSecs = getReadingSecondsForQuestion(q);
+    setCurrentQuestion(q);
+    setReadingTimeLeft(readingSecs);
+    setTimeLeft(q.time_limit_seconds || 45);
+    questionDisplayedAtRef.current = Date.now();
+    answerTimerStartedAtRef.current = null;
+    if (typeof nextIndex === 'number') {
+      setQuestionNumber(nextIndex);
+    } else {
+      setQuestionNumber((prev) => prev + 1);
+    }
+  };
+
+  // Timer Tick handler: first counts down Reading Grace time, then counts down Answer Timer
   useEffect(() => {
     if (isQuizActive && currentQuestion && !result) {
       timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!);
-            // Auto submit when time runs out
-            handleAutoSubmit();
+        setReadingTimeLeft((prevReading) => {
+          if (prevReading > 1) {
+            return prevReading - 1;
+          }
+          if (prevReading === 1) {
+            if (!answerTimerStartedAtRef.current) {
+              answerTimerStartedAtRef.current = Date.now();
+            }
             return 0;
           }
-          return prev - 1;
+
+          // Reading grace is finished; tick down the main answer timer
+          if (!answerTimerStartedAtRef.current) {
+            answerTimerStartedAtRef.current = Date.now();
+          }
+          setTimeLeft((prevTime) => {
+            if (prevTime <= 1) {
+              if (timerRef.current) clearInterval(timerRef.current);
+              handleAutoSubmit();
+              return 0;
+            }
+            return prevTime - 1;
+          });
+          return 0;
         });
       }, 1000);
     }
@@ -406,28 +474,46 @@ const QuizPage = () => {
   }, [isQuizActive, currentQuestion, result]);
 
   const startQuiz = async () => {
-    if (!selectedSubject) {
-      setError('Please select a subject to enter the Quiz Arena.');
+    const candidateInput = selectedSubject.trim() || subjectSearch.trim();
+    if (!candidateInput) {
+      setError('Please select a course to enter the Quiz Arena.');
       return;
     }
 
-    // Instant client-side validation: find exact matching subject from loaded list
-    const trimmedSubject = selectedSubject.trim();
-    const matchedSubject = subjects.find(
-      (sub) => sub.name.toLowerCase() === trimmedSubject.toLowerCase()
-    );
+    // Match by selected paper_id first, then exact course name or code (or single filtered match when searching)
+    const lowerCandidate = candidateInput.toLowerCase();
+    let matchedSubject = selectedPaperId
+      ? subjects.find((sub) => sub.paper_id === selectedPaperId)
+      : undefined;
+
+    if (!matchedSubject) {
+      matchedSubject = subjects.find(
+        (sub) =>
+          sub.name?.trim().toLowerCase() === lowerCandidate ||
+          (sub.code && sub.code.trim().toLowerCase() === lowerCandidate)
+      );
+    }
+
+    if (!matchedSubject && subjectSearch.trim() && filteredSubjects.length === 1) {
+      matchedSubject = filteredSubjects[0];
+    }
 
     if (!matchedSubject && subjects.length > 0) {
       setSubjectErrorConfig({
-        title: '📚 Subject Not Found',
-        message: `The subject "${trimmedSubject}" does not match any available subject. Please select a valid subject from the list.`
+        title: '📚 Course Not Found',
+        message: `The course "${candidateInput}" does not match any available course. Please search and select a valid course from the list below.`
       });
       setShowSubjectErrorModal(true);
       return;
     }
 
     // Use the exact DB name to avoid casing mismatches
-    const subjectToSend = matchedSubject ? matchedSubject.name : trimmedSubject;
+    const subjectToSend = matchedSubject ? matchedSubject.name : candidateInput;
+    const paperIdToSend = matchedSubject?.paper_id || undefined;
+    if (matchedSubject) {
+      if (selectedSubject !== matchedSubject.name) setSelectedSubject(matchedSubject.name);
+      if (selectedPaperId !== (matchedSubject.paper_id || '')) setSelectedPaperId(matchedSubject.paper_id || '');
+    }
 
     setLoading(true);
     setError('');
@@ -436,16 +522,18 @@ const QuizPage = () => {
     setIsQuizFinished(false);
     setActiveSessionId(null);
     setTotalQuestions(10);
+    prefetchedNextQuestionRef.current = null;
+    sessionBadgesRef.current = new Set();
     try {
       const res = await apiFetch('/quiz/session', {
         method: 'POST',
         token: token || undefined,
-        body: { subject: subjectToSend }
+        body: { subject: subjectToSend, paper_id: paperIdToSend }
       });
       if (res.session) {
         setActiveSessionId(res.session.id);
         setIsQuizActive(true);
-        await loadNextQuestion(res.session.id);
+        await loadNextQuestion(res.session.id, true);
       } else {
         throw new Error('Failed to create session');
       }
@@ -461,16 +549,16 @@ const QuizPage = () => {
         setShowUpgradeModal(true);
       } else if (body?.error === 'subject_not_available') {
         setSubjectErrorConfig({
-          title: '📚 Subject Unavailable',
-          message: body.message || `The subject "${selectedSubject}" is currently not available for practice quizzes. Please select a valid subject.`
+          title: '📚 Course Unavailable',
+          message: body.message || `The course "${subjectToSend}" is currently not available for practice quizzes. Please select a valid course.`
         });
         setShowSubjectErrorModal(true);
       } else {
         const errMsg = err.message || '';
         if (errMsg.toLowerCase().includes('subject') || errMsg.toLowerCase().includes('foreign key')) {
           setSubjectErrorConfig({
-            title: '📚 Subject Unavailable',
-            message: `The subject "${selectedSubject}" is currently not available or does not exist. Please check the spelling or select a subject from the list.`
+            title: '📚 Course Unavailable',
+            message: `The course "${subjectToSend}" is currently not available or does not exist. Please select a course from the list.`
           });
           setShowSubjectErrorModal(true);
         } else {
@@ -481,27 +569,43 @@ const QuizPage = () => {
     }
   };
 
-  const loadNextQuestion = async (sessId?: string) => {
-    setLoading(true);
+  const loadNextQuestion = async (sessId?: string, isInitialQuestion = false) => {
     setError('');
     setSelectedAnswer(null);
     setResult(null);
     setCortanaDrawerOpen(false);
     setCortanaExplanation('');
     setCortanaError('');
-    setCurrentQuestion(null);
+
     const targetSessionId = sessId || activeSessionId;
+
+    // Instant 0ms path: if the next question was already pre-loaded from the batch, render it immediately!
+    if (!isInitialQuestion && prefetchedNextQuestionRef.current) {
+      const instantQ = prefetchedNextQuestionRef.current;
+      prefetchedNextQuestionRef.current = null;
+      setLoading(false);
+      applyQuestionToArena(instantQ);
+
+      // Silently refresh the subsequent peek question in the background
+      const peekUrl = targetSessionId ? `/quiz/question?session_id=${targetSessionId}` : '/quiz/question';
+      apiFetch(peekUrl, { token: token || undefined })
+        .then((res) => {
+          if (res?.nextQuestion && res.question?.id === instantQ.id) {
+            prefetchedNextQuestionRef.current = res.nextQuestion;
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+
+    setLoading(true);
+    setCurrentQuestion(null);
     try {
       const url = targetSessionId ? `/quiz/question?session_id=${targetSessionId}` : '/quiz/question';
       const res = await apiFetch(url, { token: token || undefined });
       if (res.question) {
-        setCurrentQuestion(res.question);
-        setTimeLeft(res.question.time_limit_seconds);
-        if (res.questionIndex) {
-          setQuestionNumber(res.questionIndex);
-        } else {
-          setQuestionNumber(prev => prev + 1);
-        }
+        prefetchedNextQuestionRef.current = res.nextQuestion || null;
+        applyQuestionToArena(res.question, res.questionIndex);
         if (res.subject) {
           setSelectedSubject(res.subject);
         }
@@ -509,9 +613,11 @@ const QuizPage = () => {
           setTotalQuestions(res.totalQuestions);
         }
       } else {
+        if (isInitialQuestion) setIsQuizActive(false);
         setError('Failed to fetch next question.');
       }
     } catch (err: any) {
+      if (isInitialQuestion) setIsQuizActive(false);
       const body = err?.body || err?.response || err;
       if (body?.error === 'quiz_limit_reached') {
         setUpgradeModalConfig({
@@ -534,6 +640,13 @@ const QuizPage = () => {
 
     setIsSubmitting(true);
     setError('');
+
+    // Compute active answer time (post-reading grace) so reading long questions doesn't penalize speed rewards
+    const nowMs = Date.now();
+    const activeAnswerMs = answerTimerStartedAtRef.current
+      ? Math.max(350, nowMs - answerTimerStartedAtRef.current)
+      : Math.min(Math.max(350, nowMs - questionDisplayedAtRef.current), 1800);
+
     try {
       const res = await apiFetch('/quiz/submit', {
         method: 'POST',
@@ -541,16 +654,23 @@ const QuizPage = () => {
         body: {
           question_id: currentQuestion.id,
           submitted_answer: selectedAnswer,
-          session_id: activeSessionId || undefined
+          session_id: activeSessionId || undefined,
+          answer_time_ms: activeAnswerMs
         }
       });
+      if (res.next_question) {
+        prefetchedNextQuestionRef.current = res.next_question;
+      }
+      if (Array.isArray(res.earned_badges)) {
+        res.earned_badges.forEach((slug: string) => sessionBadgesRef.current.add(slug));
+      }
       setResult(res);
       if (res.is_completed) {
         setSessionStats({
           points: res.session_points,
           correct: res.session_correct,
           total: res.session_total,
-          badges: res.earned_badges
+          badges: Array.from(sessionBadgesRef.current)
         });
       }
     } catch (err: any) {
@@ -573,13 +693,19 @@ const QuizPage = () => {
           session_id: activeSessionId || undefined
         }
       });
+      if (res.next_question) {
+        prefetchedNextQuestionRef.current = res.next_question;
+      }
+      if (Array.isArray(res.earned_badges)) {
+        res.earned_badges.forEach((slug: string) => sessionBadgesRef.current.add(slug));
+      }
       setResult(res);
       if (res.is_completed) {
         setSessionStats({
           points: res.session_points,
           correct: res.session_correct,
           total: res.session_total,
-          badges: res.earned_badges
+          badges: Array.from(sessionBadgesRef.current)
         });
       }
     } catch (err: any) {
@@ -593,6 +719,8 @@ const QuizPage = () => {
     setConfirmQuitOpen(false);
     setIsQuizActive(false);
     setCurrentQuestion(null);
+    prefetchedNextQuestionRef.current = null;
+    sessionBadgesRef.current = new Set();
     setQuestionNumber(0);
     setResult(null);
     setSessionStats(null);
@@ -707,47 +835,223 @@ const QuizPage = () => {
             <li className="flex gap-3 items-start">
               <Clock className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Timer:</strong> Each question has its own timer based on difficulty. Unsubmitted questions when timer hits 0 score 0 points.
+                <strong>Timer:</strong> Each question has its own timer based on difficulty and length. Unsubmitted questions when timer hits 0 score 0 points.
               </span>
             </li>
             <li className="flex gap-3 items-start">
               <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Bonuses:</strong> Speed bonuses are awarded for correct answers under 3, 6, and 10 seconds. Correct streaks multiply your score!
+                <strong>Bonuses:</strong> Higher difficulty levels and fast correct answers award extra points and badges. Correct streaks multiply your score!
               </span>
             </li>
           </ul>
 
-          {/* Subject Selector */}
-          <div className="flex flex-col gap-2 border-t border-theme-border/30 pt-4 mt-2">
-            <label className="text-xs font-extrabold uppercase tracking-widest text-indigo-400 flex items-center gap-2">
-              <BookOpen className="w-4 h-4" />
-              Select Subject
-            </label>
+          {/* Course Search & Scrollable List Selector */}
+          <div className="flex flex-col gap-3 border-t border-theme-border/30 pt-5 mt-2">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-extrabold uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
+                Select Course / Paper
+              </label>
+              {!loadingSubjects && subjects.length > 0 && (
+                <span className="text-[11px] font-bold text-theme-muted">
+                  {filteredSubjects.length} of {subjects.length} papers available
+                </span>
+              )}
+            </div>
+
             {loadingSubjects ? (
-              <div className="text-xs font-bold text-theme-muted py-2 animate-pulse">Loading subjects...</div>
+              <div className="flex items-center justify-center gap-2 text-xs font-bold text-theme-muted py-8 bg-theme-surface/40 border border-theme-border/40 rounded-2xl animate-pulse">
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                Loading all available papers...
+              </div>
             ) : (
-              <>
-                <input
-                  type="text"
-                  list="subjects-datalist"
-                  value={selectedSubject}
-                  onChange={(e) => setSelectedSubject(e.target.value)}
-                  placeholder="Type or select a subject..."
-                  className="w-full bg-theme-surface border border-theme-border text-theme-primary px-4 py-3.5 rounded-2xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:bg-theme-surface-2 transition-all placeholder:text-theme-muted"
-                />
-                <datalist id="subjects-datalist">
-                  {subjects.map((sub) => (
-                    <option key={sub.id} value={sub.name} />
-                  ))}
-                </datalist>
-              </>
+              <div className="flex flex-col gap-3">
+                {/* Search input */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-theme-muted absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={subjectSearch}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSubjectSearch(val);
+                      const exact = subjects.find(
+                        (s) =>
+                          s.name?.toLowerCase() === val.trim().toLowerCase() ||
+                          (s.code && s.code.toLowerCase() === val.trim().toLowerCase())
+                      );
+                      if (exact) {
+                        setSelectedSubject(exact.name);
+                        setSelectedPaperId(exact.paper_id || '');
+                      }
+                    }}
+                    placeholder="Search course title, code, or year..."
+                    className="w-full bg-theme-surface border border-theme-border text-theme-primary pl-10 pr-9 py-3 rounded-2xl text-xs sm:text-sm font-semibold focus:outline-none focus:border-indigo-500 focus:bg-theme-surface-2 transition-all placeholder:text-theme-muted"
+                  />
+                  {subjectSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setSubjectSearch('')}
+                      aria-label="Clear search"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-theme-muted hover:text-theme-primary hover:bg-theme-surface-2 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Selected Course Indicator */}
+                {selectedSubject && (() => {
+                  const activeSub = selectedPaperId
+                    ? subjects.find((s) => s.paper_id === selectedPaperId)
+                    : subjects.find((s) => s.name === selectedSubject);
+                  return (
+                    <div className={clsx(
+                      'flex flex-col gap-1.5 px-3.5 py-3 rounded-xl border text-xs',
+                      isDark
+                        ? 'bg-indigo-500/12 border-indigo-400/35 text-indigo-200'
+                        : 'bg-indigo-50/90 border-indigo-300 text-slate-800'
+                    )}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-400">
+                            Selected Course
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {activeSub?.year && (
+                            <span className={clsx(
+                              'text-[10px] font-bold px-2 py-0.5 rounded-md border',
+                              isDark ? 'bg-theme-surface border-theme-border text-theme-secondary' : 'bg-white border-slate-200 text-slate-600'
+                            )}>
+                              {activeSub.year}
+                            </span>
+                          )}
+                          {activeSub?.code && (
+                            <span className={clsx(
+                              'text-[10px] font-black uppercase px-2 py-0.5 rounded-md border',
+                              isDark ? 'bg-indigo-500/20 border-indigo-400/30 text-indigo-300' : 'bg-white border-indigo-200 text-indigo-600'
+                            )}>
+                              {activeSub.code}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs sm:text-sm font-extrabold text-theme-primary leading-snug break-words">
+                        {selectedSubject}
+                      </p>
+                      {activeSub?.subject_name && activeSub.subject_name !== selectedSubject && (
+                        <p className="text-[11px] font-medium text-theme-muted leading-snug break-words">
+                          {activeSub.subject_name}{activeSub.semester ? ` • Semester ${activeSub.semester}` : ''}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Scrollable list of courses */}
+                <div className="max-h-72 overflow-y-auto rounded-2xl border border-theme-border/60 bg-theme-surface/40 p-1.5 flex flex-col gap-1.5">
+                  {filteredSubjects.length === 0 ? (
+                    <div className="py-6 px-4 text-center flex flex-col items-center gap-1.5">
+                      <p className="text-xs font-bold text-theme-primary">
+                        No courses match "{subjectSearch}"
+                      </p>
+                      <p className="text-[11px] text-theme-muted">
+                        Try searching by another keyword or clear the search to browse all papers.
+                      </p>
+                    </div>
+                  ) : (
+                    filteredSubjects.map((sub) => {
+                      const isSelected = sub.paper_id
+                        ? selectedPaperId === sub.paper_id
+                        : selectedSubject === sub.name;
+                      return (
+                        <button
+                          key={sub.paper_id || sub.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSubject(sub.name);
+                            setSelectedPaperId(sub.paper_id || '');
+                            if (token) {
+                              apiFetch('/quiz/prewarm', {
+                                method: 'POST',
+                                token,
+                                body: { subject: sub.name, paper_id: sub.paper_id || undefined }
+                              }).catch(() => {});
+                            }
+                          }}
+                          className={clsx(
+                            'w-full text-left flex items-start gap-2.5 px-3 py-2.5 rounded-xl border transition-all cursor-pointer',
+                            isSelected
+                              ? (isDark
+                                  ? 'bg-indigo-500/20 border-indigo-400/50 text-theme-primary shadow-sm'
+                                  : 'bg-indigo-50 border-indigo-400 text-theme-primary shadow-sm')
+                              : 'border-transparent hover:bg-theme-surface-2/70 text-theme-secondary hover:text-theme-primary'
+                          )}
+                        >
+                          <span
+                            className={clsx(
+                              'w-4 h-4 mt-0.5 rounded-full flex items-center justify-center border shrink-0 transition-colors',
+                              isSelected
+                                ? 'bg-indigo-500 border-indigo-500 text-white'
+                                : 'border-theme-border bg-theme-surface'
+                            )}
+                          >
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </span>
+
+                          <div className="flex-1 min-w-0 flex flex-col gap-1">
+                            <span className={clsx(
+                              'text-xs sm:text-sm leading-snug break-words',
+                              isSelected ? 'font-extrabold text-theme-primary' : 'font-semibold text-theme-primary/90'
+                            )}>
+                              {sub.name}
+                            </span>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {sub.code && (
+                                <span
+                                  className={clsx(
+                                    'text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md border',
+                                    isSelected
+                                      ? (isDark ? 'bg-indigo-500/25 border-indigo-400/40 text-indigo-200' : 'bg-white border-indigo-300 text-indigo-600')
+                                      : 'bg-theme-surface border-theme-border/60 text-theme-muted'
+                                  )}
+                                >
+                                  {sub.code}
+                                </span>
+                              )}
+                              {sub.year && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-theme-surface border border-theme-border/60 text-theme-muted">
+                                  {sub.year}
+                                </span>
+                              )}
+                              {sub.semester && (
+                                <span className="text-[10px] font-semibold text-theme-muted">
+                                  Sem {sub.semester}
+                                </span>
+                              )}
+                              {sub.subject_name && sub.subject_name !== sub.name && (
+                                <span className="text-[11px] font-medium text-theme-muted leading-snug break-words">
+                                  • {sub.subject_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
           <button
             onClick={startQuiz}
-            disabled={loading || loadingSubjects || !selectedSubject.trim()}
+            disabled={loading || loadingSubjects || (!selectedSubject.trim() && !subjectSearch.trim())}
             className="w-full py-3.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-2xl font-bold text-sm transition-all shadow-md shadow-indigo-500/15 active:scale-98 cursor-pointer flex items-center justify-center gap-2"
           >
             {loading ? 'Entering Arena...' : 'Enter Quiz Arena'}
@@ -920,6 +1224,31 @@ const QuizPage = () => {
   // Render Question / Result Arena
   return (
     <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-6 animate-fade-in select-none">
+      {!currentQuestion && !loading && (
+        <div className="w-full rounded-2xl bg-theme-surface/60 border border-theme-border/60 p-6 text-center flex flex-col items-center gap-4 shadow-xl">
+          <AlertTriangle className="w-8 h-8 text-amber-400" />
+          <div>
+            <h3 className="text-base font-extrabold text-theme-primary">Unable to Load Question</h3>
+            <p className="text-xs text-theme-muted mt-1">
+              {error || 'We could not load the next question right now. Please try again.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <button
+              onClick={() => loadNextQuestion()}
+              className="flex-1 sm:flex-initial px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={handleQuit}
+              className="flex-1 sm:flex-initial px-5 py-2.5 bg-theme-surface-2 hover:bg-theme-border/40 text-theme-primary border border-theme-border rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              Change Course
+            </button>
+          </div>
+        </div>
+      )}
       {currentQuestion && (
         <div className="w-full flex flex-col gap-6 animate-slide-up">
           {/* Status Bar */}
@@ -933,17 +1262,27 @@ const QuizPage = () => {
                   Question <span className="text-indigo-400">{questionNumber}</span> of <span className="text-theme-primary">{totalQuestions}</span>
                 </span>
               </div>
-              <div className="flex items-center gap-3">
-                {/* Timer */}
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                {/* Reading Grace Indicator + Answer Timer */}
                 {!result && (
-                  <div className={clsx(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors shadow-sm",
-                    timeLeft <= 10
-                      ? "bg-red-500/10 border-red-500/30 text-red-400 animate-pulse"
-                      : "bg-theme-surface border-theme-border text-theme-secondary"
-                  )}>
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{timeLeft}s</span>
+                  <div className="flex items-center gap-1.5">
+                    {readingTimeLeft > 0 && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-extrabold bg-indigo-500/15 border border-indigo-400/35 text-indigo-300 shadow-sm animate-pulse">
+                        <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Reading {readingTimeLeft}s</span>
+                      </div>
+                    )}
+                    <div className={clsx(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors shadow-sm",
+                      readingTimeLeft > 0
+                        ? "bg-theme-surface/70 border-theme-border/60 text-theme-muted"
+                        : timeLeft <= 10
+                          ? "bg-red-500/10 border-red-500/30 text-red-400 animate-pulse"
+                          : "bg-theme-surface border-theme-border text-theme-secondary"
+                    )}>
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{timeLeft}s</span>
+                    </div>
                   </div>
                 )}
                 {/* Quit Arena Button */}
@@ -958,17 +1297,27 @@ const QuizPage = () => {
             </div>
 
             {/* Badges Row */}
-            <div className="flex gap-2">
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 max-w-full truncate">
                 {currentQuestion.category}
               </span>
               <span className={clsx(
-                "px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border",
+                "px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border inline-flex items-center gap-1",
                 currentQuestion.difficulty === 'Easy' && "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
                 currentQuestion.difficulty === 'Medium' && "bg-amber-500/10 border-amber-500/20 text-amber-400",
-                currentQuestion.difficulty === 'Hard' && "bg-red-500/10 border-red-500/20 text-red-400"
+                currentQuestion.difficulty === 'Hard' && "bg-red-500/10 border-red-500/20 text-red-400",
+                currentQuestion.difficulty === 'Insane' && "bg-fuchsia-500/15 border-fuchsia-500/35 text-fuchsia-400 shadow-[0_0_12px_rgba(217,70,239,0.2)]"
               )}>
-                {currentQuestion.difficulty}
+                {currentQuestion.difficulty === 'Insane' && <Flame className="w-3 h-3 text-fuchsia-400" />}
+                {currentQuestion.difficulty} • +{currentQuestion.base_points || (currentQuestion.difficulty === 'Insane' ? 30 : currentQuestion.difficulty === 'Hard' ? 20 : currentQuestion.difficulty === 'Medium' ? 15 : 10)} PTS
+              </span>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-theme-surface border border-theme-border/70 text-theme-muted inline-flex items-center gap-1">
+                <Zap className="w-3 h-3 text-amber-400" />
+                {currentQuestion.difficulty === 'Insane'
+                  ? 'Fast ≤3s: +15 PTS & Badge'
+                  : currentQuestion.speed_tiers && currentQuestion.speed_tiers[0]
+                    ? `Fast ${currentQuestion.speed_tiers[0].label}: +${currentQuestion.speed_tiers[0].bonus} PTS`
+                    : 'Fast ≤3s: Speed Bonus'}
               </span>
             </div>
           </div>
@@ -1063,7 +1412,7 @@ const QuizPage = () => {
                   </h4>
                   <p className="text-xs font-semibold mt-2 text-theme-secondary leading-relaxed">
                     {result.is_correct
-                      ? `Nice work! You earned +${result.points_awarded} points for answering correctly in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
+                      ? `Nice work! You earned +${result.points_awarded} points${result.speed_bonus ? ` (including +${result.speed_bonus} speed bonus)` : ''} for answering in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
                       : result.is_expired
                         ? `Time ran out before you could answer. Keep going!`
                         : `That wasn't the right answer. The correct answers will be revealed when you complete the quiz.`
@@ -1099,10 +1448,6 @@ const QuizPage = () => {
                     if (questionNumber >= totalQuestions) {
                       setIsQuizFinished(true);
                     } else {
-                      setCortanaDrawerOpen(false);
-                      setCortanaExplanation('');
-                      setCortanaError('');
-                      setCurrentQuestion(null);
                       loadNextQuestion();
                     }
                   }}

@@ -423,27 +423,46 @@ router.get('/:id/stream', protect, async (req: AuthRequest, res: Response) => {
 
 
 
-// ── GET ALL SUBJECTS (authenticated, includes paper count) ────────────────────
+// ── GET ALL SUBJECTS & ALL PAPERS (authenticated, used by Quiz Arena search) ──
 router.get('/subjects/all', protect, async (_req: AuthRequest, res: Response) => {
   try {
-    const { data, error } = await supabase
-      .from('upsa_subjects')
-      .select('id, name, code, upsa_papers(count)')
-      .order('name');
+    const [{ data: subjectsData, error: subjectsError }, { data: papersData, error: papersError }] = await Promise.all([
+      supabase
+        .from('upsa_subjects')
+        .select('id, name, code, upsa_papers(count)')
+        .order('name'),
+      supabase
+        .from('upsa_papers')
+        .select('id, title, year, semester, upsa_subjects(id, name, code)')
+        .order('title', { ascending: true })
+        .order('year', { ascending: false })
+        .limit(2000),
+    ]);
 
-    if (error) throw error;
+    if (subjectsError) throw subjectsError;
+    if (papersError) throw papersError;
 
-    const subjects = (data || []).map((s: any) => ({
+    const subjects = (subjectsData || []).map((s: any) => ({
       id: s.id,
       name: s.name,
       code: s.code,
       count: s.upsa_papers?.[0]?.count ?? 0,
     }));
 
-    res.status(200).json({ subjects });
-  } catch (err) {
+    const papers = (papersData || []).map((p: any) => ({
+      id: p.id,
+      paper_id: p.id,
+      name: p.title,
+      title: p.title,
+      year: p.year,
+      semester: p.semester,
+      subject_name: p.upsa_subjects?.name || '',
+      code: p.upsa_subjects?.code || '',
+    }));
 
-    res.status(500).json({ error: 'Failed to fetch subjects.' });
+    res.status(200).json({ subjects, papers });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch subjects and papers.' });
   }
 });
 

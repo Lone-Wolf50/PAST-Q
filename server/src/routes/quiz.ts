@@ -2,7 +2,13 @@ import { Router, Response } from 'express';
 import { protect, adminOnly, AuthRequest } from '../middleware/auth';
 import { supabase } from '../lib/supabase';
 import { redis } from '../lib/redis';
-import { generateQuestion } from '../lib/question-generator';
+import {
+  generateQuestion,
+  generateQuestionsBatch,
+  calculateQuestionTiming,
+  DIFFICULTY_CONFIG_MAP,
+  QuestionDifficulty,
+} from '../lib/question-generator';
 import { awardBadges, BADGE_REGISTRY } from '../lib/badges';
 import { performOcrPipeline } from '../lib/ocr';
 import { getAiCompletion } from '../lib/ai-helper';
@@ -35,6 +41,220 @@ function getEffectiveStreak(streakCount?: number | null, streakLastDate?: string
   const yesterdayStr = yesterday.toISOString().split('T')[0];
 
   return streakLastDate === todayStr || streakLastDate === yesterdayStr ? count : 0;
+}
+
+/** Check if an entry in `upsa_sessions.questions_shown` is a metadata tag rather than a question UUID. */
+function isSessionMetaTag(entry: string): boolean {
+  return (
+    typeof entry !== 'string' ||
+    entry === 'is_custom:true' ||
+    entry.startsWith('paper_id:') ||
+    entry.startsWith('paper_title:')
+  );
+}
+
+function getSessionPaperMeta(shownIds: string[]): { paperId?: string; paperTitle?: string } {
+  const idTag = shownIds.find((s) => typeof s === 'string' && s.startsWith('paper_id:'));
+  const titleTag = shownIds.find((s) => typeof s === 'string' && s.startsWith('paper_title:'));
+  return {
+    paperId: idTag ? idTag.slice('paper_id:'.length) : undefined,
+    paperTitle: titleTag ? titleTag.slice('paper_title:'.length) : undefined,
+  };
+}
+
+/** Format a DB question row for the client (excluding correct_answer) with reading time & difficulty metadata. */
+function formatClientQuestion(q: any, displaySubject: string) {
+  const timing = calculateQuestionTiming(q.body, q.options, q.difficulty);
+  return {
+    id: q.id,
+    body: q.body,
+    category: displaySubject,
+    difficulty: timing.difficulty,
+    options: q.options,
+    time_limit_seconds: Math.max(Number(q.time_limit_seconds) || 0, timing.time_limit_seconds),
+    reading_time_seconds: timing.reading_time_seconds,
+    base_points: timing.base_points,
+    speed_tiers: timing.speed_tiers,
+  };
+}
+
+/** Track in-flight batch pre-generation per session so we never duplicate AI calls. */
+const inFlightSessionPrewarms = new Map<string, Promise<string[]>>();
+
+/** Cache of prewarmed question IDs keyed by paper_id or subject name for instant session startup. */
+const prewarmedCoursePool = new Map<string, string[]>();
+const inFlightCoursePrewarms = new Map<string, Promise<string[]>>();
+
+function prewarmCourseQuestions(
+  subject: string,
+  paperId?: string,
+  paperTitle?: string
+): Promise<string[]> {
+  const key = paperId ? `paper:${paperId}` : `subject:${subject}`;
+  const existing = inFlightCoursePrewarms.get(key);
+  if (existing) return existing;
+
+  const cached = prewarmedCoursePool.get(key);
+  if (cached && cached.length >= 5) {
+    return Promise.resolve(cached);
+  }
+
+  const task = (async (): Promise<string[]> => {
+    try {
+      const batch = await generateQuestionsBatch(6, subject, paperId, paperTitle);
+      const { data: inserted } = await supabase
+        .from('upsa_questions')
+        .insert(batch)
+        .select('id');
+
+      const ids = (inserted || []).map((r: any) => r.id);
+      if (ids.length > 0) {
+        const prev = prewarmedCoursePool.get(key) || [];
+        prewarmedCoursePool.set(key, [...prev, ...ids].slice(-20));
+      }
+      return ids;
+    } catch {
+      return [];
+    } finally {
+      inFlightCoursePrewarms.delete(key);
+    }
+  })();
+
+  inFlightCoursePrewarms.set(key, task);
+  return task;
+}
+
+/**
+ * Pre-generates a full batch of quiz questions for a session so that once the student enters
+ * the arena, all subsequent questions are already ready in `upsa_sessions.questions_shown` with 0ms wait.
+ */
+function prewarmSessionQuestions(
+  sessionId: string,
+  subject: string,
+  paperId: string | undefined,
+  paperTitle: string | undefined,
+  targetCount: number
+): Promise<string[]> {
+  const existingPromise = inFlightSessionPrewarms.get(sessionId);
+  if (existingPromise) return existingPromise;
+
+  const task = (async (): Promise<string[]> => {
+    try {
+      const { data: sess } = await supabase
+        .from('upsa_sessions')
+        .select('questions_shown')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      if (!sess) return [];
+
+      let shownIds: string[] = [];
+      try {
+        shownIds = typeof sess.questions_shown === 'string'
+          ? JSON.parse(sess.questions_shown)
+          : (sess.questions_shown || []);
+      } catch {
+        shownIds = [];
+      }
+
+      const currentQIds = shownIds.filter((id: string) => !isSessionMetaTag(id));
+      const needed = targetCount - currentQIds.length;
+      if (needed <= 0) return currentQIds;
+
+      let newQuestionIds: string[] = [];
+      try {
+        const batch = await generateQuestionsBatch(needed, subject, paperId, paperTitle);
+        const { data: inserted } = await supabase
+          .from('upsa_questions')
+          .insert(batch)
+          .select('id');
+
+        if (inserted && inserted.length > 0) {
+          newQuestionIds = inserted.map((r: any) => r.id);
+        }
+      } catch (batchErr: any) {
+        console.warn('⚠️ [Quiz Prewarm] Batch AI generation failed, falling back to single/pool:', batchErr.message);
+        try {
+          const singleQ = await generateQuestion(subject, paperId, paperTitle);
+          const { data: insertedSingle } = await supabase
+            .from('upsa_questions')
+            .insert(singleQ)
+            .select('id')
+            .single();
+          if (insertedSingle) {
+            newQuestionIds = [insertedSingle.id];
+          }
+        } catch {
+          // Pool fallback is handled below if still needed
+        }
+      }
+
+      if (newQuestionIds.length < needed) {
+        const stillNeeded = needed - newQuestionIds.length;
+        const { data: poolQuestions } = await supabase
+          .from('upsa_questions')
+          .select('id')
+          .eq('category', subject)
+          .limit(60);
+
+        const exclude = new Set([...currentQIds, ...newQuestionIds]);
+        const unseenPool = (poolQuestions || [])
+          .map((q: any) => q.id)
+          .filter((id: string) => !exclude.has(id));
+
+        for (let i = 0; i < stillNeeded && unseenPool.length > 0; i++) {
+          const pickIdx = Math.floor(Math.random() * unseenPool.length);
+          newQuestionIds.push(unseenPool.splice(pickIdx, 1)[0]);
+        }
+      }
+
+      if (newQuestionIds.length > 0) {
+        // Re-fetch latest questions_shown to merge cleanly without race conditions
+        const { data: latestSess } = await supabase
+          .from('upsa_sessions')
+          .select('questions_shown')
+          .eq('id', sessionId)
+          .maybeSingle();
+
+        let latestShown: string[] = shownIds;
+        if (latestSess?.questions_shown) {
+          try {
+            latestShown = typeof latestSess.questions_shown === 'string'
+              ? JSON.parse(latestSess.questions_shown)
+              : latestSess.questions_shown;
+          } catch {
+            latestShown = shownIds;
+          }
+        }
+
+        const existingSet = new Set(latestShown);
+        const merged = [...latestShown];
+        for (const qId of newQuestionIds) {
+          if (!existingSet.has(qId) && merged.filter((id: string) => !isSessionMetaTag(id)).length < targetCount) {
+            merged.push(qId);
+            existingSet.add(qId);
+          }
+        }
+
+        await supabase
+          .from('upsa_sessions')
+          .update({ questions_shown: merged })
+          .eq('id', sessionId);
+
+        return merged.filter((id: string) => !isSessionMetaTag(id));
+      }
+
+      return currentQIds;
+    } catch (err: any) {
+      console.warn('⚠️ [Quiz Prewarm] Error:', err.message);
+      return [];
+    } finally {
+      inFlightSessionPrewarms.delete(sessionId);
+    }
+  })();
+
+  inFlightSessionPrewarms.set(sessionId, task);
+  return task;
 }
 
 // All quiz routes require authentication
@@ -116,64 +336,112 @@ function getStartOfMonth(): string {
   return start.toISOString();
 }
 
+// --- 0. PREWARM QUESTIONS WHEN STUDENT CLICKS A COURSE ---
+router.post('/prewarm', async (req: AuthRequest, res: Response): Promise<void> => {
+  const { subject, paper_id } = req.body || {};
+  try {
+    let canonicalSubject = String(subject || '').trim();
+    let matchedPaperId: string | undefined;
+    let matchedPaperTitle: string | undefined;
+
+    if (paper_id) {
+      const { data: paperRow } = await supabase
+        .from('upsa_papers')
+        .select('id, title, upsa_subjects(name)')
+        .eq('id', paper_id)
+        .maybeSingle();
+
+      if (paperRow) {
+        matchedPaperId = (paperRow as any).id;
+        matchedPaperTitle = (paperRow as any).title;
+        canonicalSubject = (paperRow as any).upsa_subjects?.name || canonicalSubject;
+      }
+    }
+
+    if (canonicalSubject) {
+      void prewarmCourseQuestions(canonicalSubject, matchedPaperId, matchedPaperTitle);
+    }
+    res.status(200).json({ ok: true });
+  } catch {
+    res.status(200).json({ ok: false });
+  }
+});
+
 // --- 1. START / FETCH ACTIVE QUIZ SESSION ---
 router.post('/session', async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id;
-  const { subject } = req.body;
+  const { subject, paper_id, force_new } = req.body;
 
-  if (!subject) {
-    res.status(400).json({ error: 'Subject selection is required to start a quiz.' });
+  if ((!subject || !String(subject).trim()) && !paper_id) {
+    res.status(400).json({ error: 'Course selection is required to start a quiz.' });
     return;
   }
 
+  const trimmedSubject = String(subject || '').trim();
+
   try {
-    // Verify that the subject exists in the database
-    const { data: subjectExists, error: subjectErr } = await supabase
+    // 1. Fetch all subjects and resolve either a specific paper (out of all 617 papers) or a subject
+    const { data: allSubjects, error: subjectErr } = await supabase
       .from('upsa_subjects')
-      .select('id')
-      .eq('name', subject)
-      .maybeSingle();
+      .select('id, name, code');
 
     if (subjectErr) throw subjectErr;
 
-    if (!subjectExists) {
+    const lowerInput = trimmedSubject.toLowerCase();
+    let canonicalSubject = '';
+    let matchedPaperId: string | undefined;
+    let matchedPaperTitle: string | undefined;
+
+    if (paper_id) {
+      const { data: paperRow } = await supabase
+        .from('upsa_papers')
+        .select('id, title, upsa_subjects(id, name, code)')
+        .eq('id', paper_id)
+        .maybeSingle();
+
+      if (paperRow) {
+        matchedPaperId = (paperRow as any).id;
+        matchedPaperTitle = (paperRow as any).title;
+        canonicalSubject = (paperRow as any).upsa_subjects?.name || allSubjects?.[0]?.name || '';
+      }
+    }
+
+    if (!canonicalSubject && trimmedSubject) {
+      // Check upsa_subjects by name or code first
+      const subjectMatch = (allSubjects || []).find(
+        (s: any) =>
+          s.name?.trim().toLowerCase() === lowerInput ||
+          (s.code && s.code.trim().toLowerCase() === lowerInput)
+      );
+
+      if (subjectMatch) {
+        canonicalSubject = subjectMatch.name;
+      } else {
+        // Otherwise check all 617 papers in upsa_papers by title
+        const { data: paperMatches } = await supabase
+          .from('upsa_papers')
+          .select('id, title, upsa_subjects(id, name, code)')
+          .ilike('title', trimmedSubject)
+          .limit(1);
+
+        if (paperMatches && paperMatches.length > 0) {
+          const p = paperMatches[0] as any;
+          matchedPaperId = p.id;
+          matchedPaperTitle = p.title;
+          canonicalSubject = p.upsa_subjects?.name || allSubjects?.[0]?.name || '';
+        }
+      }
+    }
+
+    if (!canonicalSubject) {
       res.status(404).json({
         error: 'subject_not_available',
-        message: `The subject "${subject}" is currently not available or does not exist. Please choose a subject from the list.`
+        message: `The course "${trimmedSubject}" is currently not available or does not exist. Please choose a course from the list.`
       });
       return;
     }
 
-    // Check for an active standard session of the selected subject (started in the last 2 hours)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const { data: activeSessions, error: fetchErr } = await supabase
-      .from('upsa_sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('subject', subject)
-      .gte('started_at', twoHoursAgo)
-      .order('started_at', { ascending: false });
-
-    if (fetchErr) throw fetchErr;
-
-    const activeSession = (activeSessions || []).find((s: any) => {
-      let shownIds: string[] = [];
-      try {
-        shownIds = typeof s.questions_shown === 'string'
-          ? JSON.parse(s.questions_shown)
-          : s.questions_shown;
-      } catch {
-        shownIds = [];
-      }
-      return !shownIds.includes('is_custom:true');
-    });
-
-    if (activeSession) {
-      res.status(200).json({ session: activeSession });
-      return;
-    }
-
-    // Enforce pricing plan quiz limits
+    // Fetch user plan early so we know total questions per session and daily limits
     const { data: limitUserData, error: userErr } = await supabase
       .from('upsa_users')
       .select('plan')
@@ -182,6 +450,54 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
 
     if (userErr) throw userErr;
     const plan = (limitUserData?.plan || 'free').toLowerCase();
+    const sessionQuestionTarget = plan === 'free' ? 5 : 10;
+
+    // Check for an INCOMPLETE active standard session of the selected course/subject (started in the last 2 hours)
+    if (!force_new) {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const { data: activeSessions, error: fetchErr } = await supabase
+        .from('upsa_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('subject', canonicalSubject)
+        .gte('started_at', twoHoursAgo)
+        .order('started_at', { ascending: false });
+
+      if (fetchErr) throw fetchErr;
+
+      for (const s of activeSessions || []) {
+        let shownIds: string[] = [];
+        try {
+          shownIds = typeof s.questions_shown === 'string'
+            ? JSON.parse(s.questions_shown)
+            : s.questions_shown;
+        } catch {
+          shownIds = [];
+        }
+        if (shownIds.includes('is_custom:true')) continue;
+
+        const { paperId: sessPaperId } = getSessionPaperMeta(shownIds);
+        if (matchedPaperId && sessPaperId !== matchedPaperId) continue;
+
+        const qIds = shownIds.filter((id: string) => !isSessionMetaTag(id));
+        if (qIds.length < sessionQuestionTarget) {
+          res.status(200).json({ session: s });
+          return;
+        }
+
+        // If all target questions were shown, check if any remain unanswered
+        const { count: answeredCount } = await supabase
+          .from('upsa_submissions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .in('question_id', qIds);
+
+        if ((answeredCount ?? 0) < qIds.length) {
+          res.status(200).json({ session: s });
+          return;
+        }
+      }
+    }
 
     if (plan === 'free' || plan === 'basic') {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -193,14 +509,15 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
 
       if (countErr) throw countErr;
 
-      // Count standard (Arena) sessions only
+      // Count standard (Arena) sessions that actually served at least 1 question
       const standardCount = (recentSessions || []).filter((s: any) => {
         try {
           const shown = typeof s.questions_shown === 'string'
             ? JSON.parse(s.questions_shown)
             : s.questions_shown;
-          return !Array.isArray(shown) || !shown.includes('is_custom:true');
-        } catch { return true; }
+          if (!Array.isArray(shown) || shown.includes('is_custom:true')) return false;
+          return shown.some((id: string) => !isSessionMetaTag(id));
+        } catch { return false; }
       }).length;
 
       const limit = plan === 'free' ? 5 : 20;
@@ -213,14 +530,55 @@ router.post('/session', async (req: AuthRequest, res: Response): Promise<void> =
       }
     }
 
-    // Otherwise, create a new session with the chosen subject
+    const initialMetaTags: string[] = [];
+    if (matchedPaperId) initialMetaTags.push(`paper_id:${matchedPaperId}`);
+    if (matchedPaperTitle) initialMetaTags.push(`paper_title:${matchedPaperTitle}`);
+
+    // Seed with any already-prewarmed or unseen pool questions so Question 1 starts with 0ms wait
+    const courseKey = matchedPaperId ? `paper:${matchedPaperId}` : `subject:${canonicalSubject}`;
+    let candidatePoolIds = [...(prewarmedCoursePool.get(courseKey) || [])];
+
+    if (candidatePoolIds.length === 0) {
+      const { data: existingPool } = await supabase
+        .from('upsa_questions')
+        .select('id')
+        .eq('category', canonicalSubject)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      candidatePoolIds = (existingPool || []).map((q: any) => q.id);
+    }
+
+    if (candidatePoolIds.length > 0) {
+      const { data: answeredRows } = await supabase
+        .from('upsa_submissions')
+        .select('question_id')
+        .eq('user_id', userId)
+        .in('question_id', candidatePoolIds);
+      const answeredSet = new Set((answeredRows || []).map((r: any) => r.question_id));
+      const unseenSeed = candidatePoolIds
+        .filter((id: string) => !answeredSet.has(id))
+        .slice(0, Math.min(3, sessionQuestionTarget));
+      initialMetaTags.push(...unseenSeed);
+    }
+
+    // Create a new session with the canonical subject name (for FK integrity) + paper metadata tags + seeded questions
     const { data: newSession, error: createErr } = await supabase
       .from('upsa_sessions')
-      .insert({ user_id: userId, subject, questions_shown: [] })
+      .insert({ user_id: userId, subject: canonicalSubject, questions_shown: initialMetaTags })
       .select('*')
       .single();
 
     if (createErr) throw createErr;
+
+    // Immediately kick off background batch pre-generation for all remaining questions in this session
+    // so the student never waits between questions!
+    void prewarmSessionQuestions(
+      newSession.id,
+      canonicalSubject,
+      matchedPaperId,
+      matchedPaperTitle,
+      sessionQuestionTarget
+    );
 
     // Check daily login bonus
     const { data: userData } = await supabase
@@ -321,7 +679,9 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
     const plan = (limitUserData?.plan || 'free').toLowerCase();
 
     const isCustom = shownIds.includes('is_custom:true');
-    const questionIds = shownIds.filter(id => id !== 'is_custom:true');
+    const { paperId, paperTitle } = getSessionPaperMeta(shownIds);
+    const displaySubject = paperTitle || session.subject;
+    const questionIds = shownIds.filter((id: string) => !isSessionMetaTag(id));
     const totalQuestions = isCustom ? questionIds.length : (plan === 'free' ? 5 : 10);
 
     // Fetch submissions for this session's questions
@@ -336,10 +696,14 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
     }
 
     // Find the first unanswered question ID
-    const nextQuestionId = questionIds.find(id => !answeredIds.has(id));
+    let nextQuestionId = questionIds.find(id => !answeredIds.has(id));
 
+    // If we have an unanswered question ready, serve it immediately and top up remaining questions in the background
     if (nextQuestionId) {
-      // Serve the unanswered question
+      if (!isCustom && questionIds.length < totalQuestions) {
+        void prewarmSessionQuestions(session.id, session.subject, paperId, paperTitle, totalQuestions);
+      }
+
       const { data: question, error: qErr } = await supabase
         .from('upsa_questions')
         .select('id, body, category, difficulty, options, time_limit_seconds')
@@ -351,7 +715,27 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
         return;
       }
 
-      res.status(200).json({ question, totalQuestions, questionIndex: answeredIds.size + 1, subject: session.subject });
+      // Also peek the subsequent question (if already pre-generated) so the client can transition in 0ms
+      const nextIdx = questionIds.indexOf(nextQuestionId) + 1;
+      let prefetchedNext: any = null;
+      if (nextIdx < questionIds.length) {
+        const { data: peekQ } = await supabase
+          .from('upsa_questions')
+          .select('id, body, category, difficulty, options, time_limit_seconds')
+          .eq('id', questionIds[nextIdx])
+          .maybeSingle();
+        if (peekQ) {
+          prefetchedNext = formatClientQuestion(peekQ, displaySubject);
+        }
+      }
+
+      res.status(200).json({
+        question: formatClientQuestion(question, displaySubject),
+        nextQuestion: prefetchedNext,
+        totalQuestions,
+        questionIndex: answeredIds.size + 1,
+        subject: displaySubject
+      });
       return;
     }
 
@@ -369,36 +753,87 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    // Otherwise, generate a new question dynamically for standard session
-    const qData = await generateQuestion(session.subject);
+    // Otherwise, await the session prewarm batch (which generates all questions for the quiz at once)
+    const prewarmedIds = await prewarmSessionQuestions(
+      session.id,
+      session.subject,
+      paperId,
+      paperTitle,
+      totalQuestions
+    );
 
-    // Save to questions table
-    const { data: dbQuestion, error: qErr } = await supabase
-      .from('upsa_questions')
-      .insert(qData)
-      .select('*')
-      .single();
+    nextQuestionId = prewarmedIds.find(id => !answeredIds.has(id));
 
-    if (qErr || !dbQuestion) throw qErr;
+    let dbQuestion: any = null;
+    if (nextQuestionId) {
+      const { data: fetchedQ } = await supabase
+        .from('upsa_questions')
+        .select('id, body, category, difficulty, options, time_limit_seconds')
+        .eq('id', nextQuestionId)
+        .maybeSingle();
+      dbQuestion = fetchedQ;
+    }
 
-    // Update session
-    const newShownIds = [...shownIds, dbQuestion.id];
-    await supabase
-      .from('upsa_sessions')
-      .update({ questions_shown: newShownIds })
-      .eq('id', session.id);
+    // Final safety fallback if batch prewarm returned empty
+    if (!dbQuestion) {
+      try {
+        const qData = await generateQuestion(session.subject, paperId, paperTitle);
+        const { data: insertedQuestion, error: qErr } = await supabase
+          .from('upsa_questions')
+          .insert(qData)
+          .select('*')
+          .single();
 
-    // Send to client, STRICTLY EXCLUDING correct_answer column
-    const clientQuestion = {
-      id: dbQuestion.id,
-      body: dbQuestion.body,
-      category: dbQuestion.category,
-      difficulty: dbQuestion.difficulty,
-      options: dbQuestion.options,
-      time_limit_seconds: dbQuestion.time_limit_seconds
-    };
+        if (qErr || !insertedQuestion) throw qErr;
+        dbQuestion = insertedQuestion;
+      } catch (genErr: any) {
+        console.warn('⚠️ [Quiz Question] Dynamic generation failed, checking existing question pool:', genErr.message);
+        const { data: poolQuestions } = await supabase
+          .from('upsa_questions')
+          .select('*')
+          .eq('category', session.subject)
+          .limit(50);
 
-    res.status(200).json({ question: clientQuestion, totalQuestions, questionIndex: answeredIds.size + 1, subject: session.subject });
+        const unseenPool = (poolQuestions || []).filter((q: any) => !questionIds.includes(q.id));
+        if (unseenPool.length > 0) {
+          dbQuestion = unseenPool[Math.floor(Math.random() * unseenPool.length)];
+        } else if (poolQuestions && poolQuestions.length > 0) {
+          dbQuestion = poolQuestions[Math.floor(Math.random() * poolQuestions.length)];
+        } else {
+          throw genErr;
+        }
+      }
+
+      const newShownIds = [...shownIds, dbQuestion.id];
+      await supabase
+        .from('upsa_sessions')
+        .update({ questions_shown: newShownIds })
+        .eq('id', session.id);
+    }
+
+    // Also include the second question in `nextQuestion` if available from the batch so Question 2 loads in 0ms
+    let prefetchedNext: any = null;
+    const nextIdxAfterCurrent = prewarmedIds.indexOf(dbQuestion.id) + 1;
+    if (nextIdxAfterCurrent > 0 && nextIdxAfterCurrent < prewarmedIds.length) {
+      const { data: peekQ } = await supabase
+        .from('upsa_questions')
+        .select('id, body, category, difficulty, options, time_limit_seconds')
+        .eq('id', prewarmedIds[nextIdxAfterCurrent])
+        .maybeSingle();
+      if (peekQ) {
+        prefetchedNext = formatClientQuestion(peekQ, displaySubject);
+      }
+    }
+
+    const clientQuestion = formatClientQuestion(dbQuestion, displaySubject);
+
+    res.status(200).json({
+      question: clientQuestion,
+      nextQuestion: prefetchedNext,
+      totalQuestions,
+      questionIndex: answeredIds.size + 1,
+      subject: displaySubject
+    });
   } catch (err: any) {
     console.error('❌ [Quiz Question] Error:', err.message);
     res.status(500).json({ error: 'Failed to serve next question.' });
@@ -408,7 +843,7 @@ router.get('/question', async (req: AuthRequest, res: Response): Promise<void> =
 // --- 3. SUBMIT ANSWER ---
 router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id;
-  const { question_id, submitted_answer, session_id } = req.body;
+  const { question_id, submitted_answer, session_id, answer_time_ms } = req.body;
 
   if (!question_id || submitted_answer === undefined) {
     res.status(400).json({ error: 'Question ID and submitted answer are required.' });
@@ -501,7 +936,9 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
     const plan = (limitUserData?.plan || 'free').toLowerCase();
 
     const isCustom = shownIds.includes('is_custom:true');
-    const questionIds = shownIds.filter(id => id !== 'is_custom:true');
+    const { paperTitle } = getSessionPaperMeta(shownIds);
+    const displaySubject = paperTitle || session.subject;
+    const questionIds = shownIds.filter((id: string) => !isSessionMetaTag(id));
     const totalQs = isCustom ? questionIds.length : (plan === 'free' ? 5 : 10);
 
     const questionIndex = questionIds.indexOf(question_id);
@@ -510,7 +947,13 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
       return;
     }
 
-    // Calculate start time for the question
+    // Calculate difficulty-aware timing & reading grace buffer for this question
+    const timing = calculateQuestionTiming(question.body, question.options, question.difficulty);
+    const diffConfig = DIFFICULTY_CONFIG_MAP[timing.difficulty];
+    const effectiveTimeLimitSec = Math.max(Number(question.time_limit_seconds) || 0, timing.time_limit_seconds);
+    const readingGraceMs = timing.reading_time_seconds * 1000;
+
+    // Calculate server-side start time for the question
     let startTime = new Date(session.started_at).getTime();
     if (questionIndex > 0) {
       const prevQuestionId = questionIds[questionIndex - 1];
@@ -526,31 +969,36 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
       }
     }
 
-    const timeTakenMs = now.getTime() - startTime;
+    const rawServerElapsedMs = Math.max(300, now.getTime() - startTime);
+    const serverReadingAdjustedMs = Math.max(400, rawServerElapsedMs - readingGraceMs);
 
-    // Flag sub-1000ms submissions as suspicious
-    if (timeTakenMs < 1000) {
-      console.warn(`🚨 [Anti-Cheat] Suspiciously fast submission: User ID ${userId} answered Question ${question_id} in ${timeTakenMs}ms.`);
-    }
+    // Prefer client-measured active answer time (post-reading grace) when valid so reading Cortana explanations
+    // on the previous question never penalizes the student's timer on the next question
+    const clientAnswerMs = Number(answer_time_ms);
+    const timeTakenMs =
+      Number.isFinite(clientAnswerMs) && clientAnswerMs >= 250 && clientAnswerMs <= (effectiveTimeLimitSec + 30) * 1000
+        ? Math.round(clientAnswerMs)
+        : serverReadingAdjustedMs;
 
-    // 4. Enforce time limit (allow a 2-second buffer for latency)
-    const allowedTimeMs = (question.time_limit_seconds * 1000) + 2000;
-    const isExpired = timeTakenMs > allowedTimeMs;
+    // 4. Enforce time limit (allow a 3-second buffer for network latency)
+    const allowedTimeMs = (effectiveTimeLimitSec * 1000) + 3000;
+    const isExpired = submitted_answer === '' || timeTakenMs > allowedTimeMs;
 
-    // 5. Evaluate correctness and calculate points
+    // 5. Evaluate correctness and calculate difficulty-scaled points & speed bonuses
     const isCorrect = !isExpired && (submitted_answer.trim() === question.correct_answer.trim());
     let pointsAwarded = 0;
+    let speedBonusAwarded = 0;
 
     if (isCorrect) {
-      pointsAwarded = 10;
+      pointsAwarded = diffConfig.basePoints;
 
-      // Speed bonus
-      if (timeTakenMs < 3000) {
-        pointsAwarded += 5;
-      } else if (timeTakenMs < 6000) {
-        pointsAwarded += 3;
-      } else if (timeTakenMs < 10000) {
-        pointsAwarded += 1;
+      // Difficulty-specific speed bonus tiers (e.g. <=3s on Insane gives +15 bonus!)
+      for (const tier of diffConfig.speedTiers) {
+        if (timeTakenMs <= tier.maxMs) {
+          speedBonusAwarded = tier.bonus;
+          pointsAwarded += tier.bonus;
+          break;
+        }
       }
 
       // Streak bonus: 1.5x multiply if user has 3+ correct answers in a row (including current)
@@ -605,7 +1053,7 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
     let earnedBadges: string[] = [];
 
     if (isSessionComplete) {
-      // 7. Update user's total points ONLY on full session completion
+      // 7. Update user's total points on full session completion
       const { data: userRecord } = await supabase
         .from('upsa_users')
         .select('total_points')
@@ -619,21 +1067,42 @@ router.post('/submit', async (req: AuthRequest, res: Response): Promise<void> =>
           .eq('id', userId);
         await invalidateLeaderboardCache();
       }
+    }
 
-      // 8. Award badges automatically
+    // 8. Check and award badges immediately on any correct answer OR session completion
+    // so fast-answer badges (e.g. <=3s on Insane -> Insane Reflex / Speed Demon) unlock right away!
+    if (isCorrect || isSessionComplete) {
       earnedBadges = await awardBadges(userId);
+    }
+
+    // 9. Pre-load next question into response so clicking "Next Question" is 0ms instant
+    let nextQuestionPayload: any = null;
+    if (!isSessionComplete && questionIndex + 1 < questionIds.length) {
+      const nextQId = questionIds[questionIndex + 1];
+      const { data: nextQRow } = await supabase
+        .from('upsa_questions')
+        .select('id, body, category, difficulty, options, time_limit_seconds')
+        .eq('id', nextQId)
+        .maybeSingle();
+      if (nextQRow) {
+        nextQuestionPayload = formatClientQuestion(nextQRow, displaySubject);
+      }
     }
 
     const responseData: any = {
       is_correct: isCorrect,
       points_awarded: pointsAwarded,
+      base_points: diffConfig.basePoints,
+      speed_bonus: speedBonusAwarded,
+      difficulty: timing.difficulty,
       time_taken_ms: timeTakenMs,
       is_expired: isExpired,
       is_completed: isSessionComplete,
       session_points: totalSessionPoints,
       session_correct: correctCount,
       session_total: totalQs,
-      earned_badges: earnedBadges
+      earned_badges: earnedBadges,
+      next_question: nextQuestionPayload
     };
 
     // Only reveal correct answers after the ENTIRE quiz session is completed
@@ -1252,16 +1721,15 @@ router.post('/generate-from-paper', async (req: AuthRequest, res: Response): Pro
     const systemInstruction = `You are an expert academic exam author. Generate ONLY a valid JSON array. No markdown fences, no explanations, just raw JSON.`;
 
     const userMessage =
-      `Based on the following exam paper content, generate exactly 5 multiple-choice questions for a student to practice.\n\n` +
+      `Based on the following exam paper content, generate exactly 5 multiple-choice questions for a student to practice (progressing across Easy, Medium, Hard, and Insane difficulty).\n\n` +
       `PAPER CONTENT:\n${extractedText}\n\n` +
       `Rules:\n` +
       `- Each question must have exactly 4 options.\n` +
       `- The correct_answer field must be an EXACT copy of one of the options strings.\n` +
-      `- difficulty must be one of: Easy, Medium, Hard\n` +
-      `- time_limit_seconds must be between 20 and 60\n` +
+      `- difficulty must be one of: Easy, Medium, Hard, Insane\n` +
       `- category must be: "${subjectName}"\n\n` +
       `Return ONLY a valid JSON array like this (no extra text):\n` +
-      `[{"body":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"Medium","time_limit_seconds":30,"category":"${subjectName}"}]`;
+      `[{"body":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"Medium","category":"${subjectName}"}]`;
 
     const rawReply = await getAiCompletion(systemInstruction, [], userMessage);
 
@@ -1291,14 +1759,17 @@ router.post('/generate-from-paper', async (req: AuthRequest, res: Response): Pro
     }
 
     // 5. Insert questions into upsa_questions
-    const insertPayload = questions.map(q => ({
-      body: q.body,
-      category: q.category || subjectName,
-      difficulty: ['Easy', 'Medium', 'Hard'].includes(q.difficulty) ? q.difficulty : 'Medium',
-      correct_answer: q.correct_answer,
-      options: q.options,
-      time_limit_seconds: Math.min(Math.max(Number(q.time_limit_seconds) || 30, 15), 60)
-    }));
+    const insertPayload = questions.map(q => {
+      const timing = calculateQuestionTiming(q.body, q.options, q.difficulty);
+      return {
+        body: q.body,
+        category: q.category || subjectName,
+        difficulty: timing.difficulty,
+        correct_answer: q.correct_answer,
+        options: q.options,
+        time_limit_seconds: timing.time_limit_seconds
+      };
+    });
 
     const { data: insertedQuestions, error: insertErr } = await supabase
       .from('upsa_questions')

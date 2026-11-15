@@ -18,6 +18,7 @@ export const BADGE_REGISTRY: Record<string, Badge> = {
 
   // Speed
   speed_demon: { slug: 'speed_demon', name: 'Speed Demon', description: 'Answer correctly in under 3 seconds', icon: 'Zap', condition: 'Answer correctly in under 3 seconds', hidden: false },
+  insane_reflex: { slug: 'insane_reflex', name: 'Insane Reflex', description: 'Answer an Insane difficulty question correctly in under 3 seconds', icon: 'Zap', condition: 'Answer an Insane question correctly in ≤ 3 seconds', hidden: false },
   lightning: { slug: 'lightning', name: 'Lightning', description: 'Answer 10 questions correctly all under 3s', icon: 'Sparkles', condition: 'Answer 10 questions correctly in under 3 seconds each', hidden: false },
   blink: { slug: 'blink', name: 'Blink', description: 'Answer correctly in under 1 second', icon: 'Eye', condition: 'Answer correctly in under 1 second', hidden: false },
 
@@ -39,7 +40,8 @@ export const BADGE_REGISTRY: Record<string, Badge> = {
   // Explorer
   category_master: { slug: 'category_master', name: 'Category Master', description: 'Answer all questions in one category correctly', icon: 'GraduationCap', condition: 'Answer at least 15 questions in a single category with 100% accuracy', hidden: false },
   all_rounder: { slug: 'all_rounder', name: 'All-Rounder', description: 'Answer at least 10 questions in every category', icon: 'Compass', condition: 'Answer at least 10 questions in every active category (minimum 3 categories)', hidden: false },
-  deep_diver: { slug: 'deep_diver', name: 'Deep Diver', description: 'Complete all hard-difficulty questions in a category', icon: 'Waves', condition: 'Answer at least 10 Hard difficulty questions in a single category', hidden: false },
+  deep_diver: { slug: 'deep_diver', name: 'Deep Diver', description: 'Complete all hard-difficulty questions in a category', icon: 'Waves', condition: 'Answer at least 10 Hard/Insane difficulty questions in a single category', hidden: false },
+  insane_conqueror: { slug: 'insane_conqueror', name: 'Insane Conqueror', description: 'Conquer 5 Insane-difficulty questions correctly', icon: 'Flame', condition: 'Answer at least 5 Insane difficulty questions correctly', hidden: false },
 
   // Leaderboard
   top_10: { slug: 'top_10', name: 'Top 10', description: 'Reach global top 10 on the leaderboard', icon: 'Trophy', condition: 'Reach global top 10 on the leaderboard', hidden: false },
@@ -141,15 +143,23 @@ export async function awardBadges(userId: string): Promise<string[]> {
 
     // --- SPEED BADGES ---
     if (subs && subs.length > 0) {
-      // Speed Demon (Correct in < 3s)
+      // Speed Demon (Correct in <= 3s)
       if (!hasBadge('speed_demon')) {
-        const hasSpeedSub = subs.some(s => s.is_correct && s.time_taken_ms < 3000);
+        const hasSpeedSub = subs.some(s => s.is_correct && s.time_taken_ms <= 3000);
         if (hasSpeedSub) await grantBadge('speed_demon');
+      }
+
+      // Insane Reflex (Answer an Insane difficulty question correctly in <= 3s)
+      if (!hasBadge('insane_reflex')) {
+        const hasInsaneSpeed = subs.some(
+          s => s.is_correct && s.time_taken_ms <= 3000 && s.upsa_questions?.difficulty === 'Insane'
+        );
+        if (hasInsaneSpeed) await grantBadge('insane_reflex');
       }
 
       // Lightning (Answer 10 correctly all under 3s)
       if (!hasBadge('lightning')) {
-        const lightningCount = subs.filter(s => s.is_correct && s.time_taken_ms < 3000).length;
+        const lightningCount = subs.filter(s => s.is_correct && s.time_taken_ms <= 3000).length;
         if (lightningCount >= 10) await grantBadge('lightning');
       }
 
@@ -190,8 +200,9 @@ export async function awardBadges(userId: string): Promise<string[]> {
             shownIds = [];
           }
 
-          if (shownIds && shownIds.length === 10) {
-            const correctSessionSubs = subs ? subs.filter(s => shownIds.includes(s.question_id) && s.is_correct) : [];
+          const realQIds = (shownIds || []).filter((id: string) => typeof id === 'string' && !id.includes(':'));
+          if (realQIds.length === 10) {
+            const correctSessionSubs = subs ? subs.filter(s => realQIds.includes(s.question_id) && s.is_correct) : [];
             if (correctSessionSubs.length === 10) {
               await grantBadge('perfectionist');
               break;
@@ -258,14 +269,26 @@ export async function awardBadges(userId: string): Promise<string[]> {
         }
       }
 
-      // Deep Diver (Complete/answer at least 10 hard-difficulty questions in a category)
+      // Deep Diver (Complete/answer at least 10 hard/insane-difficulty questions in a category)
       if (!hasBadge('deep_diver')) {
         for (const cat of Object.keys(catSubmissions)) {
-          const hardCount = catSubmissions[cat].filter(s => s.upsa_questions?.difficulty === 'Hard').length;
+          const hardCount = catSubmissions[cat].filter(
+            s => s.upsa_questions?.difficulty === 'Hard' || s.upsa_questions?.difficulty === 'Insane'
+          ).length;
           if (hardCount >= 10) {
             await grantBadge('deep_diver');
             break;
           }
+        }
+      }
+
+      // Insane Conqueror (Answer 5 Insane difficulty questions correctly)
+      if (!hasBadge('insane_conqueror')) {
+        const insaneCorrectCount = subs.filter(
+          s => s.is_correct && s.upsa_questions?.difficulty === 'Insane'
+        ).length;
+        if (insaneCorrectCount >= 5) {
+          await grantBadge('insane_conqueror');
         }
       }
     }
