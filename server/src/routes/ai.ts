@@ -473,13 +473,12 @@ const checkHistoryAccess = async (req: AuthRequest, res: any, next: any) => {
   }
 };
 
-// GET /ai/conversations — list active (non-expired) conversations
+// GET /ai/conversations — list saved conversations (maintained until deleted by user)
 router.get('/conversations', protect, checkHistoryAccess, async (req: AuthRequest, res: any) => {
   const { data, error } = await supabase
     .from('upsa_ai_conversations')
     .select('id, title, last_message_at, created_at, expires_at')
     .eq('user_id', req.user!.id)
-    .gt('expires_at', new Date().toISOString())
     .order('last_message_at', { ascending: false })
     .limit(50);
 
@@ -487,14 +486,15 @@ router.get('/conversations', protect, checkHistoryAccess, async (req: AuthReques
   res.json({ conversations: data ?? [] });
 });
 
-// POST /ai/conversations — create a new conversation
+// POST /ai/conversations — create a new conversation (no 7-day auto-expiry)
 router.post('/conversations', protect, checkHistoryAccess, async (req: AuthRequest, res: any) => {
   const { title } = req.body;
   const safeTitle = (title || 'New Conversation').slice(0, 80);
+  const farFuture = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data, error } = await supabase
     .from('upsa_ai_conversations')
-    .insert({ user_id: req.user!.id, title: safeTitle })
+    .insert({ user_id: req.user!.id, title: safeTitle, expires_at: farFuture })
     .select('id, title, last_message_at, created_at, expires_at')
     .single();
 
@@ -512,7 +512,6 @@ router.get('/conversations/:id', protect, checkHistoryAccess, async (req: AuthRe
     .select('id, title, expires_at')
     .eq('id', id)
     .eq('user_id', req.user!.id)
-    .gt('expires_at', new Date().toISOString())
     .single();
 
   if (convErr || !conv) return res.status(404).json({ error: 'Conversation not found.' });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { HelpCircle, AlertTriangle, Shield, Clock, ArrowRight, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy, Bot, X, Loader2, Search, Zap, Flame } from 'lucide-react';
+import { HelpCircle, AlertTriangle, Shield, Clock, ArrowLeft, ArrowRight, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy, Bot, X, Loader2, Search, Flame } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -17,12 +17,15 @@ interface SpeedTier {
   label: string;
 }
 
+type ArenaDifficultyChoice = 'Easy' | 'Normal' | 'Hard' | 'Insane';
+
 interface Question {
   id: string;
   body: string;
   category: string;
   difficulty: 'Easy' | 'Medium' | 'Hard' | 'Insane' | string;
   options: string[];
+  timed?: boolean;
   time_limit_seconds: number;
   reading_time_seconds?: number;
   base_points?: number;
@@ -208,6 +211,12 @@ const QuizPage = () => {
   const [selectedPaperId, setSelectedPaperId] = useState<string>('');
   const [subjectSearch, setSubjectSearch] = useState<string>('');
   const [loadingSubjects, setLoadingSubjects] = useState(false);
+
+  // Quiz Arena Setup (Step 2), Difficulty & Timer Mode Selection
+  const [isArenaSetupOpen, setIsArenaSetupOpen] = useState(false);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<ArenaDifficultyChoice>('Normal');
+  const [isTimedMode, setIsTimedMode] = useState<boolean>(true);
+  const toApiDifficulty = (choice: ArenaDifficultyChoice) => (choice === 'Normal' ? 'Medium' : choice);
 
   const filteredSubjects = subjects.filter((sub) => {
     const q = subjectSearch.trim().toLowerCase();
@@ -421,12 +430,18 @@ const QuizPage = () => {
     return Math.min(18, Math.max(4, 4 + extra));
   };
 
-  // Apply a question to state and initialize its reading grace period + answer timer
+  // Apply a question to state and initialize its reading grace period + answer timer (if timed)
   const applyQuestionToArena = (q: Question, nextIndex?: number) => {
-    const readingSecs = getReadingSecondsForQuestion(q);
+    const questionIsTimed = typeof q.timed === 'boolean' ? q.timed : isTimedMode;
     setCurrentQuestion(q);
-    setReadingTimeLeft(readingSecs);
-    setTimeLeft(q.time_limit_seconds || 45);
+    if (questionIsTimed) {
+      const readingSecs = getReadingSecondsForQuestion(q);
+      setReadingTimeLeft(readingSecs);
+      setTimeLeft(q.time_limit_seconds || 45);
+    } else {
+      setReadingTimeLeft(0);
+      setTimeLeft(0);
+    }
     questionDisplayedAtRef.current = Date.now();
     answerTimerStartedAtRef.current = null;
     if (typeof nextIndex === 'number') {
@@ -436,9 +451,13 @@ const QuizPage = () => {
     }
   };
 
-  // Timer Tick handler: first counts down Reading Grace time, then counts down Answer Timer
+  // Timer Tick handler: only active in Timed mode; first counts down Reading Grace, then Answer Timer
   useEffect(() => {
-    if (isQuizActive && currentQuestion && !result) {
+    const questionIsTimed = currentQuestion
+      ? (typeof currentQuestion.timed === 'boolean' ? currentQuestion.timed : isTimedMode)
+      : isTimedMode;
+
+    if (isQuizActive && currentQuestion && !result && questionIsTimed) {
       timerRef.current = setInterval(() => {
         setReadingTimeLeft((prevReading) => {
           if (prevReading > 1) {
@@ -471,13 +490,13 @@ const QuizPage = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isQuizActive, currentQuestion, result]);
+  }, [isQuizActive, currentQuestion, result, isTimedMode]);
 
-  const startQuiz = async () => {
+  const resolveSelectedCourse = () => {
     const candidateInput = selectedSubject.trim() || subjectSearch.trim();
     if (!candidateInput) {
       setError('Please select a course to enter the Quiz Arena.');
-      return;
+      return null;
     }
 
     // Match by selected paper_id first, then exact course name or code (or single filtered match when searching)
@@ -504,7 +523,7 @@ const QuizPage = () => {
         message: `The course "${candidateInput}" does not match any available course. Please search and select a valid course from the list below.`
       });
       setShowSubjectErrorModal(true);
-      return;
+      return null;
     }
 
     // Use the exact DB name to avoid casing mismatches
@@ -514,6 +533,35 @@ const QuizPage = () => {
       if (selectedSubject !== matchedSubject.name) setSelectedSubject(matchedSubject.name);
       if (selectedPaperId !== (matchedSubject.paper_id || '')) setSelectedPaperId(matchedSubject.paper_id || '');
     }
+
+    return { subjectToSend, paperIdToSend };
+  };
+
+  const handleEnterArenaSetup = () => {
+    const resolved = resolveSelectedCourse();
+    if (!resolved) return;
+
+    setError('');
+    if (token) {
+      apiFetch('/quiz/prewarm', {
+        method: 'POST',
+        token,
+        body: {
+          subject: resolved.subjectToSend,
+          paper_id: resolved.paperIdToSend,
+          difficulty: toApiDifficulty(selectedDifficulty),
+        }
+      }).catch(() => {});
+    }
+    setIsArenaSetupOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const startQuiz = async () => {
+    const resolved = resolveSelectedCourse();
+    if (!resolved) return;
+
+    const { subjectToSend, paperIdToSend } = resolved;
 
     setLoading(true);
     setError('');
@@ -528,9 +576,15 @@ const QuizPage = () => {
       const res = await apiFetch('/quiz/session', {
         method: 'POST',
         token: token || undefined,
-        body: { subject: subjectToSend, paper_id: paperIdToSend }
+        body: {
+          subject: subjectToSend,
+          paper_id: paperIdToSend,
+          difficulty: toApiDifficulty(selectedDifficulty),
+          timed: isTimedMode,
+        }
       });
       if (res.session) {
+        setIsArenaSetupOpen(false);
         setActiveSessionId(res.session.id);
         setIsQuizActive(true);
         await loadNextQuestion(res.session.id, true);
@@ -604,6 +658,9 @@ const QuizPage = () => {
       const url = targetSessionId ? `/quiz/question?session_id=${targetSessionId}` : '/quiz/question';
       const res = await apiFetch(url, { token: token || undefined });
       if (res.question) {
+        if (typeof res.timed === 'boolean') {
+          setIsTimedMode(res.timed);
+        }
         prefetchedNextQuestionRef.current = res.nextQuestion || null;
         applyQuestionToArena(res.question, res.questionIndex);
         if (res.subject) {
@@ -718,6 +775,7 @@ const QuizPage = () => {
   const handleQuit = () => {
     setConfirmQuitOpen(false);
     setIsQuizActive(false);
+    setIsArenaSetupOpen(false);
     setCurrentQuestion(null);
     prefetchedNextQuestionRef.current = null;
     sessionBadgesRef.current = new Set();
@@ -795,8 +853,246 @@ const QuizPage = () => {
     </>
   );
 
-  // Render Start Screen with Rules
+  // Render Start Screen (Step 1: Course Selection) and Arena Setup Screen (Step 2: Level & Timer)
   if (!isQuizActive) {
+    const activeSelectedCourse = selectedPaperId
+      ? subjects.find((s) => s.paper_id === selectedPaperId)
+      : subjects.find((s) => s.name === selectedSubject);
+
+    if (isArenaSetupOpen) {
+      return (
+        <>
+          <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-6 animate-fade-in">
+            {/* Step 2 Header */}
+            <div className="w-full flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsArenaSetupOpen(false);
+                  setError('');
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-theme-surface border border-theme-border hover:bg-theme-surface-2 text-xs font-bold text-theme-secondary hover:text-theme-primary transition-all cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Change Course
+              </button>
+              <span className="text-[11px] font-extrabold uppercase tracking-widest text-indigo-400">
+                Quiz Arena Setup
+              </span>
+            </div>
+
+            {/* Arena Setup Card */}
+            <div className="w-full rounded-2xl bg-theme-surface/50 border border-theme-border/50 p-6 backdrop-blur-sm shadow-xl flex flex-col gap-6">
+              {/* Selected Course Header */}
+              <div className={clsx(
+                'flex flex-col gap-1.5 px-4 py-3.5 rounded-xl border',
+                isDark
+                  ? 'bg-indigo-500/10 border-indigo-400/30 text-indigo-100'
+                  : 'bg-indigo-50/90 border-indigo-200 text-slate-900'
+              )}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-400 flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5" />
+                    Selected Subject
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {activeSelectedCourse?.year && (
+                      <span className={clsx(
+                        'text-[10px] font-bold px-2 py-0.5 rounded-md border',
+                        isDark ? 'bg-theme-surface border-theme-border text-theme-secondary' : 'bg-white border-slate-200 text-slate-600'
+                      )}>
+                        {activeSelectedCourse.year}
+                      </span>
+                    )}
+                    {activeSelectedCourse?.code && (
+                      <span className={clsx(
+                        'text-[10px] font-black uppercase px-2 py-0.5 rounded-md border',
+                        isDark ? 'bg-indigo-500/20 border-indigo-400/30 text-indigo-300' : 'bg-white border-indigo-200 text-indigo-600'
+                      )}>
+                        {activeSelectedCourse.code}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <h2 className="text-sm sm:text-base font-extrabold text-theme-primary leading-snug break-words">
+                  {selectedSubject || subjectSearch}
+                </h2>
+                {activeSelectedCourse?.subject_name && activeSelectedCourse.subject_name !== selectedSubject && (
+                  <p className="text-[11px] font-medium text-theme-muted leading-snug break-words">
+                    {activeSelectedCourse.subject_name}{activeSelectedCourse.semester ? ` • Semester ${activeSelectedCourse.semester}` : ''}
+                  </p>
+                )}
+              </div>
+
+              {/* Difficulty Level Selector (No Points Shown) */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-extrabold uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                    <Flame className="w-4 h-4" />
+                    Difficulty Level
+                  </label>
+                  <span className="text-[11px] font-semibold text-theme-muted">
+                    Select question level
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  {([
+                    {
+                      id: 'Easy' as ArenaDifficultyChoice,
+                      description: 'Foundational concepts',
+                      activeCls: isDark
+                        ? 'bg-emerald-500/15 border-emerald-400/50 text-emerald-300'
+                        : 'bg-emerald-50 border-emerald-400 text-emerald-700',
+                      badgeCls: 'text-emerald-400',
+                    },
+                    {
+                      id: 'Normal' as ArenaDifficultyChoice,
+                      description: 'Standard exam difficulty',
+                      activeCls: isDark
+                        ? 'bg-amber-500/15 border-amber-400/50 text-amber-300'
+                        : 'bg-amber-50 border-amber-400 text-amber-700',
+                      badgeCls: 'text-amber-400',
+                    },
+                    {
+                      id: 'Hard' as ArenaDifficultyChoice,
+                      description: 'Analytical problem solving',
+                      activeCls: isDark
+                        ? 'bg-red-500/15 border-red-400/50 text-red-300'
+                        : 'bg-red-50 border-red-400 text-red-700',
+                      badgeCls: 'text-red-400',
+                    },
+                    {
+                      id: 'Insane' as ArenaDifficultyChoice,
+                      description: 'Mastery-level challenge',
+                      activeCls: isDark
+                        ? 'bg-fuchsia-500/15 border-fuchsia-400/50 text-fuchsia-300'
+                        : 'bg-fuchsia-50 border-fuchsia-400 text-fuchsia-700',
+                      badgeCls: 'text-fuchsia-400',
+                    },
+                  ]).map((lvl) => {
+                    const isSelected = selectedDifficulty === lvl.id;
+                    return (
+                      <button
+                        key={lvl.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDifficulty(lvl.id);
+                          if (token && selectedSubject) {
+                            apiFetch('/quiz/prewarm', {
+                              method: 'POST',
+                              token,
+                              body: {
+                                subject: selectedSubject,
+                                paper_id: selectedPaperId || undefined,
+                                difficulty: toApiDifficulty(lvl.id),
+                              }
+                            }).catch(() => {});
+                          }
+                        }}
+                        className={clsx(
+                          'text-left px-3.5 py-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-0.5',
+                          isSelected
+                            ? `${lvl.activeCls} shadow-sm`
+                            : 'bg-theme-surface/50 border-theme-border/60 text-theme-secondary hover:bg-theme-surface-2/70'
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-extrabold tracking-wide">{lvl.id}</span>
+                          {lvl.id === 'Insane' && <Flame className={clsx('w-3.5 h-3.5', isSelected ? lvl.badgeCls : 'text-theme-muted')} />}
+                        </div>
+                        <span className={clsx('text-[11px] font-medium leading-snug', isSelected ? 'opacity-90' : 'text-theme-muted')}>
+                          {lvl.description}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Timer Preference Selector */}
+              <div className="flex flex-col gap-3 border-t border-theme-border/30 pt-5">
+                <label className="text-xs font-extrabold uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Timer Preference
+                </label>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsTimedMode(true)}
+                    className={clsx(
+                      'text-left px-3.5 py-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-1',
+                      isTimedMode
+                        ? (isDark
+                            ? 'bg-indigo-500/20 border-indigo-400/50 text-theme-primary shadow-sm'
+                            : 'bg-indigo-50 border-indigo-400 text-theme-primary shadow-sm')
+                        : 'bg-theme-surface/50 border-theme-border/60 text-theme-secondary hover:bg-theme-surface-2/70'
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-extrabold">
+                      <Clock className={clsx('w-3.5 h-3.5', isTimedMode ? 'text-indigo-400' : 'text-theme-muted')} />
+                      <span>With Timer</span>
+                    </div>
+                    <span className="text-[11px] font-medium text-theme-muted leading-snug">
+                      Timed countdown per question
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsTimedMode(false)}
+                    className={clsx(
+                      'text-left px-3.5 py-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-1',
+                      !isTimedMode
+                        ? (isDark
+                            ? 'bg-emerald-500/15 border-emerald-400/50 text-theme-primary shadow-sm'
+                            : 'bg-emerald-50 border-emerald-400 text-theme-primary shadow-sm')
+                        : 'bg-theme-surface/50 border-theme-border/60 text-theme-secondary hover:bg-theme-surface-2/70'
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-extrabold">
+                      <BookOpen className={clsx('w-3.5 h-3.5', !isTimedMode ? 'text-emerald-400' : 'text-theme-muted')} />
+                      <span>No Timer</span>
+                    </div>
+                    <span className="text-[11px] font-medium text-theme-muted leading-snug">
+                      Practice at your own pace
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Start Quiz CTA */}
+              <button
+                type="button"
+                onClick={startQuiz}
+                disabled={loading}
+                className="w-full py-3.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-2xl font-bold text-sm transition-all shadow-md shadow-indigo-500/15 active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {loading ? 'Starting Quiz...' : 'Start Quiz'}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              {error && (
+                <div className="flex flex-col items-center gap-3 mt-1">
+                  <p className="text-xs font-bold text-red-400 text-center">{error}</p>
+                  {(error.toLowerCase().includes('limit') || error.toLowerCase().includes('upgrade')) && (
+                    <Link
+                      to="/pricing"
+                      className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 active:scale-95"
+                    >
+                      View Pricing & Upgrade
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          {renderModals()}
+        </>
+      );
+    }
+
     return (
       <>
         <div className="w-full flex-grow flex flex-col items-center px-4 md:px-6 max-w-xl mx-auto py-10 pb-32 md:pb-16 gap-8 animate-fade-in">
@@ -812,7 +1108,7 @@ const QuizPage = () => {
           </p>
         </div>
 
-        {/* Rules Card */}
+        {/* Rules & Course Selection Card */}
         <div className="w-full rounded-2xl bg-theme-surface/50 border border-theme-border/50 p-6 backdrop-blur-sm shadow-xl flex flex-col gap-5">
           <h3 className="text-base font-extrabold uppercase tracking-widest text-indigo-400 flex items-center gap-2">
             <Shield className="w-4 h-4" />
@@ -835,13 +1131,13 @@ const QuizPage = () => {
             <li className="flex gap-3 items-start">
               <Clock className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Timer:</strong> Each question has its own timer based on difficulty and length. Unsubmitted questions when timer hits 0 score 0 points.
+                <strong>Timer Choice:</strong> Inside the arena, choose between a timed countdown per question or untimed practice.
               </span>
             </li>
             <li className="flex gap-3 items-start">
               <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Bonuses:</strong> Higher difficulty levels and fast correct answers award extra points and badges. Correct streaks multiply your score!
+                <strong>Difficulty Levels:</strong> Select Easy, Normal, Hard, or Insane once you enter the arena.
               </span>
             </li>
           </ul>
@@ -902,54 +1198,49 @@ const QuizPage = () => {
                 </div>
 
                 {/* Selected Course Indicator */}
-                {selectedSubject && (() => {
-                  const activeSub = selectedPaperId
-                    ? subjects.find((s) => s.paper_id === selectedPaperId)
-                    : subjects.find((s) => s.name === selectedSubject);
-                  return (
-                    <div className={clsx(
-                      'flex flex-col gap-1.5 px-3.5 py-3 rounded-xl border text-xs',
-                      isDark
-                        ? 'bg-indigo-500/12 border-indigo-400/35 text-indigo-200'
-                        : 'bg-indigo-50/90 border-indigo-300 text-slate-800'
-                    )}>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-400">
-                            Selected Course
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {activeSub?.year && (
-                            <span className={clsx(
-                              'text-[10px] font-bold px-2 py-0.5 rounded-md border',
-                              isDark ? 'bg-theme-surface border-theme-border text-theme-secondary' : 'bg-white border-slate-200 text-slate-600'
-                            )}>
-                              {activeSub.year}
-                            </span>
-                          )}
-                          {activeSub?.code && (
-                            <span className={clsx(
-                              'text-[10px] font-black uppercase px-2 py-0.5 rounded-md border',
-                              isDark ? 'bg-indigo-500/20 border-indigo-400/30 text-indigo-300' : 'bg-white border-indigo-200 text-indigo-600'
-                            )}>
-                              {activeSub.code}
-                            </span>
-                          )}
-                        </div>
+                {selectedSubject && (
+                  <div className={clsx(
+                    'flex flex-col gap-1.5 px-3.5 py-3 rounded-xl border text-xs',
+                    isDark
+                      ? 'bg-indigo-500/12 border-indigo-400/35 text-indigo-200'
+                      : 'bg-indigo-50/90 border-indigo-300 text-slate-800'
+                  )}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-400">
+                          Selected Course
+                        </span>
                       </div>
-                      <p className="text-xs sm:text-sm font-extrabold text-theme-primary leading-snug break-words">
-                        {selectedSubject}
-                      </p>
-                      {activeSub?.subject_name && activeSub.subject_name !== selectedSubject && (
-                        <p className="text-[11px] font-medium text-theme-muted leading-snug break-words">
-                          {activeSub.subject_name}{activeSub.semester ? ` • Semester ${activeSub.semester}` : ''}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {activeSelectedCourse?.year && (
+                          <span className={clsx(
+                            'text-[10px] font-bold px-2 py-0.5 rounded-md border',
+                            isDark ? 'bg-theme-surface border-theme-border text-theme-secondary' : 'bg-white border-slate-200 text-slate-600'
+                          )}>
+                            {activeSelectedCourse.year}
+                          </span>
+                        )}
+                        {activeSelectedCourse?.code && (
+                          <span className={clsx(
+                            'text-[10px] font-black uppercase px-2 py-0.5 rounded-md border',
+                            isDark ? 'bg-indigo-500/20 border-indigo-400/30 text-indigo-300' : 'bg-white border-indigo-200 text-indigo-600'
+                          )}>
+                            {activeSelectedCourse.code}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  );
-                })()}
+                    <p className="text-xs sm:text-sm font-extrabold text-theme-primary leading-snug break-words">
+                      {selectedSubject}
+                    </p>
+                    {activeSelectedCourse?.subject_name && activeSelectedCourse.subject_name !== selectedSubject && (
+                      <p className="text-[11px] font-medium text-theme-muted leading-snug break-words">
+                        {activeSelectedCourse.subject_name}{activeSelectedCourse.semester ? ` • Semester ${activeSelectedCourse.semester}` : ''}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Scrollable list of courses */}
                 <div className="max-h-72 overflow-y-auto rounded-2xl border border-theme-border/60 bg-theme-surface/40 p-1.5 flex flex-col gap-1.5">
@@ -978,7 +1269,11 @@ const QuizPage = () => {
                               apiFetch('/quiz/prewarm', {
                                 method: 'POST',
                                 token,
-                                body: { subject: sub.name, paper_id: sub.paper_id || undefined }
+                                body: {
+                                  subject: sub.name,
+                                  paper_id: sub.paper_id || undefined,
+                                  difficulty: toApiDifficulty(selectedDifficulty),
+                                }
                               }).catch(() => {});
                             }
                           }}
@@ -1050,11 +1345,12 @@ const QuizPage = () => {
           </div>
 
           <button
-            onClick={startQuiz}
+            type="button"
+            onClick={handleEnterArenaSetup}
             disabled={loading || loadingSubjects || (!selectedSubject.trim() && !subjectSearch.trim())}
             className="w-full py-3.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-2xl font-bold text-sm transition-all shadow-md shadow-indigo-500/15 active:scale-98 cursor-pointer flex items-center justify-center gap-2"
           >
-            {loading ? 'Entering Arena...' : 'Enter Quiz Arena'}
+            Enter Quiz Arena
             <ArrowRight className="w-4 h-4" />
           </button>
 
@@ -1263,8 +1559,8 @@ const QuizPage = () => {
                 </span>
               </div>
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                {/* Reading Grace Indicator + Answer Timer */}
-                {!result && (
+                {/* Reading Grace Indicator + Answer Timer (only in Timed mode) */}
+                {!result && ((typeof currentQuestion.timed === 'boolean' ? currentQuestion.timed : isTimedMode) ? (
                   <div className="flex items-center gap-1.5">
                     {readingTimeLeft > 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-extrabold bg-indigo-500/15 border border-indigo-400/35 text-indigo-300 shadow-sm animate-pulse">
@@ -1284,7 +1580,12 @@ const QuizPage = () => {
                       <span>{timeLeft}s</span>
                     </div>
                   </div>
-                )}
+                ) : (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 shadow-sm">
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>No Timer</span>
+                  </div>
+                ))}
                 {/* Quit Arena Button */}
                 <button
                   onClick={() => setConfirmQuitOpen(true)}
@@ -1309,16 +1610,19 @@ const QuizPage = () => {
                 currentQuestion.difficulty === 'Insane' && "bg-fuchsia-500/15 border-fuchsia-500/35 text-fuchsia-400 shadow-[0_0_12px_rgba(217,70,239,0.2)]"
               )}>
                 {currentQuestion.difficulty === 'Insane' && <Flame className="w-3 h-3 text-fuchsia-400" />}
-                {currentQuestion.difficulty} • +{currentQuestion.base_points || (currentQuestion.difficulty === 'Insane' ? 30 : currentQuestion.difficulty === 'Hard' ? 20 : currentQuestion.difficulty === 'Medium' ? 15 : 10)} PTS
+                {currentQuestion.difficulty === 'Medium' ? 'Normal' : currentQuestion.difficulty}
               </span>
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-theme-surface border border-theme-border/70 text-theme-muted inline-flex items-center gap-1">
-                <Zap className="w-3 h-3 text-amber-400" />
-                {currentQuestion.difficulty === 'Insane'
-                  ? 'Fast ≤3s: +15 PTS & Badge'
-                  : currentQuestion.speed_tiers && currentQuestion.speed_tiers[0]
-                    ? `Fast ${currentQuestion.speed_tiers[0].label}: +${currentQuestion.speed_tiers[0].bonus} PTS`
-                    : 'Fast ≤3s: Speed Bonus'}
-              </span>
+              {(typeof currentQuestion.timed === 'boolean' ? currentQuestion.timed : isTimedMode) ? (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-theme-surface border border-theme-border/70 text-theme-muted inline-flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-indigo-400" />
+                  Timed Mode
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-theme-surface border border-theme-border/70 text-theme-muted inline-flex items-center gap-1">
+                  <Shield className="w-3 h-3 text-emerald-400" />
+                  Untimed Focus Mode
+                </span>
+              )}
             </div>
           </div>
 
@@ -1412,7 +1716,9 @@ const QuizPage = () => {
                   </h4>
                   <p className="text-xs font-semibold mt-2 text-theme-secondary leading-relaxed">
                     {result.is_correct
-                      ? `Nice work! You earned +${result.points_awarded} points${result.speed_bonus ? ` (including +${result.speed_bonus} speed bonus)` : ''} for answering in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
+                      ? result.timed === false
+                        ? `Nice work! You earned +${result.points_awarded} points on this untimed question.`
+                        : `Nice work! You earned +${result.points_awarded} points${result.speed_bonus ? ` (including +${result.speed_bonus} speed bonus)` : ''} for answering in ${(result.time_taken_ms / 1000).toFixed(1)}s.`
                       : result.is_expired
                         ? `Time ran out before you could answer. Keep going!`
                         : `That wasn't the right answer. The correct answers will be revealed when you complete the quiz.`
@@ -1621,7 +1927,7 @@ const QuizPage = () => {
                           } else if (category === 'blue') {
                             customStyle = { color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 };
                           } else {
-                            customStyle = { fontWeight: isDark ? 850 : 700 };
+                            customStyle = { fontWeight: 800 };
                           }
                           return (
                             <strong

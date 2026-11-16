@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import { protect, AuthRequest } from '../middleware/auth';
-import { generatePaperInsights, isProcessing } from '../lib/ai-insights';
+import { ensurePaperInsights } from '../lib/ai-insights';
 
 
 const router = Router();
@@ -147,11 +147,9 @@ router.get('/:id', protect, async (req: AuthRequest, res: Response) => {
     const canSeeAnswers = ['basic', 'plus', 'pro'].includes(user.plan);
     const insightsData = (paper as any).upsa_paper_insights?.[0] || null;
 
-    // ── Insight cache logging ──────────────────────────────────────────────
-    if (insightsData) {
-
-    } else {
-
+    // Warm up AI insights in the background if missing so every paper has insights
+    if (!insightsData && id) {
+      ensurePaperInsights(id as string).catch(() => {});
     }
 
     const responseData = {
@@ -167,6 +165,18 @@ router.get('/:id', protect, async (req: AuthRequest, res: Response) => {
   } catch (err) {
 
     res.status(500).json({ error: 'Failed to fetch paper.' });
+  }
+});
+
+// ── ENSURE / GENERATE PAPER INSIGHTS ON DEMAND ────────────────────────────────
+router.post('/:id/insights', protect, async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  try {
+    const insights = await ensurePaperInsights(id as string);
+    res.status(200).json({ insights });
+  } catch (err: any) {
+    console.error(`[POST /papers/${id}/insights] Error:`, err?.message || err);
+    res.status(500).json({ error: 'Failed to generate insights for this paper.' });
   }
 });
 

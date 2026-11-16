@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Loader2, Paperclip, Sparkles,
-  RotateCcw, Menu, X, Trash2, Plus, Clock
+  RotateCcw, Menu, X, Trash2, Plus,
+  Search, BookOpen, Copy, Check, PanelLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Markdown from 'react-markdown';
@@ -378,6 +379,16 @@ const AskAIPage = () => {
   });
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [showChatSearch, setShowChatSearch] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [hideUpgradeBanner, setHideUpgradeBanner] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.avatar_url]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -661,11 +672,6 @@ const AskAIPage = () => {
   };
 
   // Helpers
-  const daysUntilExpiry = (expiresAt: string) => {
-    const diff = new Date(expiresAt).getTime() - Date.now();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-  };
-
   const relativeTime = (iso: string | null) => {
     if (!iso) return 'Just now';
     const date = new Date(iso);
@@ -917,479 +923,727 @@ const AskAIPage = () => {
 
   const limit = PLAN_LIMITS[plan];
 
+  const copyMessage = (id: string, text: string) => {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopiedMsgId(id);
+      setTimeout(() => {
+        setCopiedMsgId(prev => (prev === id ? null : prev));
+      }, 1800);
+    }).catch(() => {});
+  };
+
+  const filteredConversations = conversations.filter((conv) => {
+    const q = chatSearchQuery.trim().toLowerCase();
+    return !q || conv.title.toLowerCase().includes(q);
+  });
+
+  const activeConvTitle =
+    conversations.find((c) => c.id === activeConversationId)?.title ||
+    (activePaperId && selectedFileName ? selectedFileName : 'New chat');
+
+  const visibleMessages = messages.filter((m) => m.id !== 'welcome');
+  const welcomeMessage = messages.find((m) => m.id === 'welcome');
+  const hasPaperWelcomeDetails =
+    Boolean(welcomeMessage?.content?.includes('verified the questions in this exam paper'));
+
   return (
-    <div className="w-full h-[calc(100dvh-72px)] flex overflow-hidden bg-theme-base">
+    <div className={clsx(
+      "w-full flex-1 min-h-0 h-full relative flex overflow-hidden border-t",
+      isDark ? "bg-[#212120] border-[#2c2c2a]" : "bg-[#fcfbf8] border-stone-200/80"
+    )}>
 
       {/* Mobile Drawer Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden"
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm z-30 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+      {/* ── Claude-Inspired Sidebar ─────────────────────────────────────── */}
       <aside className={clsx(
-        "fixed md:static inset-y-0 left-0 w-72 shrink-0 flex flex-col gap-3 p-3 z-50 transition-transform duration-300 shadow-2xl md:shadow-none border-r border-theme-border/60 bg-[var(--glass-sidebar-bg)] backdrop-blur-2xl",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 hidden md:flex"
+        "absolute md:static inset-y-0 left-0 h-full shrink-0 flex flex-col z-40 md:z-auto transition-all duration-200 border-r pb-20 md:pb-2",
+        isDark
+          ? "bg-[#191918] border-[#2c2c2a] text-[#ecece7]"
+          : "bg-[#f5f3ee] border-stone-200 text-stone-900",
+        sidebarOpen ? "w-72 translate-x-0 flex shadow-2xl" : "-translate-x-full hidden",
+        desktopSidebarOpen ? "md:w-64 md:translate-x-0 md:flex md:shadow-none" : "md:hidden"
       )}>
-        {/* Top Info Card */}
-        <div className="glass-panel-premium p-3.5 shadow-md shrink-0 flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center border border-theme-border/60">
-                <img src="/lumio.jpg" alt="Cortana" className="w-full h-full object-cover" />
-              </div>
-              <h1 className="text-lg font-black tracking-tight text-theme-primary">Cortana AI</h1>
+        {/* Top Brand Row */}
+        <div className="px-3.5 pt-3.5 pb-2 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg overflow-hidden border border-theme-border/60 shrink-0">
+              <img src="/lumio.jpg" alt="Cortana" className="w-full h-full object-cover" />
             </div>
-            <button className="md:hidden p-2 text-theme-muted hover:text-theme-primary hover:bg-theme-surface-2 rounded-xl transition-all" onClick={() => setSidebarOpen(false)}>
-              <X size={20} />
-            </button>
+            <span className="text-[17px] font-bold tracking-tight truncate">Cortana</span>
           </div>
-
-          <div className="flex items-center gap-3 mt-4 pt-3 border-t border-theme-border/40">
-            <div className="w-10 h-10 rounded-full bg-theme-surface border-2 border-theme-border/80 shadow-inner flex items-center justify-center overflow-hidden">
-              {user?.avatar_url ? (
-                <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-tr from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold">
-                  {user?.full_name?.charAt(0).toUpperCase() || 'S'}
-                </div>
-              )}
-            </div>
-            <div className="overflow-hidden">
-              <p className="font-semibold text-sm text-theme-primary truncate">{user?.full_name || 'Student'}</p>
-              <p className="text-[10px] text-theme-muted uppercase font-bold tracking-wider">{plan} Member</p>
-            </div>
-          </div>
-        </div>
-
-        {(plan === 'Plus' || plan === 'Pro') && (
           <button
-            onClick={startNewChat}
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-bold transition-all active:scale-95 shadow-md shadow-indigo-500/10 border border-indigo-400/20 shrink-0 cursor-pointer"
-          >
-            <Plus size={16} />
-            New Conversation
-          </button>
-        )}
-
-        {/* History Area */}
-        {(plan === 'Plus' || plan === 'Pro') && (
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-2 px-1">
-              <label className="text-[10px] uppercase font-bold text-theme-muted tracking-wider">
-                Recent Chats
-              </label>
-              {isHistoryLoading && <Loader2 size={12} className="animate-spin text-theme-muted" />}
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-hide">
-              {conversations.length === 0 && !isHistoryLoading && (
-                <div className="py-8 px-4 text-center bg-theme-surface-2/30 rounded-2xl border border-dashed border-theme-border/50">
-                  <p className="text-[10px] text-theme-muted font-medium leading-relaxed">
-                    No recent chats found. Start a new one above!
-                  </p>
-                </div>
-              )}
-              {conversations.map((conv) => (
-                <motion.div
-                  key={conv.id}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => loadConversation(conv)}
-                  onKeyDown={(e) => e.key === 'Enter' && loadConversation(conv)}
-                  tabIndex={0}
-                  role="button"
-                  className={clsx(
-                    "w-full text-left p-2.5 rounded-xl border transition-all group relative cursor-pointer backdrop-blur-md",
-                    activeConversationId === conv.id
-                      ? "bg-indigo-500/10 border-indigo-500/30 shadow-[0_4px_16px_rgba(99,102,241,0.08)]"
-                      : "bg-theme-surface-2/20 border-theme-border/30 hover:border-indigo-500/30 hover:bg-theme-surface-2/50"
-                  )}
-                >
-                  <p className={clsx(
-                    "text-xs font-semibold truncate pr-6 transition-colors",
-                    activeConversationId === conv.id ? "text-indigo-500 dark:text-indigo-400" : "text-theme-secondary group-hover:text-theme-primary"
-                  )}>
-                    {conv.title}
-                  </p>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-[9px] text-theme-muted font-medium">{relativeTime(conv.last_message_at)}</span>
-                    <div className="flex items-center gap-1 text-[9px] text-theme-muted bg-theme-surface/60 px-1.5 py-0.5 rounded-md border border-theme-border/30">
-                      <Clock size={8} />
-                      <span>{daysUntilExpiry(conv.expires_at)}d</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => deleteConversation(e, conv.id)}
-                    disabled={deletingId === conv.id}
-                    className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 text-theme-muted transition-all cursor-pointer"
-                  >
-                    {deletingId === conv.id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
-                  </button>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Usage Card */}
-        <div className="glass-panel-premium p-3.5 shadow-md shrink-0">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-[10px] font-bold text-theme-muted uppercase tracking-wider">
-              {plan} Plan
-            </span>
-            {plan !== 'Pro' && (
-              <Link to="/pricing" className="text-[10px] font-bold text-indigo-500 hover:text-indigo-400 dark:text-indigo-400 dark:hover:text-indigo-300">
-                Upgrade
-              </Link>
+            type="button"
+            onClick={() => {
+              setSidebarOpen(false);
+              setDesktopSidebarOpen(false);
+            }}
+            title="Collapse sidebar"
+            className={clsx(
+              "p-1.5 rounded-lg transition-colors cursor-pointer",
+              isDark ? "text-stone-400 hover:text-stone-100 hover:bg-white/5" : "text-stone-500 hover:text-stone-900 hover:bg-black/5"
             )}
-          </div>
+          >
+            <PanelLeft size={17} className="hidden md:block" />
+            <X size={18} className="md:hidden" />
+          </button>
+        </div>
 
-          <div className="w-full bg-theme-surface/50 h-1.5 rounded-full overflow-hidden mb-2 border border-theme-border/30">
-            <motion.div
-              className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full shadow-[0_0_8px_rgba(79,70,229,0.3)]"
-              initial={{ width: 0 }}
-              animate={{
-                width: limit === Infinity ? '100%' : `${Math.min((usageCount / limit) * 100, 100)}%`
-              }}
-            />
-          </div>
+        {/* Navigation Links (+ New chat, Search, Past Papers) */}
+        <div className="px-2.5 py-1.5 space-y-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              if (plan === 'Plus' || plan === 'Pro') {
+                startNewChat();
+              } else {
+                setSidebarOpen(false);
+                handleReset();
+              }
+            }}
+            className={clsx(
+              "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer",
+              isDark ? "hover:bg-white/5 text-[#e6e6e1]" : "hover:bg-black/5 text-stone-800"
+            )}
+          >
+            <Plus size={16} className="opacity-80 shrink-0" />
+            <span>New chat</span>
+          </button>
 
-          <div className="flex justify-between items-center">
-            <p className="text-[10px] text-theme-muted font-bold">
-              <span className="text-theme-primary">{usageCount}/{limit === Infinity ? '∞' : limit}</span> queries
-            </p>
+          {(plan === 'Plus' || plan === 'Pro') && (
             <button
-              onClick={handleReset}
-              className="p-1.5 text-theme-muted hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-theme-surface/50 rounded-lg border border-transparent hover:border-theme-border/30 transition-all cursor-pointer"
-              title="Reset session"
+              type="button"
+              onClick={() => {
+                setShowChatSearch(prev => {
+                  if (prev) setChatSearchQuery('');
+                  return !prev;
+                });
+              }}
+              className={clsx(
+                "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer",
+                showChatSearch
+                  ? (isDark ? "bg-white/10 text-white" : "bg-black/5 text-stone-900")
+                  : (isDark ? "hover:bg-white/5 text-[#d4d4cf]" : "hover:bg-black/5 text-stone-700")
+              )}
             >
-              <RotateCcw size={12} />
+              <Search size={15} className="opacity-75 shrink-0" />
+              <span>Search</span>
+            </button>
+          )}
+
+          {showChatSearch && (plan === 'Plus' || plan === 'Pro') && (
+            <div className="px-1 pt-1 pb-1.5">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+                <input
+                  type="text"
+                  value={chatSearchQuery}
+                  onChange={(e) => setChatSearchQuery(e.target.value)}
+                  placeholder="Filter conversations..."
+                  autoFocus
+                  className={clsx(
+                    "w-full pl-8 pr-7 py-1.5 rounded-lg text-xs border focus:outline-none transition-colors",
+                    isDark
+                      ? "bg-[#242422] border-[#383835] text-stone-100 placeholder:text-stone-500 focus:border-indigo-400/60"
+                      : "bg-white border-stone-200 text-stone-900 placeholder:text-stone-400 focus:border-indigo-400"
+                  )}
+                />
+                {chatSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setChatSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <Link
+            to="/papers"
+            onClick={() => setSidebarOpen(false)}
+            className={clsx(
+              "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors",
+              isDark ? "hover:bg-white/5 text-[#d4d4cf]" : "hover:bg-black/5 text-stone-700"
+            )}
+          >
+            <BookOpen size={15} className="opacity-75 shrink-0" />
+            <span>Past Papers</span>
+          </Link>
+        </div>
+
+        {/* Recents List (Plus/Pro) or History Info (Free/Basic) */}
+        <div className="flex-1 flex flex-col min-h-0 px-2.5 pt-3">
+          <div className="flex items-center justify-between px-2.5 mb-1.5">
+            <span className="text-[11px] font-semibold text-theme-muted">Recents</span>
+            {isHistoryLoading && <Loader2 size={11} className="animate-spin text-theme-muted" />}
+          </div>
+
+          {(plan === 'Plus' || plan === 'Pro') ? (
+            <div className="flex-1 overflow-y-auto overscroll-contain space-y-0.5 pr-0.5 scrollbar-hide">
+              {filteredConversations.length === 0 && !isHistoryLoading ? (
+                <div className="px-2.5 py-4 text-[11px] text-theme-muted leading-relaxed">
+                  {chatSearchQuery.trim()
+                    ? `No chats match "${chatSearchQuery}".`
+                    : 'No saved chats yet. Start a conversation to keep it here.'}
+                </div>
+              ) : (
+                filteredConversations.map((conv) => {
+                  const isActive = activeConversationId === conv.id;
+                  return (
+                    <div
+                      key={conv.id}
+                      onClick={() => loadConversation(conv)}
+                      onKeyDown={(e) => e.key === 'Enter' && loadConversation(conv)}
+                      tabIndex={0}
+                      role="button"
+                      title={`${conv.title} • ${relativeTime(conv.last_message_at)}`}
+                      className={clsx(
+                        "w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors group cursor-pointer",
+                        isActive
+                          ? (isDark ? "bg-white/10 text-white font-medium" : "bg-black/10 text-stone-950 font-medium")
+                          : (isDark ? "text-[#c8c8c2] hover:bg-white/5 hover:text-white" : "text-stone-700 hover:bg-black/5 hover:text-stone-950")
+                      )}
+                    >
+                      <span className="truncate flex-1">{conv.title}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => deleteConversation(e, conv.id)}
+                        disabled={deletingId === conv.id}
+                        aria-label="Delete conversation"
+                        title="Delete conversation"
+                        className="p-1 rounded opacity-70 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500/15 hover:text-red-400 text-theme-muted transition-all shrink-0 cursor-pointer"
+                      >
+                        {deletingId === conv.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          ) : (
+            <div className={clsx(
+              "mt-1 mx-1 p-3 rounded-xl border text-[11px] space-y-2",
+              isDark ? "bg-[#222220] border-[#32322f] text-stone-400" : "bg-white/70 border-stone-200 text-stone-600"
+            )}>
+              <p className="leading-relaxed">
+                Upgrade to <span className="font-semibold text-theme-primary">Plus</span> or <span className="font-semibold text-theme-primary">Pro</span> to save &amp; search past conversations forever.
+              </p>
+              <Link
+                to="/pricing"
+                className="inline-block text-[11px] font-semibold text-indigo-500 hover:text-indigo-400"
+              >
+                View plans →
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Pinned Bottom User & Usage Footer */}
+        <div className={clsx(
+          "px-3 pt-2.5 pb-2 border-t shrink-0 space-y-2",
+          isDark ? "border-[#2c2c2a]" : "border-stone-200"
+        )}>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center text-[10px] font-semibold text-theme-muted">
+              <span>{limit === Infinity ? `${usageCount} queries • ∞` : `${usageCount}/${limit} daily queries`}</span>
+              {plan !== 'Pro' && (
+                <Link to="/pricing" className="text-indigo-500 hover:underline">
+                  Upgrade
+                </Link>
+              )}
+            </div>
+            <div className="w-full bg-theme-surface h-1 rounded-full overflow-hidden">
+              <motion.div
+                className="bg-indigo-500 h-full"
+                initial={{ width: 0 }}
+                animate={{
+                  width: limit === Infinity ? '100%' : `${Math.min((usageCount / limit) * 100, 100)}%`
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-full bg-theme-surface border border-theme-border flex items-center justify-center overflow-hidden shrink-0">
+                {user?.avatar_url && !avatarError ? (
+                  <img
+                    src={user.avatar_url}
+                    alt={user.full_name || 'Profile'}
+                    referrerPolicy="no-referrer"
+                    onError={() => setAvatarError(true)}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="w-full h-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
+                    {user?.full_name?.charAt(0).toUpperCase() || 'S'}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0 leading-tight">
+                <p className="text-xs font-semibold truncate">{user?.full_name || 'Student'}</p>
+                <p className="text-[10px] text-theme-muted">{plan} plan</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleReset}
+              className={clsx(
+                "p-1.5 rounded-lg text-theme-muted hover:text-theme-primary transition-colors cursor-pointer shrink-0",
+                isDark ? "hover:bg-white/5" : "hover:bg-black/5"
+              )}
+              title="Reset current session"
+            >
+              <RotateCcw size={14} />
             </button>
           </div>
         </div>
-
       </aside>
 
-      {/* ── Chat Area ────────────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-theme-base">
+      {/* ── Main Claude-Style Chat Canvas ────────────────────────────────── */}
+      <main className="flex-1 flex flex-col h-full min-h-0 relative overflow-hidden">
 
-        {/* Header */}
-        <header className="px-5 py-3.5 border-b border-theme-border/60 flex justify-between items-center bg-[var(--glass-header-bg)] backdrop-blur-xl z-10 shrink-0 shadow-sm">
-          <div className="flex items-center gap-3">
-            <button className="md:hidden p-2 -ml-2 text-theme-muted hover:bg-theme-surface-2 rounded-xl transition-colors cursor-pointer" onClick={() => setSidebarOpen(true)}>
-              <Menu size={20} />
+        {/* Minimalist Top Bar */}
+        <header className={clsx(
+          "px-4 md:px-6 h-12 border-b flex justify-between items-center z-10 shrink-0",
+          isDark ? "border-[#2c2c2a]/70 bg-[#212120]/95" : "border-stone-200/80 bg-[#fcfbf8]/95"
+        )}>
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              className={clsx(
+                "md:hidden p-1.5 -ml-1 rounded-lg text-theme-muted hover:text-theme-primary transition-colors cursor-pointer",
+                isDark ? "hover:bg-white/5" : "hover:bg-black/5"
+              )}
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu size={19} />
             </button>
-            <div>
-              <h2 className="font-bold text-lg text-theme-primary">Cortana AI Tutor</h2>
-              <p className="text-xs text-theme-muted font-medium flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> Ready to help with your studies
-              </p>
+            {!desktopSidebarOpen && (
+              <button
+                type="button"
+                className={clsx(
+                  "hidden md:flex p-1.5 -ml-1 rounded-lg text-theme-muted hover:text-theme-primary transition-colors cursor-pointer",
+                  isDark ? "hover:bg-white/5" : "hover:bg-black/5"
+                )}
+                onClick={() => setDesktopSidebarOpen(true)}
+                title="Open sidebar"
+              >
+                <PanelLeft size={18} />
+              </button>
+            )}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Cortana Online" />
+              <h2 className="font-semibold text-sm text-theme-primary truncate max-w-[180px] sm:max-w-xs md:max-w-md">
+                {activeConvTitle}
+              </h2>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Center Claude-Style Plan Pill */}
+          {plan !== 'Pro' && !hideUpgradeBanner && (
+            <div className={clsx(
+              "hidden lg:flex items-center gap-2 px-3 py-1 rounded-lg border text-xs font-medium",
+              isDark ? "bg-[#2a2a28] border-[#3a3a37] text-stone-300" : "bg-stone-100 border-stone-200 text-stone-700"
+            )}>
+              <span>{plan} plan</span>
+              <span className="opacity-40">·</span>
+              <Link to="/pricing" className="text-indigo-500 hover:underline font-semibold">
+                Upgrade
+              </Link>
+              <button
+                type="button"
+                onClick={() => setHideUpgradeBanner(true)}
+                aria-label="Dismiss upgrade banner"
+                className="text-theme-muted hover:text-theme-primary ml-0.5 cursor-pointer"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
+          {/* Right Quick Actions */}
+          <div className="flex items-center gap-2 shrink-0">
             {(plan === 'Plus' || plan === 'Pro') && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-bold border border-amber-500/20 shadow-sm">
-                <Sparkles size={14} />
-                <span>{plan}</span>
-              </div>
+              <span className={clsx(
+                "hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border",
+                isDark ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-amber-50 border-amber-200 text-amber-700"
+              )}>
+                <Sparkles size={12} />
+                {plan}
+              </span>
             )}
-            <Link to="/papers" className="px-4 py-2 glass-panel-premium glass-panel-premium-hover rounded-xl text-xs font-bold shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all text-theme-primary">Past Papers</Link>
+            <Link
+              to="/papers"
+              className={clsx(
+                "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
+                isDark
+                  ? "bg-[#2a2a28] border-[#3a3a37] text-stone-200 hover:bg-[#333330]"
+                  : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
+              )}
+            >
+              Past Papers
+            </Link>
           </div>
         </header>
 
-        {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-10 space-y-8 scroll-smooth">
-          <AnimatePresence initial={false}>
-            {messages.length === 1 && !isLoading && !input.trim() && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-w-2xl mx-auto mt-12 text-center"
-              >
+        {/* Scrollable Messages */}
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 md:px-8 py-6 scroll-smooth">
+          <div className="max-w-3xl mx-auto w-full space-y-7">
+            <AnimatePresence initial={false}>
+              {visibleMessages.length === 0 && !isLoading && (
                 <motion.div
-                  whileHover={{
-                    scale: 1.08,
-                    y: -4,
-                    boxShadow: "0 20px 30px rgba(99, 102, 241, 0.2)",
-                    borderColor: "rgba(99, 102, 241, 0.6)"
-                  }}
-                  transition={{ type: "spring", stiffness: 300, damping: 15 }}
-                  className="w-20 h-20 rounded-[1.8rem] shadow-lg flex items-center justify-center mx-auto mb-8 relative group overflow-hidden border-2 border-indigo-500/30 cursor-pointer"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  className="pt-4 md:pt-12 space-y-6"
                 >
-                  <img src="/lumio.jpg" alt="Cortana" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                  <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-                </motion.div>
-                <h3 className="text-3xl font-extrabold text-theme-primary mb-3 tracking-tight">How can I help you today?</h3>
-                <p className="text-theme-muted max-w-sm mx-auto mb-10 text-sm font-medium leading-relaxed">
-                  Choose a topic below or type your own assignment or concept question to get started.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl mx-auto">
-                  {STARTER_QUESTIONS.map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => handleSend(q)}
-                      className="p-5 glass-panel-premium glass-panel-premium-hover rounded-2xl text-left text-xs font-semibold text-theme-secondary hover:border-indigo-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm group cursor-pointer"
-                    >
-                      <span className="group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors leading-relaxed">{q}</span>
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
+                  <div className="text-center space-y-3">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden border border-indigo-500/30 shadow-md mx-auto">
+                      <img src="/lumio.jpg" alt="Cortana" className="w-full h-full object-cover" />
+                    </div>
+                    <h3 className="text-2xl md:text-3xl font-bold tracking-tight text-theme-primary">
+                      How can I help you today, {username}?
+                    </h3>
+                    <p className="text-theme-muted max-w-md mx-auto text-sm leading-relaxed">
+                      Ask about concepts, upload lecture notes or past papers, or pick a prompt below.
+                    </p>
+                  </div>
 
-            {messages.filter(m => m.id !== 'welcome').map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={clsx(
-                  "flex flex-col group",
-                  message.role === 'user' ? "items-end" : "items-start"
-                )}
-              >
-                <div className={clsx(
-                  "max-w-[85%] p-5 rounded-2xl shadow-sm transition-all",
-                  message.role === 'user'
-                    ? "glass-bubble-user rounded-tr-none"
-                    : "glass-bubble-ai rounded-tl-none"
-                )}>
-                  {message.attachmentName && (
-                    <div className="mb-3 flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 rounded-xl text-[11px] font-bold text-indigo-500 dark:text-indigo-400">
-                      <Paperclip size={14} />
-                      <span className="truncate max-w-[200px]">{message.attachmentName}</span>
+                  {/* Verified Exam Paper Questions Preview when arriving from a Paper */}
+                  {hasPaperWelcomeDetails && welcomeMessage && (
+                    <div className={clsx(
+                      "rounded-2xl border p-5 text-left",
+                      isDark ? "bg-[#282826] border-[#383835]" : "bg-white border-stone-200 shadow-sm"
+                    )}>
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-400 mb-3">
+                        <BookOpen size={14} />
+                        <span>Paper Questions Loaded</span>
+                      </div>
+                      <div className="ai-prose text-sm">
+                        <Markdown remarkPlugins={[remarkGfm]}>
+                          {formatAIContentForProse(welcomeMessage.content)}
+                        </Markdown>
+                      </div>
                     </div>
                   )}
-                  {message.role === 'user' ? (
-                    <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed">{message.content}</p>
-                  ) : (
-                    <>
-                      {(() => {
-                        const emotion = detectMessageEmotion(message.content);
-                        const config = EMOTION_MAP[emotion];
-                        return (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.85, y: -2 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            transition={{ type: "spring", stiffness: 400, damping: 18, delay: 0.05 }}
-                            className={clsx(
-                              "mb-3 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border w-max flex items-center gap-1.5 backdrop-blur-md shadow-sm transition-all duration-300 select-none",
-                              config.class
-                            )}
-                          >
-                            <span className="text-xs leading-none">{config.emoji}</span>
-                            <span className="leading-none">{config.label}</span>
-                          </motion.div>
-                        );
-                      })()}
-                      <div className="ai-prose">
-                        <Markdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            h1: ({ children }) => (
-                              <p
-                                className="ai-section-title"
-                                style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
-                              >
-                                {children}
-                              </p>
-                            ),
-                            h2: ({ children }) => (
-                              <p
-                                className="ai-section-title"
-                                style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
-                              >
-                                {children}
-                              </p>
-                            ),
-                            h3: ({ children }) => (
-                              <p
-                                className="ai-section-title"
-                                style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
-                              >
-                                {children}
-                              </p>
-                            ),
-                            h4: ({ children }) => (
-                              <p
-                                className="ai-section-title"
-                                style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
-                              >
-                                {children}
-                              </p>
-                            ),
-                            p: ({ children }) => <p className="ai-p">{children}</p>,
-                            ul: ({ children }) => <ul className="ai-ul">{children}</ul>,
-                            ol: ({ children }) => <ol className="ai-ol">{children}</ol>,
-                            li: ({ children }) => <li className="ai-li">{colorKeyTermsInList(children, isDark)}</li>,
-                            strong: ({ children }) => {
-                              const text = getChildrenText(children);
-                              const category = getContentCategory(text);
-                              let customStyle = {};
-                              if (category === 'green') {
-                                customStyle = { color: isDark ? '#10b981' : '#059669', fontWeight: 800 };
-                              } else if (category === 'blue') {
-                                customStyle = { color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 };
-                              } else {
-                                customStyle = { fontWeight: isDark ? 850 : 700 };
-                              }
-                              return (
-                                <strong
-                                  className="ai-strong"
-                                  style={customStyle}
-                                >
-                                  {children}
-                                </strong>
-                              );
-                            },
-                            em: ({ children }) => <em className="ai-em">{children}</em>,
-                            blockquote: ({ children }) => (
-                              <blockquote
-                                className="ai-blockquote"
-                                style={{
-                                  borderLeftColor: isDark ? '#3b82f6' : '#2563eb',
-                                  color: isDark ? '#60a5fa' : '#1d4ed8',
-                                  backgroundColor: isDark ? 'rgba(59, 130, 246, 0.04)' : 'rgba(37, 99, 235, 0.03)'
-                                }}
-                              >
-                                {children}
-                              </blockquote>
-                            ),
-                            hr: () => <hr className="ai-hr" />,
-                            a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
-                            code: ({ className, children, ...props }) => {
-                              const isBlock = className?.includes('language-');
-                              return isBlock ? (
-                                <div className="ai-code-block-wrapper">
-                                  {className && (
-                                    <div className="ai-code-lang">{className.replace('language-', '')}</div>
-                                  )}
-                                  <pre className="ai-pre"><code className={className}>{children}</code></pre>
-                                </div>
-                              ) : (
-                                <code className="ai-inline-code" {...props}>{children}</code>
-                              );
-                            },
-                            pre: ({ children }) => <>{children}</>,
-                            table: ({ children }) => (
-                              <div className="ai-table-wrapper">
-                                <table className="ai-table">{children}</table>
-                              </div>
-                            ),
-                            thead: ({ children }) => <thead className="ai-thead">{children}</thead>,
-                            tbody: ({ children }) => <tbody>{children}</tbody>,
-                            tr: ({ children }) => <tr className="ai-tr">{children}</tr>,
-                            th: ({ children }) => <th className="ai-th">{children}</th>,
-                            td: ({ children }) => <td className="ai-td">{children}</td>,
-                          }}
-                        >
-                          {formatAIContentForProse(message.content)}
-                        </Markdown>
 
-                        {message.isErrorFallback && (
-                          <div className="mt-4 pt-4 border-t border-theme-border/30">
-                            <p className="text-[10px] text-theme-muted uppercase font-bold tracking-wider mb-2.5">
-                              Suggested External AI Servers
-                            </p>
-                            <div className="flex flex-wrap gap-2.5">
-                              <a
-                                href="https://chat.openai.com"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-xl text-xs font-bold transition-all border border-emerald-500/20 active:scale-95 shadow-sm"
-                              >
-                                <span>ChatGPT</span>
-                              </a>
-                              <a
-                                href="https://claude.ai"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 rounded-xl text-xs font-bold transition-all border border-orange-500/20 active:scale-95 shadow-sm"
-                              >
-                                <span>Claude</span>
-                              </a>
-                              <a
-                                href="https://gemini.google.com"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 rounded-xl text-xs font-bold transition-all border border-blue-500/20 active:scale-95 shadow-sm"
-                              >
-                                <span>Gemini</span>
-                              </a>
-                            </div>
+                  {!input.trim() && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto">
+                      {STARTER_QUESTIONS.map((q) => (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => handleSend(q)}
+                          className={clsx(
+                            "p-4 rounded-xl border text-left text-xs font-medium transition-all cursor-pointer group",
+                            isDark
+                              ? "bg-[#282826] border-[#363633] text-stone-300 hover:border-indigo-400/50 hover:bg-[#2f2f2c]"
+                              : "bg-white border-stone-200 text-stone-700 hover:border-indigo-400 hover:bg-stone-50 shadow-sm"
+                          )}
+                        >
+                          <span className="group-hover:text-theme-primary leading-relaxed">{q}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {visibleMessages.map((message, idx) => {
+                const precedingUserMsg = [...visibleMessages.slice(0, idx)]
+                  .reverse()
+                  .find((m) => m.role === 'user');
+
+                return (
+                  <motion.div
+                    key={message.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={clsx(
+                      "flex flex-col group",
+                      message.role === 'user' ? "items-end" : "items-start"
+                    )}
+                  >
+                    {message.role === 'user' ? (
+                      <div className={clsx(
+                        "max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-2xl",
+                        isDark ? "bg-[#30302e] text-[#f3f3ee]" : "bg-[#efede6] text-stone-900"
+                      )}>
+                        {message.attachmentName && (
+                          <div className="mb-2 flex items-center gap-1.5 bg-indigo-500/12 border border-indigo-500/20 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-indigo-400 w-max max-w-full">
+                            <Paperclip size={12} />
+                            <span className="truncate max-w-[200px]">{message.attachmentName}</span>
                           </div>
                         )}
+                        <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{message.content}</p>
                       </div>
-                    </>
-                  )}
-                </div>
-                <div className={clsx(
-                  "text-[10px] text-theme-muted mt-2 font-bold uppercase tracking-wider flex items-center gap-1.5",
-                  message.role === 'user' ? "mr-1" : "ml-1"
-                )}>
-                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {message.role === 'assistant' && <span className="opacity-50">• Cortana</span>}
-                </div>
-              </motion.div>
-            ))}
+                    ) : (
+                      <div className="w-full space-y-2.5">
+                        {/* Subtle Emotion & Identity Tag */}
+                        {(() => {
+                          const emotion = detectMessageEmotion(message.content);
+                          const config = EMOTION_MAP[emotion];
+                          return (
+                            <div className="flex items-center gap-2">
+                              <div className={clsx(
+                                "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border w-max flex items-center gap-1.5 select-none",
+                                config.class
+                              )}>
+                                <span className="text-xs leading-none">{config.emoji}</span>
+                                <span className="leading-none">{config.label}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
-            {isLoading && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-start"
-              >
-                <div className="glass-panel-premium p-4 rounded-2xl rounded-tl-none shadow-md flex items-center gap-3 text-indigo-500 dark:text-indigo-400 text-xs font-bold italic">
-                  <Loader2 size={16} className="animate-spin" />
+                        {/* Borderless Claude-Style Editorial Prose */}
+                        <div className="ai-prose">
+                          <Markdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: ({ children }) => (
+                                <p
+                                  className="ai-section-title"
+                                  style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                                >
+                                  {children}
+                                </p>
+                              ),
+                              h2: ({ children }) => (
+                                <p
+                                  className="ai-section-title"
+                                  style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                                >
+                                  {children}
+                                </p>
+                              ),
+                              h3: ({ children }) => (
+                                <p
+                                  className="ai-section-title"
+                                  style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                                >
+                                  {children}
+                                </p>
+                              ),
+                              h4: ({ children }) => (
+                                <p
+                                  className="ai-section-title"
+                                  style={{ color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 }}
+                                >
+                                  {children}
+                                </p>
+                              ),
+                              p: ({ children }) => <p className="ai-p">{children}</p>,
+                              ul: ({ children }) => <ul className="ai-ul">{children}</ul>,
+                              ol: ({ children }) => <ol className="ai-ol">{children}</ol>,
+                              li: ({ children }) => <li className="ai-li">{colorKeyTermsInList(children, isDark)}</li>,
+                              strong: ({ children }) => {
+                                const text = getChildrenText(children);
+                                const category = getContentCategory(text);
+                                let customStyle = {};
+                                if (category === 'green') {
+                                  customStyle = { color: isDark ? '#10b981' : '#059669', fontWeight: 800 };
+                                } else if (category === 'blue') {
+                                  customStyle = { color: isDark ? '#3b82f6' : '#2563eb', fontWeight: 800 };
+                                } else {
+                                  customStyle = { fontWeight: 800 };
+                                }
+                                return (
+                                  <strong
+                                    className="ai-strong"
+                                    style={customStyle}
+                                  >
+                                    {children}
+                                  </strong>
+                                );
+                              },
+                              em: ({ children }) => <em className="ai-em">{children}</em>,
+                              blockquote: ({ children }) => (
+                                <blockquote
+                                  className="ai-blockquote"
+                                  style={{
+                                    borderLeftColor: isDark ? '#3b82f6' : '#2563eb',
+                                    color: isDark ? '#60a5fa' : '#1d4ed8',
+                                    backgroundColor: isDark ? 'rgba(59, 130, 246, 0.04)' : 'rgba(37, 99, 235, 0.03)'
+                                  }}
+                                >
+                                  {children}
+                                </blockquote>
+                              ),
+                              hr: () => <hr className="ai-hr" />,
+                              a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="ai-link">{children}</a>,
+                              code: ({ className, children, ...props }) => {
+                                const isBlock = className?.includes('language-');
+                                return isBlock ? (
+                                  <div className="ai-code-block-wrapper">
+                                    {className && (
+                                      <div className="ai-code-lang">{className.replace('language-', '')}</div>
+                                    )}
+                                    <pre className="ai-pre"><code className={className}>{children}</code></pre>
+                                  </div>
+                                ) : (
+                                  <code className="ai-inline-code" {...props}>{children}</code>
+                                );
+                              },
+                              pre: ({ children }) => <>{children}</>,
+                              table: ({ children }) => (
+                                <div className="ai-table-wrapper">
+                                  <table className="ai-table">{children}</table>
+                                </div>
+                              ),
+                              thead: ({ children }) => <thead className="ai-thead">{children}</thead>,
+                              tbody: ({ children }) => <tbody>{children}</tbody>,
+                              tr: ({ children }) => <tr className="ai-tr">{children}</tr>,
+                              th: ({ children }) => <th className="ai-th">{children}</th>,
+                              td: ({ children }) => <td className="ai-td">{children}</td>,
+                            }}
+                          >
+                            {formatAIContentForProse(message.content)}
+                          </Markdown>
+
+                          {message.isErrorFallback && (
+                            <div className="mt-4 pt-4 border-t border-theme-border/30">
+                              <p className="text-[10px] text-theme-muted uppercase font-bold tracking-wider mb-2.5">
+                                Suggested External AI Servers
+                              </p>
+                              <div className="flex flex-wrap gap-2.5">
+                                <a
+                                  href="https://chat.openai.com"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-xl text-xs font-bold transition-all border border-emerald-500/20 active:scale-95 shadow-sm"
+                                >
+                                  <span>ChatGPT</span>
+                                </a>
+                                <a
+                                  href="https://claude.ai"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 rounded-xl text-xs font-bold transition-all border border-orange-500/20 active:scale-95 shadow-sm"
+                                >
+                                  <span>Claude</span>
+                                </a>
+                                <a
+                                  href="https://gemini.google.com"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 rounded-xl text-xs font-bold transition-all border border-blue-500/20 active:scale-95 shadow-sm"
+                                >
+                                  <span>Gemini</span>
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Claude-Style Action Row (Copy, Retry, Timestamp) */}
+                        <div className="flex items-center gap-2 pt-1 text-theme-muted">
+                          <button
+                            type="button"
+                            onClick={() => copyMessage(message.id, message.content)}
+                            title="Copy response"
+                            className={clsx(
+                              "p-1.5 rounded-lg transition-colors cursor-pointer",
+                              isDark ? "hover:bg-white/5 hover:text-stone-200" : "hover:bg-black/5 hover:text-stone-800"
+                            )}
+                          >
+                            {copiedMsgId === message.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                          </button>
+                          {precedingUserMsg && (
+                            <button
+                              type="button"
+                              onClick={() => handleSend(precedingUserMsg.content)}
+                              disabled={isLoading || !canSend}
+                              title="Regenerate response"
+                              className={clsx(
+                                "p-1.5 rounded-lg transition-colors disabled:opacity-40 cursor-pointer",
+                                isDark ? "hover:bg-white/5 hover:text-stone-200" : "hover:bg-black/5 hover:text-stone-800"
+                              )}
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          )}
+                          <span className="text-[11px] opacity-70 ml-1">
+                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+
+              {isLoading && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2.5 text-sm text-indigo-400 font-medium py-2"
+                >
+                  <Loader2 size={16} className="animate-spin shrink-0" />
                   <motion.span
                     key={loadingMsgIdx}
-                    initial={{ opacity: 0, y: 5 }}
+                    initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    className="inline-block"
+                    exit={{ opacity: 0, y: -4 }}
                   >
                     {LOADING_MESSAGES[loadingMsgIdx]}
                   </motion.span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
-        {/* Input */}
-        <footer className="p-4 md:p-6 pb-28 md:pb-6 bg-[var(--glass-footer-bg)] border-t border-theme-border/60 backdrop-blur-xl shrink-0">
-          <div className="max-w-4xl mx-auto w-full">
+        {/* Claude-Style Centered Composer */}
+        <footer className="px-4 md:px-8 pt-2 pb-24 md:pb-5 shrink-0">
+          <div className="max-w-3xl mx-auto w-full">
             {selectedFileName && (
-              <div className="mb-3 flex items-center gap-2 bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border border-indigo-500/20 px-3 py-1.5 rounded-lg w-max text-xs font-semibold">
-                <Paperclip size={14} />
-                <span className="truncate max-w-[200px] md:max-w-[300px]">{selectedFileName}</span>
+              <div className="mb-2 flex items-center gap-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-3 py-1.5 rounded-lg w-max text-xs font-semibold">
+                <Paperclip size={13} />
+                <span className="truncate max-w-[200px] md:max-w-[320px]">{selectedFileName}</span>
                 <button
                   type="button"
                   onClick={() => { setSelectedFileName(''); setSelectedFile(null); }}
                   className="hover:text-red-400 ml-1 transition-colors cursor-pointer"
                 >
-                  <X size={14} />
+                  <X size={13} />
                 </button>
               </div>
             )}
+
             <form
               onSubmit={handleSubmit}
               className={clsx(
-                "relative flex items-end group",
-                !canSend && "opacity-50 pointer-events-none"
+                "rounded-2xl border transition-all overflow-hidden",
+                isDark
+                  ? "bg-[#2b2b29] border-[#3d3d3a] focus-within:border-[#52524e]"
+                  : "bg-white border-stone-200 shadow-sm focus-within:border-stone-400",
+                !canSend && "opacity-55 pointer-events-none"
               )}
             >
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={canSend ? "Ask your academic question..." : "Limit reached."}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(input.trim());
+                  }
+                }}
+                placeholder={canSend ? "Reply to Cortana..." : "Daily query limit reached."}
                 rows={1}
-                className="w-full glass-panel-premium ai-chat-input py-3.5 pl-4 pr-[100px] rounded-2xl text-sm text-theme-primary font-medium placeholder:text-theme-muted transition-all resize-none min-h-[52px] max-h-[200px] overflow-y-auto scrollbar-hide align-bottom focus:outline-none"
+                className="w-full bg-transparent px-4 pt-3.5 pb-2 text-sm text-theme-primary font-normal placeholder:text-theme-muted focus:outline-none resize-none min-h-[46px] max-h-[180px] overflow-y-auto scrollbar-hide"
                 disabled={!canSend || isLoading}
               />
               <input
@@ -1400,53 +1654,64 @@ const AskAIPage = () => {
                 accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
               />
 
-              <div className="absolute right-2.5 bottom-2 flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (plan === 'Free') {
-                      setAlert({
-                        show: true,
-                        title: 'Upgrade Required',
-                        message: 'Upgrade to Basic to upload and analyze files with AI!',
-                        variant: 'info'
-                      });
-                      return;
-                    }
-                    fileInputRef.current?.click();
-                  }}
-                  className={clsx(
-                    "h-9 w-9 flex items-center justify-center transition-all rounded-xl cursor-pointer",
-                    selectedFileName ? "text-indigo-500 bg-indigo-500/10 hidden" : "text-theme-muted hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-theme-surface-2",
-                    plan === 'Free' && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-theme-muted"
-                  )}
-                  title={plan === 'Free' ? "Upload blocked on Free plan" : "Attach File"}
-                >
-                  <Paperclip size={18} />
-                </button>
-                <button
-                  type="submit"
-                  disabled={!input.trim() || !canSend || isLoading}
-                  className={clsx(
-                    "h-9 w-9 flex items-center justify-center rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-40 cursor-pointer",
-                    input.trim() && canSend && !isLoading
-                      ? "bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-indigo-500/15"
-                      : "bg-theme-surface/50 border border-theme-border/30 text-theme-muted"
-                  )}
-                >
-                  <Send size={18} />
-                </button>
+              {/* Bottom Composer Toolbar */}
+              <div className="px-3 pb-2.5 pt-1 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (plan === 'Free') {
+                        setAlert({
+                          show: true,
+                          title: 'Upgrade Required',
+                          message: 'Upgrade to Basic to upload and analyze files with AI!',
+                          variant: 'info'
+                        });
+                        return;
+                      }
+                      fileInputRef.current?.click();
+                    }}
+                    className={clsx(
+                      "h-8 px-2 flex items-center gap-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer",
+                      isDark ? "text-stone-400 hover:text-stone-200 hover:bg-white/5" : "text-stone-500 hover:text-stone-900 hover:bg-black/5",
+                      plan === 'Free' && "opacity-45"
+                    )}
+                    title={plan === 'Free' ? "Upgrade to Basic to attach documents" : "Attach PDF, Word, PowerPoint, or TXT"}
+                  >
+                    <Plus size={16} />
+                    <span className="hidden sm:inline">Attach</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <span className="hidden sm:inline text-[11px] font-medium text-theme-muted">
+                    Cortana 3.0 · {plan}
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || !canSend || isLoading}
+                    aria-label="Send message"
+                    className={clsx(
+                      "h-8 w-8 flex items-center justify-center rounded-lg transition-all active:scale-95 disabled:opacity-35 cursor-pointer",
+                      input.trim() && canSend && !isLoading
+                        ? "bg-indigo-500 hover:bg-indigo-600 text-white shadow-sm"
+                        : (isDark ? "bg-[#383835] text-stone-400" : "bg-stone-100 text-stone-400")
+                    )}
+                  >
+                    <Send size={15} />
+                  </button>
+                </div>
               </div>
             </form>
 
-            <div className="mt-4 flex flex-col items-center gap-1">
+            <div className="mt-2 flex items-center justify-center">
               {!canSend ? (
-                <Link to="/pricing" className="text-[10px] font-bold text-amber-500 uppercase tracking-widest bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/20 backdrop-blur-sm hover:underline">
-                  Limit Reached • Upgrade to Continue
+                <Link to="/pricing" className="text-[11px] font-semibold text-amber-500 hover:underline">
+                  Daily limit reached • Upgrade plan to continue
                 </Link>
               ) : (
-                <p className="text-[10px] text-theme-muted uppercase tracking-widest font-bold">
-                  {plan} Session • {limit === Infinity ? 'Unlimited Queries' : `${limit - usageCount} Queries Remaining`} • <span className="text-indigo-500 dark:text-indigo-400">Cortana AI v3.0</span>
+                <p className="text-[11px] text-theme-muted text-center">
+                  Cortana is AI and can make mistakes · {limit === Infinity ? 'Unlimited Queries' : `${Math.max(limit - usageCount, 0)} queries left today`}
                 </p>
               )}
             </div>

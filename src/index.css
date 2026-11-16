@@ -136,6 +136,7 @@
 
 :root.light {
   color-scheme: light;
+  font-size: 16.5px;
 
   /* Inspired by Soft Pastel LMS Light Palette (Sky Blue #73b0f4, Pastel Lavender #eedcfb, Pastel Sky #cde8fe, Pastel Pink #fceaf6, Cool Ice Canvas #eaf1f8) */
   --surface: #ffffff;
@@ -146,8 +147,8 @@
   --surface-container: #eaf1f8;
   --surface-container-high: #dde7f0;
   --surface-container-highest: #d0deeb;
-  --on-surface: #1b2533;
-  --on-surface-variant: #4c637a;
+  --on-surface: #0f172a;
+  --on-surface-variant: #1e293b;
   --primary: #73b0f4;
   --primary-container: #cde8fe;
   --secondary: #52a788;
@@ -161,29 +162,29 @@
   --bg-surface-2: #e2ebf3;
   --border: rgba(115, 176, 244, 0.28);
   --border-hover: rgba(115, 176, 244, 0.50);
-  --text-primary: #1b2533;
-  --text-secondary: #4c637a;
-  --text-muted: #7c92a8;
+  --text-primary: #0f172a;
+  --text-secondary: #1e293b;
+  --text-muted: #334155;
   --glow-a: rgba(238, 220, 251, 0.65);
   --glow-b: rgba(205, 232, 254, 0.65);
 
-  /* Remap Tailwind Accent Colors to Soft Pastel LMS Palette in Light Mode */
+  /* Remap Tailwind Accent Colors to Crisp, High-Contrast Palette in Light Mode */
   --color-indigo-200: #cde8fe;
-  --color-indigo-300: #73b0f4;
-  --color-indigo-400: #4a90e2;
-  --color-indigo-500: #73b0f4;
-  --color-indigo-600: #5a9cf0;
+  --color-indigo-300: #3b82f6;
+  --color-indigo-400: #2563eb;
+  --color-indigo-500: #3b82f6;
+  --color-indigo-600: #2563eb;
   --color-purple-300: #eedcfb;
-  --color-purple-400: #9d65d8;
+  --color-purple-400: #7c3aed;
   --color-purple-500: #b882f0;
   --color-violet-300: #eedcfb;
-  --color-violet-400: #9d65d8;
+  --color-violet-400: #7c3aed;
   --color-violet-500: #b882f0;
   --color-emerald-300: #b5e5d3;
-  --color-emerald-400: #469c82;
-  --color-emerald-500: #52a788;
-  --color-blue-400: #4a90e2;
-  --color-blue-500: #73b0f4;
+  --color-emerald-400: #059669;
+  --color-emerald-500: #059669;
+  --color-blue-400: #2563eb;
+  --color-blue-500: #3b82f6;
   --color-pink-400: #d474b3;
 
   /* Premium Glassmorphic Design Variables */
@@ -231,6 +232,57 @@
   /* Fix mobile keyboard pushing content up in Ask AI */
   #ask-ai-container {
     height: 100svh;
+  }
+
+  :root.light body {
+    font-weight: 600;
+  }
+}
+
+/* ── Light Mode Readability & Typography Boost ────────────────────────────── */
+@layer utilities {
+  :root.light .text-\[9px\] {
+    font-size: 10.5px;
+  }
+  :root.light .text-\[10px\] {
+    font-size: 11.5px;
+  }
+  :root.light .text-\[11px\] {
+    font-size: 12.25px;
+  }
+  :root.light .text-xs {
+    font-size: 0.8125rem;
+  }
+  :root.light .text-\[13px\] {
+    font-size: 13.75px;
+  }
+  :root.light .text-sm {
+    font-size: 0.9125rem;
+  }
+
+  :root.light :is(.text-\[9px\], .text-\[10px\], .text-\[11px\]):not(.font-bold):not(.font-extrabold):not(.font-black) {
+    font-weight: 700;
+  }
+
+  :root.light :is(.text-xs, .text-\[13px\]):not(.font-bold):not(.font-extrabold):not(.font-black) {
+    font-weight: 650;
+  }
+
+  :root.light .font-normal,
+  :root.light .font-medium {
+    font-weight: 600;
+  }
+
+  :root.light .font-semibold {
+    font-weight: 700;
+  }
+
+  :root.light :is(.text-stone-400, .text-stone-500, .text-stone-600, .text-slate-400, .text-slate-500) {
+    color: #334155;
+  }
+
+  :root.light :is(.text-stone-400, .text-stone-500, .text-stone-600, .text-slate-400, .text-slate-500):not(.font-bold):not(.font-extrabold):not(.font-black) {
+    font-weight: 600;
   }
 }
 
@@ -578,8 +630,16 @@
     font-weight: 850;
     color: var(--text-primary);
   }
+  :root.light .ai-prose {
+    font-size: 0.95rem;
+  }
+  :root.light .ai-prose .ai-p,
+  :root.light .ai-prose .ai-li {
+    font-weight: 600;
+    color: #0f172a;
+  }
   :root.light .ai-prose .ai-strong {
-    font-weight: 700;
+    font-weight: 800;
   }
 
   /* List item first bold child is colored green as a Key Term / Main Point */

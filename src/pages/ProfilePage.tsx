@@ -107,6 +107,7 @@ const ProfilePage = () => {
   const [name, setName] = useState(user?.full_name || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
   const [isAvatarDeleted, setIsAvatarDeleted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -151,6 +152,7 @@ const ProfilePage = () => {
         if (res.user) {
           setName(res.user.full_name);
           setAvatarUrl(res.user.avatar_url || '');
+          setAvatarError(false);
           updateUser({
             full_name: res.user.full_name,
             avatar_url: res.user.avatar_url,
@@ -201,6 +203,7 @@ const ProfilePage = () => {
   const handleRemoveAvatar = () => {
     setAvatarUrl('');
     setAvatarBase64(null);
+    setAvatarError(false);
     setIsAvatarDeleted(true);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -212,6 +215,7 @@ const ProfilePage = () => {
         const base64 = event.target?.result as string;
         setAvatarUrl(base64);
         setAvatarBase64(base64);
+        setAvatarError(false);
         setIsAvatarDeleted(false);
       };
       reader.readAsDataURL(e.target.files[0]);
@@ -266,8 +270,14 @@ const ProfilePage = () => {
         {/* Avatar */}
         <div className="relative group">
           <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-theme-surface shadow-xl">
-            {avatarUrl && !isAvatarDeleted ? (
-              <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+            {avatarUrl && !isAvatarDeleted && !avatarError ? (
+              <img
+                src={avatarUrl}
+                alt={name || 'Student'}
+                referrerPolicy="no-referrer"
+                onError={() => setAvatarError(true)}
+                className="w-full h-full object-cover"
+              />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
                 <span className="text-3xl font-black text-white select-none">
@@ -291,6 +301,37 @@ const ProfilePage = () => {
             className="hidden"
           />
         </div>
+
+        {/* Immediate Save / Remove photo pills right under avatar */}
+        {(avatarBase64 || isAvatarDeleted) ? (
+          <div className="flex items-center gap-2.5 px-4 py-2 bg-indigo-500/10 border border-indigo-500/25 rounded-full">
+            <span className="text-xs font-semibold text-theme-secondary">
+              {isAvatarDeleted ? 'Photo marked for removal' : 'New photo selected'}
+            </span>
+            <button
+              onClick={handleSaveChanges}
+              disabled={isSaving}
+              className="px-3 py-1 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? 'Saving…' : 'Save Photo'}
+            </button>
+            {avatarUrl && !isAvatarDeleted && (
+              <button
+                onClick={handleRemoveAvatar}
+                className="px-2.5 py-1 rounded-full bg-red-500/15 hover:bg-red-500/25 text-red-400 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ) : (avatarUrl && !isAvatarDeleted) ? (
+          <button
+            onClick={handleRemoveAvatar}
+            className="text-[11px] font-bold text-theme-muted hover:text-red-400 transition-colors cursor-pointer"
+          >
+            Remove photo
+          </button>
+        ) : null}
 
         {/* Name & Plan Badge */}
         <div className="text-center">
@@ -491,23 +532,6 @@ const ProfilePage = () => {
         )}>
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           {message}
-        </div>
-      )}
-
-      {/* Photo actions if pending */}
-      {(avatarBase64 || isAvatarDeleted) && (
-        <div className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-500/8 border border-indigo-500/20 rounded-2xl">
-          <p className="flex-grow text-xs font-semibold text-theme-secondary">
-            {isAvatarDeleted ? 'Photo marked for removal.' : 'New photo ready to save.'}
-          </p>
-          <button onClick={handleSaveChanges} disabled={isSaving} className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer disabled:opacity-50">
-            {isSaving ? 'Saving…' : 'Save Now'}
-          </button>
-          {avatarUrl && !isAvatarDeleted && (
-            <button onClick={handleRemoveAvatar} className="text-xs font-bold text-red-400 hover:text-red-300 transition-colors cursor-pointer">
-              Remove
-            </button>
-          )}
         </div>
       )}
 

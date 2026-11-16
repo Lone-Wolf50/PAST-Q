@@ -70,6 +70,7 @@ router.patch('/me', async (req: AuthRequest, res: Response) => {
       .single();
 
     if (error) throw error;
+    invalidateCachedSession(userId).catch(() => {});
 
     res.status(200).json({ user: data });
   } catch (err) {
@@ -141,6 +142,7 @@ router.post('/me/avatar', async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    invalidateCachedSession(userId).catch(() => {});
     res.status(200).json({ avatar_url: publicUrl, message: 'Avatar updated successfully.' });
   } catch (err: any) {
 
@@ -171,6 +173,7 @@ router.delete('/me/avatar', async (req: AuthRequest, res: Response) => {
     }
 
     await supabase.from('upsa_users').update({ avatar_url: null }).eq('id', userId);
+    invalidateCachedSession(userId).catch(() => {});
     res.status(200).json({ message: 'Avatar deleted successfully.' });
   } catch (err: any) {
 

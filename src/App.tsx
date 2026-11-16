@@ -127,12 +127,37 @@ const PageLoader = () => (
 );
 
 
-// Register Service Worker for PWA
+// Register Service Worker for PWA (purge and unregister in local dev)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    const isLocalDev =
+      import.meta.env.DEV ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1';
+
+    if (isLocalDev) {
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
+        .catch(() => {});
+      if ('caches' in window) {
+        caches.keys()
+          .then((names) => Promise.all(names.map((name) => caches.delete(name))))
+          .catch(() => {});
+      }
+      return;
+    }
+
+    let reloadedOnSWUpdate = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!reloadedOnSWUpdate) {
+        reloadedOnSWUpdate = true;
+        window.location.reload();
+      }
+    });
+
     navigator.serviceWorker.register('/sw.js')
       .then((registration) => {
-        console.log('Service Worker registered successfully with scope:', registration.scope);
+        registration.update().catch(() => {});
       })
       .catch((error) => {
         console.error('Service Worker registration failed:', error);
@@ -206,18 +231,19 @@ function Layout() {
   const hideFooterRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/auth/callback', '/account-appeal'];
   const isAdminPath = location.pathname.startsWith('/hq-portal');
   const isLandingPage = location.pathname === '/';
+  const isAskAIPage = location.pathname === '/ask-ai';
   const shouldHideFooter = (isLoggedIn && !isLandingPage) || isAdminPath || hideFooterRoutes.includes(location.pathname);
   const showNavbar = !isAdminPath && location.pathname !== '/auth/callback';
 
   return (
-    <div className="min-h-screen flex flex-col font-sans relative">
+    <div className={`flex flex-col font-sans relative ${isAskAIPage ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}>
       <ScrollToTop />
       {showNavbar && <GlobalBanner />}
       <InstallPrompt />
 
       {showNavbar && <Navbar />}
 
-      <main className={`flex-grow flex flex-col ${isLoggedIn && location.pathname !== '/ask-ai' ? 'pb-24 md:pb-0' : ''}`}>
+      <main className={`flex-grow flex flex-col ${isAskAIPage ? 'min-h-0 overflow-hidden' : isLoggedIn ? 'pb-24 md:pb-0' : ''}`}>
         <ChunkErrorBoundary>
           <React.Suspense fallback={<PageLoader />}>
             <Outlet />

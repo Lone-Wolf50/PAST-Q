@@ -20,6 +20,33 @@ interface LeaderboardEntry {
   avatar_url?: string;
 }
 
+const SafeAvatarImg = ({
+  src,
+  alt,
+  className,
+  fallback,
+}: {
+  src?: string | null;
+  alt: string;
+  className: string;
+  fallback: React.ReactNode;
+}) => {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+  if (!src || failed) return <>{fallback}</>;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className={className}
+    />
+  );
+};
+
 // ── Animated counter hook ──────────────────────────────────────────────────────
 function useCountUp(target: number, duration = 1200, delay = 0) {
   const [count, setCount] = useState(0);
@@ -218,13 +245,16 @@ const PodiumCard = ({
           )}
         >
           <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
-            {user.avatar_url ? (
-              <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
-            ) : (
-              <div className={clsx('w-full h-full flex items-center justify-center font-semibold', theme.fallbackBg, isGold ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl')}>
-                {initial}
-              </div>
-            )}
+            <SafeAvatarImg
+              src={user.avatar_url}
+              alt={user.username}
+              className="w-full h-full object-cover"
+              fallback={
+                <div className={clsx('w-full h-full flex items-center justify-center font-semibold', theme.fallbackBg, isGold ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl')}>
+                  {initial}
+                </div>
+              }
+            />
           </div>
         </div>
 
@@ -548,16 +578,19 @@ const LeaderboardPage = () => {
 
                           {/* Avatar container */}
                           <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-theme-surface-2 flex items-center justify-center shrink-0">
-                            {user.avatar_url ? (
-                              <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
-                            ) : (
-                              <span className={clsx(
-                                'w-full h-full flex items-center justify-center text-sm font-semibold',
-                                isDark ? 'bg-indigo-500/20 text-indigo-200' : 'bg-[#f6d5b0] text-slate-800'
-                              )}>
-                                {(user.username || 'S').trim().charAt(0).toUpperCase()}
-                              </span>
-                            )}
+                            <SafeAvatarImg
+                              src={user.avatar_url}
+                              alt={user.username}
+                              className="w-full h-full object-cover"
+                              fallback={
+                                <span className={clsx(
+                                  'w-full h-full flex items-center justify-center text-sm font-semibold',
+                                  isDark ? 'bg-indigo-500/20 text-indigo-200' : 'bg-[#f6d5b0] text-slate-800'
+                                )}>
+                                  {(user.username || 'S').trim().charAt(0).toUpperCase()}
+                                </span>
+                              }
+                            />
                           </div>
 
                           {/* Name + badges + score bar */}
@@ -714,11 +747,12 @@ const LeaderboardPage = () => {
 
                   {/* Avatar */}
                   <div className="relative z-10 w-20 h-20 rounded-2xl ring-2 ring-indigo-500/40 shadow-[0_0_30px_rgba(99,102,241,0.25)] overflow-hidden bg-theme-surface-2 flex items-center justify-center">
-                    {profile.avatar_url ? (
-                      <img src={profile.avatar_url} alt={profile.username} className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-9 h-9 text-theme-muted" />
-                    )}
+                    <SafeAvatarImg
+                      src={profile.avatar_url}
+                      alt={profile.username}
+                      className="w-full h-full object-cover"
+                      fallback={<User className="w-9 h-9 text-theme-muted" />}
+                    />
                   </div>
 
                   {/* Name + plan */}

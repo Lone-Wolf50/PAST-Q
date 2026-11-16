@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, Sparkles, AlertCircle,
@@ -30,6 +30,8 @@ const PaperViewerPage = () => {
 
   const [isRevealing, setIsRevealing] = useState(false);
   const [isRevealed, setIsRevealed] = useState(false);
+  const [insightsError, setInsightsError] = useState(false);
+  const insightsPromiseRef = useRef<Promise<any> | null>(null);
 
   // Bookmark state
   const isPremium = ['basic', 'plus', 'pro'].includes(user?.plan?.toLowerCase() || '');
@@ -46,11 +48,41 @@ const PaperViewerPage = () => {
     variant: 'info'
   });
 
+  const generateOrFetchInsights = async () => {
+    if (!id || !token) return null;
+    if (insightsPromiseRef.current) return insightsPromiseRef.current;
+
+    const task = apiFetch(`/papers/${id}/insights`, { method: 'POST', token })
+      .then((res) => {
+        if (res?.insights) {
+          setInsightsError(false);
+          setPaper((prev: any) => (prev ? { ...prev, insights: res.insights } : prev));
+          return res.insights;
+        }
+        return null;
+      })
+      .catch(() => {
+        setInsightsError(true);
+        return null;
+      })
+      .finally(() => {
+        insightsPromiseRef.current = null;
+      });
+
+    insightsPromiseRef.current = task;
+    return task;
+  };
+
   useEffect(() => {
     const fetchPaper = async () => {
       try {
         const res = await apiFetch(`/papers/${id}`, { token: token! });
         setPaper(res.paper);
+
+        // If this paper doesn't have cached insights yet, generate them automatically in the background
+        if (res.paper && !res.paper.insights) {
+          void generateOrFetchInsights();
+        }
 
         // Auto-fetch view URL
         try {
@@ -383,54 +415,60 @@ const PaperViewerPage = () => {
             </header>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-hide">
-              {!insights ? (
+              {(!isRevealed || !insights) ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-theme-surface-2/20 rounded-3xl border border-dashed border-theme-border">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-indigo-500/5 text-indigo-400/50">
+                  <div className={clsx(
+                    "w-12 h-12 rounded-2xl flex items-center justify-center mb-4",
+                    insightsError && !insights
+                      ? "bg-amber-500/10 text-amber-400"
+                      : insights
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "bg-indigo-500/10 text-indigo-400"
+                  )}>
                     <Sparkles size={24} />
                   </div>
                   <h4 className="text-sm font-bold text-theme-primary mb-2 uppercase tracking-wide">
-                    No Insights Yet
+                    {insightsError && !insights
+                      ? 'Insights Unavailable Right Now'
+                      : insights
+                        ? 'Insights Available'
+                        : 'AI Study Insights'}
                   </h4>
                   <p className="text-[10px] text-theme-muted font-bold leading-relaxed mb-6">
-                    Automated insights are not available for this paper. But you can still ask the AI Tutor questions directly!
-                  </p>
-
-                  {user?.plan?.toLowerCase() === 'free' && (
-                    <Link
-                      to="/upgrade"
-                      className="w-full py-3 bg-theme-surface border border-theme-border text-indigo-400 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-theme-surface-2 transition-all flex items-center justify-center gap-2"
-                    >
-                      <Sparkles size={14} />
-                      Upgrade to Unlock
-                    </Link>
-                  )}
-                </div>
-
-              ) : !isRevealed ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-theme-surface-2/20 rounded-3xl border border-dashed border-theme-border">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-emerald-500/10 text-emerald-400">
-                    <Sparkles size={24} />
-                  </div>
-                  <h4 className="text-sm font-bold text-theme-primary mb-2 uppercase tracking-wide">
-                    Insights Available
-                  </h4>
-                  <p className="text-[10px] text-theme-muted font-bold leading-relaxed mb-6">
-                    Our AI Tutor has analyzed this paper and provided helpful study notes!
+                    {insightsError && !insights
+                      ? 'Could not finish generating insights automatically. Tap below to retry now.'
+                      : insights
+                        ? 'Our AI Tutor has analyzed this paper and prepared helpful study notes!'
+                        : 'Tap below to generate key topics, difficulty analysis, and study tips for this paper.'}
                   </p>
 
                   <button
-                    onClick={() => {
+                    onClick={async () => {
+                      if (isRevealing) return;
                       setIsRevealing(true);
-                      setTimeout(() => {
-                        setIsRevealed(true);
+                      setInsightsError(false);
+                      if (insights) {
+                        setTimeout(() => {
+                          setIsRevealed(true);
+                          setIsRevealing(false);
+                        }, 600);
+                      } else {
+                        const fetched = await generateOrFetchInsights();
+                        if (fetched) {
+                          setIsRevealed(true);
+                        }
                         setIsRevealing(false);
-                      }, 1200);
+                      }
                     }}
                     disabled={isRevealing}
-                    className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isRevealing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                    {isRevealing ? 'Decoding Analysis...' : 'Reveal Study Insights'}
+                    {isRevealing
+                      ? (insights ? 'Decoding Analysis...' : 'Generating Study Insights...')
+                      : insights
+                        ? 'Reveal Study Insights'
+                        : 'Generate Study Insights'}
                   </button>
                 </div>
               ) : (

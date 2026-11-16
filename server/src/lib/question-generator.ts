@@ -67,6 +67,7 @@ export const DIFFICULTY_CONFIG_MAP: Record<QuestionDifficulty, DifficultyConfig>
 export function normalizeDifficulty(raw?: string | null): QuestionDifficulty {
   const cleaned = String(raw || '').trim().toLowerCase();
   if (cleaned === 'easy') return 'Easy';
+  if (cleaned === 'normal' || cleaned === 'medium') return 'Medium';
   if (cleaned === 'hard') return 'Hard';
   if (cleaned === 'insane' || cleaned === 'extreme' || cleaned === 'expert') return 'Insane';
   return 'Medium';
@@ -244,7 +245,11 @@ export async function generateQuestion(
       parsed.options.push(parsed.correct_answer);
     }
 
-    const timing = calculateQuestionTiming(parsed.body, parsed.options, parsed.difficulty || chosenDifficulty);
+    const timing = calculateQuestionTiming(
+      parsed.body,
+      parsed.options,
+      targetDifficulty ? normalizeDifficulty(targetDifficulty) : (parsed.difficulty || chosenDifficulty)
+    );
 
     return {
       body: parsed.body,
@@ -261,14 +266,15 @@ export async function generateQuestion(
 }
 
 /**
- * Generates a full batch of questions (e.g. 5 or 10) in one AI call with a progressive mix
- * of Easy, Medium, Hard, and Insane difficulties so students never wait between questions.
+ * Generates a full batch of questions (e.g. 5 or 10) in one AI call—either calibrated to a
+ * specific difficulty level or with a progressive mix of Easy, Medium, Hard, and Insane.
  */
 export async function generateQuestionsBatch(
   count: number,
   selectedSubjectName?: string,
   selectedPaperId?: string,
-  selectedPaperTitle?: string
+  selectedPaperTitle?: string,
+  targetDifficulty?: QuestionDifficulty
 ): Promise<GeneratedQuestion[]> {
   const { subjectName, courseDisplayLabel, insightData } = await resolveCourseContext(
     selectedSubjectName,
@@ -277,8 +283,13 @@ export async function generateQuestionsBatch(
   );
 
   const safeCount = Math.min(Math.max(count, 1), 10);
+  const lockedDifficulty = targetDifficulty ? normalizeDifficulty(targetDifficulty) : undefined;
   const difficultyDistribution: QuestionDifficulty[] = [];
   for (let i = 0; i < safeCount; i++) {
+    if (lockedDifficulty) {
+      difficultyDistribution.push(lockedDifficulty);
+      continue;
+    }
     const ratio = i / Math.max(safeCount - 1, 1);
     if (ratio < 0.25) difficultyDistribution.push('Easy');
     else if (ratio < 0.55) difficultyDistribution.push('Medium');
@@ -293,7 +304,11 @@ export async function generateQuestionsBatch(
     - Summary: ${insightData.summary}
     - Hardest Question details: ${insightData.hardest_question}` : ''},
 
-    Generate exactly ${safeCount} unique, non-overlapping multiple-choice questions (MCQs) following this difficulty progression: ${difficultyDistribution.join(', ')}.
+    Generate exactly ${safeCount} unique, non-overlapping multiple-choice questions (MCQs)${
+      lockedDifficulty
+        ? ` all strictly calibrated at "${lockedDifficulty}" difficulty`
+        : ` following this difficulty progression: ${difficultyDistribution.join(', ')}`
+    }.
     - "Easy": Clear foundational concept or definition.
     - "Medium": Practical application or scenario question.
     - "Hard": Analytical multi-factor problem.
@@ -304,8 +319,8 @@ export async function generateQuestionsBatch(
       - "body": string (the question prompt)
       - "options": array of exactly 4 strings
       - "correct_answer": string (must match one of the 4 options EXACTLY)
-      - "difficulty": one of "Easy", "Medium", "Hard", "Insane"
-    - Return ONLY a valid JSON array: [{"body":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"Easy"}, ...]
+      - "difficulty": one of "Easy", "Medium", "Hard", "Insane"${lockedDifficulty ? ` (use "${lockedDifficulty}" for every item)` : ''}
+    - Return ONLY a valid JSON array: [{"body":"...","options":["A","B","C","D"],"correct_answer":"A","difficulty":"${lockedDifficulty || 'Easy'}"}, ...]
   `.trim();
 
   const rawReply = await getAiCompletion(systemPrompt, [], userPrompt);
@@ -332,7 +347,7 @@ export async function generateQuestionsBatch(
       opts[opts.length - 1] = q.correct_answer;
     }
     const fallbackDiff = difficultyDistribution[i] || 'Medium';
-    const timing = calculateQuestionTiming(q.body, opts, q.difficulty || fallbackDiff);
+    const timing = calculateQuestionTiming(q.body, opts, lockedDifficulty || q.difficulty || fallbackDiff);
     validQuestions.push({
       body: String(q.body).trim(),
       category: subjectName,

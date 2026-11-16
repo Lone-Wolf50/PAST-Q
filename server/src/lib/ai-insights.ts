@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import { getAIHealth, setAIHealth } from './ai-health';
 import { askPuter, isPuterAvailable } from './puter';
 import { getHFConfig, getHFModelId, defaultHFModels, askHuggingFace } from './huggingface';
+import { getAiCompletion } from './ai-helper';
 import { performOcrPipeline } from './ocr';
 import { logFallbackEvent, getErrorMeaning, FallbackAttempt } from './fallback-logger';
 
@@ -44,14 +45,9 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
   markProcessingStarted(paperId);
 
   try {
-
-    if (!process.env.GEMINI_API_KEY) {
-
-      markProcessingDone(paperId);
-      return;
-    }
-
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
+    const ai = process.env.GEMINI_API_KEY
+      ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' })
+      : null;
 
     const prompt = `
       You are an expert academic tutor. Analyze this past paper PDF ("${paperTitle}") and provide the following insights for students:
@@ -160,52 +156,54 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
 
     const insightAttempts: FallbackAttempt[] = [];
 
-    for (const modelName of modelsToTry) {
-      try {
+    if (ai) {
+      for (const modelName of modelsToTry) {
+        try {
 
-        // 60-second timeout per model
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('AI Request Timeout')), 60000)
-        );
+          // 60-second timeout per model
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('AI Request Timeout')), 60000)
+          );
 
-        const aiPromise = ai.models.generateContent({
-          model: modelName,
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: geminiPrompt },
-              ],
-            },
-          ],
-        });
+          const aiPromise = ai.models.generateContent({
+            model: modelName,
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { text: geminiPrompt },
+                ],
+              },
+            ],
+          });
 
-        const res: any = await Promise.race([aiPromise, timeoutPromise]);
-        result = res;
-        insightAttempts.push({
-          model_or_service: `Gemini (${modelName})`,
-          status: 'success'
-        });
+          const res: any = await Promise.race([aiPromise, timeoutPromise]);
+          result = res;
+          insightAttempts.push({
+            model_or_service: `Gemini (${modelName})`,
+            status: 'success'
+          });
 
-        break; // Success!
-      } catch (err: any) {
-        lastError = err;
-        let parsed: any = null;
-        try { parsed = JSON.parse(err.message); } catch { /* ignore */ }
-        const code = parsed?.error?.code ?? err.status;
+          break; // Success!
+        } catch (err: any) {
+          lastError = err;
+          let parsed: any = null;
+          try { parsed = JSON.parse(err.message); } catch { /* ignore */ }
+          const code = parsed?.error?.code ?? err.status;
 
-        if (code === 429) {
-          quotaExhausted = true;
+          if (code === 429) {
+            quotaExhausted = true;
+          }
+          const errInfo = getErrorMeaning(code, err.message);
+          insightAttempts.push({
+            model_or_service: `Gemini (${modelName})`,
+            status: 'failed',
+            error_code: errInfo.code,
+            error_message: err.message,
+            error_meaning: errInfo.meaning
+          });
+          continue;
         }
-        const errInfo = getErrorMeaning(code, err.message);
-        insightAttempts.push({
-          model_or_service: `Gemini (${modelName})`,
-          status: 'failed',
-          error_code: errInfo.code,
-          error_message: err.message,
-          error_meaning: errInfo.meaning
-        });
-        continue;
       }
     }
 
@@ -341,6 +339,19 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
       }
 
       if (!responseText) {
+        try {
+          const fallbackPrompt = `${prompt}\n\n${extractedText ? `Extracted paper content:\n\n${extractedText.substring(0, 15000)}` : `Paper title: "${paperTitle}"`}\n\nReturn ONLY a strictly valid JSON object.`;
+          const helperRes = await getAiCompletion('You are an expert academic tutor returning strictly valid JSON.', [], fallbackPrompt);
+          if (helperRes) {
+            responseText = helperRes;
+            setAIHealth({ status: 'online', backOnlineAt: null, lastError: null });
+          }
+        } catch {
+          // Handled below
+        }
+      }
+
+      if (!responseText) {
         // Gemini, Puter, and Hugging Face all failed
         setAIHealth({
           status: 'limited',
@@ -467,4 +478,227 @@ export async function generatePaperInsights(paperId: string, pdfBuffer: Buffer, 
   } finally {
     markProcessingDone(paperId);
   }
+}
+
+const inFlightInsightPromises = new Map<string, Promise<any>>();
+
+function normalizeDifficultyRating(val: any): 'Beginner' | 'Intermediate' | 'Advanced' {
+  const s = String(val || '').toLowerCase();
+  if (s.includes('adv') || s.includes('hard')) return 'Advanced';
+  if (s.includes('beg') || s.includes('easy')) return 'Beginner';
+  return 'Intermediate';
+}
+
+function normalizeInsightsPayload(raw: any, paperTitle: string, subjectLabel: string) {
+  const summary = typeof raw?.summary === 'string' && raw.summary.trim()
+    ? raw.summary.trim()
+    : `Study overview and examination analysis for ${paperTitle}${subjectLabel ? ` (${subjectLabel})` : ''}.`;
+
+  let topics: string[] = [];
+  if (Array.isArray(raw?.topics)) {
+    topics = raw.topics.map((t: any) => String(t).trim()).filter(Boolean).slice(0, 6);
+  } else if (typeof raw?.topics === 'string') {
+    topics = raw.topics.split(/[\n,;]+/).map((t: string) => t.replace(/^[-*\d.)\s]+/, '').trim()).filter(Boolean).slice(0, 6);
+  }
+  if (topics.length === 0) {
+    topics = [subjectLabel || paperTitle, 'Core Principles & Applications', 'Problem Solving & Exam Technique'];
+  }
+
+  let hardestQuestion = '';
+  if (typeof raw?.hardest_question === 'string' && raw.hardest_question.trim()) {
+    hardestQuestion = raw.hardest_question.trim();
+  } else if (raw?.hardest_question && typeof raw.hardest_question === 'object') {
+    const q = raw.hardest_question.question || '';
+    const sol = raw.hardest_question.solution || '';
+    hardestQuestion = `Question: ${q}\n\nSolution: ${sol}`.trim();
+  }
+  if (!hardestQuestion) {
+    hardestQuestion = `Question: Critically evaluate the core theoretical and applied concepts assessed in ${paperTitle}.\n\nSolution: Break down the key principles covered in ${subjectLabel || paperTitle}, define relevant terms accurately, apply frameworks to practical UPSA case examples, and structure a clear conclusion.`;
+  }
+
+  let examTips = '';
+  if (Array.isArray(raw?.exam_tips)) {
+    examTips = raw.exam_tips.map((t: any, i: number) => `${i + 1}. ${String(t).trim()}`).join('\n');
+  } else if (typeof raw?.exam_tips === 'string' && raw.exam_tips.trim()) {
+    examTips = raw.exam_tips.trim();
+  }
+  if (!examTips) {
+    examTips = `1. Allocate your time carefully across compulsory and optional sections.\n2. Support theoretical explanations with real-world and academic examples.\n3. Review past exam phrasing in ${subjectLabel || paperTitle} before sitting the paper.`;
+  }
+
+  return {
+    summary,
+    topics,
+    hardest_question: hardestQuestion,
+    exam_tips: examTips,
+    difficulty: normalizeDifficultyRating(raw?.difficulty),
+  };
+}
+
+/**
+ * Ensures AI insights exist for a paper, returning the existing row from `upsa_paper_insights`
+ * or generating, storing, and returning new insights on demand using verified questions, PDF text,
+ * or course metadata via the multi-provider `getAiCompletion` pipeline.
+ */
+export async function ensurePaperInsights(paperId: string): Promise<any> {
+  // 1. Check DB first
+  const { data: existingList } = await supabase
+    .from('upsa_paper_insights')
+    .select('*')
+    .eq('paper_id', paperId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (existingList && existingList.length > 0) {
+    return existingList[0];
+  }
+
+  // 2. Deduplicate concurrent requests for the same paper
+  const existingPromise = inFlightInsightPromises.get(paperId);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const task = (async () => {
+    markProcessingStarted(paperId);
+    try {
+      // Re-check once inside lock
+      const { data: recheck } = await supabase
+        .from('upsa_paper_insights')
+        .select('*')
+        .eq('paper_id', paperId)
+        .limit(1);
+      if (recheck && recheck.length > 0) return recheck[0];
+
+      const { data: paper, error: paperErr } = await supabase
+        .from('upsa_papers')
+        .select('id, title, year, semester, file_url, questions_verified, upsa_subjects(name, code)')
+        .eq('id', paperId)
+        .single();
+
+      if (paperErr || !paper) {
+        throw new Error('Paper not found.');
+      }
+
+      const subjectObj = Array.isArray((paper as any).upsa_subjects)
+        ? (paper as any).upsa_subjects[0]
+        : (paper as any).upsa_subjects;
+      const subjectName = subjectObj?.name || '';
+      const subjectCode = subjectObj?.code || '';
+      const subjectLabel = [subjectCode, subjectName].filter(Boolean).join(' - ');
+      const paperTitle = (paper as any).title || subjectName || 'Past Examination Paper';
+
+      let contextText = '';
+
+      // 3a. Use verified questions if available (fastest & cleanest)
+      if ((paper as any).questions_verified) {
+        const { data: vQuestions } = await supabase
+          .from('upsa_paper_questions')
+          .select('question_no, body, marks, sub_parts')
+          .eq('paper_id', paperId)
+          .order('question_no', { ascending: true });
+
+        if (vQuestions && vQuestions.length > 0) {
+          contextText = vQuestions.map((q: any) => {
+            const parts = Array.isArray(q.sub_parts)
+              ? q.sub_parts.map((sp: any) => `   (${sp.label}) ${sp.text}`).join('\n')
+              : '';
+            return `Question ${q.question_no}: ${q.body}${parts ? '\n' + parts : ''}`;
+          }).join('\n\n');
+        }
+      }
+
+      // 3b. Otherwise parse selectable text from PDF (fast path, non-blocking fallback if scanned)
+      if (!contextText && (paper as any).file_url) {
+        try {
+          const pdfRes = await fetch((paper as any).file_url);
+          if (pdfRes.ok) {
+            const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+            const pdfParser = typeof pdf === 'function' ? pdf : pdf.default;
+            const pdfData = await pdfParser(pdfBuffer);
+            const parsed = (pdfData?.text || '').trim();
+            if (parsed.length >= 100) {
+              contextText = parsed;
+            } else if (pdfBuffer.length <= 15 * 1024 * 1024 && process.env.GEMINI_API_KEY) {
+              // Quick Gemini Vision extraction for scanned PDFs
+              try {
+                const geminiExtractAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: 'v1beta' });
+                const base64Pdf = pdfBuffer.toString('base64');
+                const extractResult = await geminiExtractAI.models.generateContent({
+                  model: 'gemini-2.0-flash',
+                  contents: [{
+                    role: 'user',
+                    parts: [
+                      { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+                      { text: 'Extract the exam questions from this PDF as plain text. Output only raw extracted text.' }
+                    ]
+                  }]
+                });
+                const gText = extractResult.text?.trim();
+                if (gText && gText.length >= 60) {
+                  contextText = gText;
+                }
+              } catch {
+                // Continue with metadata context if vision extraction fails
+              }
+            }
+          }
+        } catch (fetchErr: any) {
+          console.warn('[ensurePaperInsights] PDF text extraction skipped:', fetchErr?.message);
+        }
+      }
+
+      const systemInstruction = 'You are an expert university academic tutor. Return ONLY a strictly valid JSON object with no markdown fences or extra commentary.';
+      const userPrompt = `
+Analyze the university past paper below and produce structured study insights for students.
+
+Course Metadata:
+- Title: "${paperTitle}"
+- Subject: "${subjectLabel || 'University Course'}"
+- Year / Semester: ${(paper as any).year || 'N/A'} / ${(paper as any).semester || 'N/A'}
+
+${contextText ? `Extracted Paper Content:\n${contextText.substring(0, 18000)}\n` : 'Note: Base your academic insights on the specific course title, course code, and curriculum topics listed above.'}
+
+Return strictly valid JSON with these exact keys:
+{
+  "summary": "A concise 2-3 sentence executive summary of what this paper assesses and its main themes.",
+  "topics": ["Topic 1", "Topic 2", "Topic 3", "Topic 4"],
+  "hardest_question": "Question: ...\\n\\nSolution: ...",
+  "exam_tips": "1. ...\\n2. ...\\n3. ...",
+  "difficulty": "Beginner" | "Intermediate" | "Advanced"
+}
+      `.trim();
+
+      const rawResponse = await getAiCompletion(systemInstruction, [], userPrompt);
+
+      let jsonStr = rawResponse.trim().replace(/```json|```/g, '').trim();
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (jsonMatch) jsonStr = jsonMatch[0];
+
+      const parsedJson = JSON.parse(jsonStr);
+      const normalized = normalizeInsightsPayload(parsedJson, paperTitle, subjectLabel);
+
+      const { data: insertedRow, error: insertErr } = await supabase
+        .from('upsa_paper_insights')
+        .insert({
+          paper_id: paperId,
+          ...normalized,
+        })
+        .select('*')
+        .single();
+
+      if (insertErr) {
+        console.warn('[ensurePaperInsights] DB insert warning:', insertErr.message);
+        return { paper_id: paperId, ...normalized };
+      }
+
+      return insertedRow;
+    } finally {
+      markProcessingDone(paperId);
+      inFlightInsightPromises.delete(paperId);
+    }
+  })();
+
+  inFlightInsightPromises.set(paperId, task);
+  return task;
 }

@@ -13,6 +13,11 @@ const Navbar = () => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [unreadCount, setUnreadCount] = useState(0);
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.avatar_url]);
 
   const fetchUnreadCount = async () => {
     if (!token) return;
@@ -79,7 +84,7 @@ const Navbar = () => {
   return (
     <Fragment>
       {/* Top Navbar — ThemeToggle glass style across Mobile, Tablet, and PC */}
-      <div className="sticky top-0 z-50 w-full px-3 md:px-6 pt-2.5 pb-1.5">
+      <div className="sticky top-0 z-50 w-full px-3 md:px-6 pt-2.5 pb-1.5 shrink-0">
         <nav
           className={clsx(
             "w-full flex items-center justify-between px-3.5 md:px-6 py-2.5 md:py-3 max-w-7xl mx-auto rounded-full",
@@ -257,8 +262,14 @@ const Navbar = () => {
                     )}
                   >
                     <div className="w-4 h-4 rounded-full overflow-hidden bg-theme-surface flex items-center justify-center border border-theme-border shrink-0">
-                      {user?.avatar_url ? (
-                        <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                      {user?.avatar_url && !avatarError ? (
+                        <img
+                          src={user.avatar_url}
+                          alt={user.full_name || 'Profile'}
+                          referrerPolicy="no-referrer"
+                          onError={() => setAvatarError(true)}
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <User className={clsx("w-3 h-3", isDark ? "text-indigo-200" : "text-slate-600")} />
                       )}
@@ -438,9 +449,15 @@ const Navbar = () => {
                           isActive ? activeThumbClass : thumbClass
                         )}
                       >
-                        {link.name === 'Account' && user?.avatar_url ? (
+                        {link.name === 'Account' && user?.avatar_url && !avatarError ? (
                           <div className="w-4 h-4 rounded-full overflow-hidden border border-theme-border relative shrink-0">
-                            <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                            <img
+                              src={user.avatar_url}
+                              alt={user.full_name || 'Profile'}
+                              referrerPolicy="no-referrer"
+                              onError={() => setAvatarError(true)}
+                              className="w-full h-full object-cover"
+                            />
                           </div>
                         ) : (
                           <Icon
