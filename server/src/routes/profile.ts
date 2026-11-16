@@ -306,7 +306,12 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.status(200).json({ notifications: data });
+    const notifications = (data || []).map((n: any) => ({
+      ...n,
+      description: n.description || n.message || '',
+      message: n.description || n.message || '',
+    }));
+    res.status(200).json({ notifications });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch notifications.' });
   }

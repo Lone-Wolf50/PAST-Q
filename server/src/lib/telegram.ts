@@ -1755,8 +1755,8 @@ function registerCommands(bot: Bot) {
         await supabase.from('upsa_notifications').insert({
           user_id: student.id,
           title: 'Exam paper approved! 🎉',
-          message: `Your exam paper "${sub.subject_name || 'Submission'}" was approved! You earned ${PREMIUM_HOURS} hours of premium access.`,
-          type: 'success',
+          description: `Your exam paper "${sub.subject_name || 'Submission'}" was approved! You earned ${PREMIUM_HOURS} hours of premium access.`,
+          type: 'paper',
         });
       } catch { /* non-fatal */ }
 
@@ -1850,8 +1850,8 @@ function registerCommands(bot: Bot) {
           await supabase.from('upsa_notifications').insert({
             user_id: student.id,
             title: 'Exam paper not approved',
-            message: `Your submission "${sub.subject_name || 'Submission'}" was not approved. Reason: ${adminNotes}`,
-            type: 'warning',
+            description: `Your submission "${sub.subject_name || 'Submission'}" was not approved. Reason: ${adminNotes}`,
+            type: 'system',
           });
         } catch { /* non-fatal */ }
       }

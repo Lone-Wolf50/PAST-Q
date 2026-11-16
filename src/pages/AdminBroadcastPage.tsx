@@ -25,11 +25,14 @@ const AdminBroadcastPage = () => {
     sentViaBrevo?: number;
     sentViaGmail?: number;
     failed: number;
+    inAppSent?: number;
+    inAppOnly?: boolean;
     errors?: string[];
     broadcastId?: string;
   } | null>(null);
   const [error, setError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmInAppOnly, setConfirmInAppOnly] = useState(false);
   const [sendInAppNotification, setSendInAppNotification] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
@@ -176,8 +179,9 @@ const AdminBroadcastPage = () => {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (inAppOnly = false) => {
     setConfirmOpen(false);
+    setConfirmInAppOnly(false);
     setSending(true);
     setProgress(null);
     setError('');
@@ -190,7 +194,7 @@ const AdminBroadcastPage = () => {
     try {
       const token = localStorage.getItem('admin_token')!;
 
-      if (mode === 'individual') {
+      if (mode === 'individual' || inAppOnly) {
         const data = await apiFetch('/hq-management/broadcast', {
           method: 'POST',
           token,
@@ -198,16 +202,19 @@ const AdminBroadcastPage = () => {
             subject: activeSubject,
             title: activeTitle,
             body: activeBody,
-            sendInAppNotification,
-            recipients,
+            sendInAppNotification: inAppOnly ? true : sendInAppNotification,
+            inAppOnly,
+            ...(mode === 'individual' ? { recipients } : {}),
           },
         });
         setResult({
           total: data.total,
           sent: data.sent,
-          sentViaBrevo: data.sentViaBrevo,
-          sentViaGmail: data.sentViaGmail,
+          sentViaBrevo: inAppOnly ? undefined : data.sentViaBrevo,
+          sentViaGmail: inAppOnly ? undefined : data.sentViaGmail,
           failed: data.failed,
+          inAppSent: data.inAppSent,
+          inAppOnly,
           errors: data.errors,
           broadcastId: data.broadcastId,
         });
@@ -222,6 +229,7 @@ const AdminBroadcastPage = () => {
         let cumulativeBrevo = 0;
         let cumulativeGmail = 0;
         let cumulativeFailed = 0;
+        let cumulativeInAppSent = 0;
         const collectedErrors: string[] = [];
 
         while (hasMore) {
@@ -247,6 +255,7 @@ const AdminBroadcastPage = () => {
           cumulativeBrevo += data.sentViaBrevo || 0;
           cumulativeGmail += data.sentViaGmail || 0;
           cumulativeFailed += data.failed || 0;
+          cumulativeInAppSent += data.inAppSent || 0;
           if (Array.isArray(data.errors)) {
             collectedErrors.push(...data.errors);
           }
@@ -269,6 +278,8 @@ const AdminBroadcastPage = () => {
           sentViaBrevo: cumulativeBrevo,
           sentViaGmail: cumulativeGmail,
           failed: cumulativeFailed,
+          inAppSent: cumulativeInAppSent,
+          inAppOnly: false,
           errors: collectedErrors.slice(0, 10),
           broadcastId: sharedBroadcastId,
         });
@@ -330,6 +341,7 @@ const AdminBroadcastPage = () => {
   const activeTitle = mode === 'broadcast' ? broadcastTitle : individualTitle;
   const activeBody = mode === 'broadcast' ? broadcastBody : individualBody;
   const canSend = activeSubject.trim() && activeTitle.trim() && activeBody.trim() && !sending && (mode === 'broadcast' || recipients.length > 0);
+  const canSendInAppOnly = activeTitle.trim() && activeBody.trim() && !sending && (mode === 'broadcast' || recipients.length > 0);
 
   return (
     <div className="min-h-screen bg-theme-base flex">
@@ -551,28 +563,53 @@ const AdminBroadcastPage = () => {
             </div>
 
             {/* Actions */}
-            <div className="p-5 border-t border-theme-border flex items-center justify-between">
+            <div className="p-5 border-t border-theme-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <p className="text-xs text-theme-secondary font-bold">
-                {canSend ? '✓ Ready to send' : mode === 'individual' && recipients.length === 0 ? 'Add at least one recipient' : 'Fill in all fields to continue'}
+                {canSend
+                  ? '✓ Ready to send'
+                  : canSendInAppOnly
+                    ? '✓ Ready for In-App notification (add Email Subject to also email)'
+                    : mode === 'individual' && recipients.length === 0
+                      ? 'Add at least one recipient'
+                      : 'Fill in title and body to continue'}
               </p>
-              <button
-                id="broadcast-send-btn"
-                onClick={() => setConfirmOpen(true)}
-                disabled={!canSend}
-                className={`flex items-center gap-2 px-5 py-2.5 ${mode === 'individual' ? 'bg-purple-500 hover:bg-purple-600 shadow-purple-500/20 hover:shadow-purple-500/30' : 'bg-indigo-500 hover:bg-indigo-600 shadow-indigo-500/20 hover:shadow-indigo-500/30'} disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm transition-all shadow-lg`}
-              >
-                {sending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    {mode === 'individual' ? `Send to ${recipients.length || 0}` : 'Send Broadcast'}
-                  </>
-                )}
-              </button>
+              <div className="flex flex-wrap items-center gap-2.5 sm:justify-end">
+                <button
+                  id="broadcast-in-app-only-btn"
+                  type="button"
+                  onClick={() => {
+                    setConfirmInAppOnly(true);
+                    setConfirmOpen(true);
+                  }}
+                  disabled={!canSendInAppOnly}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-theme-base hover:bg-theme-surface-2 border border-theme-border disabled:opacity-40 disabled:cursor-not-allowed text-theme-primary rounded-xl font-semibold text-sm transition-all cursor-pointer"
+                >
+                  <Bell className="w-4 h-4 text-indigo-400" />
+                  In-App Only
+                </button>
+                <button
+                  id="broadcast-send-btn"
+                  type="button"
+                  onClick={() => {
+                    setConfirmInAppOnly(false);
+                    setConfirmOpen(true);
+                  }}
+                  disabled={!canSend}
+                  className={`flex items-center gap-2 px-5 py-2.5 ${mode === 'individual' ? 'bg-purple-500 hover:bg-purple-600 shadow-purple-500/20 hover:shadow-purple-500/30' : 'bg-indigo-500 hover:bg-indigo-600 shadow-indigo-500/20 hover:shadow-indigo-500/30'} disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm transition-all shadow-lg cursor-pointer`}
+                >
+                  {sending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      {mode === 'individual' ? `Send to ${recipients.length || 0}` : 'Send Broadcast'}
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -586,16 +623,26 @@ const AdminBroadcastPage = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-theme-primary">
-                      {mode === 'individual' ? 'Confirm Email' : 'Confirm Broadcast'}
+                      {confirmInAppOnly
+                        ? 'Confirm In-App Notification'
+                        : mode === 'individual'
+                          ? 'Confirm Email'
+                          : 'Confirm Broadcast'}
                     </h3>
                     <p className="text-xs text-theme-muted">This action cannot be undone</p>
                   </div>
                 </div>
                 <p className="text-sm text-theme-secondary mb-6 leading-relaxed">
-                  {mode === 'individual' ? (
-                    <>This will send an email to <strong className="text-purple-400">{recipients.length} recipient(s)</strong>. Are you sure?</>
+                  {confirmInAppOnly ? (
+                    mode === 'individual' ? (
+                      <>This will deliver an in-app notification to <strong className="text-indigo-400">{recipients.length} recipient(s)</strong> without sending emails. Proceed?</>
+                    ) : (
+                      <>This will deliver an in-app notification to <strong className="text-indigo-400">all verified students</strong> in their dashboard notifications without sending emails. Proceed?</>
+                    )
+                  ) : mode === 'individual' ? (
+                    <>This will send an email{sendInAppNotification ? ' and in-app notification' : ''} to <strong className="text-purple-400">{recipients.length} recipient(s)</strong>. Are you sure?</>
                   ) : (
-                    <>This will send an email to <strong className="text-indigo-400">all verified students</strong>. Are you sure you want to proceed?</>
+                    <>This will send an email{sendInAppNotification ? ' and in-app notification' : ''} to <strong className="text-indigo-400">all verified students</strong>. Are you sure you want to proceed?</>
                   )}
                 </p>
                 {mode === 'individual' && recipients.length > 0 && (
@@ -613,11 +660,13 @@ const AdminBroadcastPage = () => {
                     Cancel
                   </button>
                   <button
-                    onClick={handleSend}
-                    className={`flex items-center gap-2 px-5 py-2.5 ${mode === 'individual' ? 'bg-purple-500 hover:bg-purple-600 shadow-purple-500/20' : 'bg-indigo-500 hover:bg-indigo-600 shadow-indigo-500/20'} text-white rounded-xl font-semibold text-sm transition-all shadow-lg`}
+                    onClick={() => handleSend(confirmInAppOnly)}
+                    className={`flex items-center gap-2 px-5 py-2.5 ${mode === 'individual' && !confirmInAppOnly ? 'bg-purple-500 hover:bg-purple-600 shadow-purple-500/20' : 'bg-indigo-500 hover:bg-indigo-600 shadow-indigo-500/20'} text-white rounded-xl font-semibold text-sm transition-all shadow-lg cursor-pointer`}
                   >
-                    <Send className="w-4 h-4" />
-                    {mode === 'individual' ? 'Yes, Send' : 'Yes, Send to All'}
+                    {confirmInAppOnly ? <Bell className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                    {confirmInAppOnly
+                      ? (mode === 'individual' ? 'Yes, Notify' : 'Yes, Notify All')
+                      : (mode === 'individual' ? 'Yes, Send' : 'Yes, Send to All')}
                   </button>
                 </div>
               </div>
@@ -686,9 +735,17 @@ const AdminBroadcastPage = () => {
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-emerald-300">
-                    {mode === 'individual' ? 'Email Sent!' : 'Broadcast Complete!'}
+                    {result.inAppOnly
+                      ? 'In-App Notifications Delivered!'
+                      : mode === 'individual'
+                        ? 'Email Sent!'
+                        : 'Broadcast Complete!'}
                   </p>
-                  <p className="text-xs text-theme-muted mt-1">Your message has been delivered.</p>
+                  <p className="text-xs text-theme-muted mt-1">
+                    {result.inAppOnly
+                      ? 'Your message now appears in students’ in-app notifications.'
+                      : 'Your message has been delivered.'}
+                  </p>
                 </div>
               </div>
 
@@ -699,8 +756,10 @@ const AdminBroadcastPage = () => {
                 </div>
                 <div className="bg-theme-base/50 border border-emerald-500/10 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-emerald-400">{result.sent}</p>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-theme-muted mt-1">Sent</p>
-                  {(result.sentViaBrevo !== undefined || result.sentViaGmail !== undefined) && result.sent > 0 && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-theme-muted mt-1">
+                    {result.inAppOnly ? 'Delivered' : 'Sent'}
+                  </p>
+                  {!result.inAppOnly && (result.sentViaBrevo !== undefined || result.sentViaGmail !== undefined) && result.sent > 0 && (
                     <p className="text-[9px] text-theme-muted mt-1">
                       {result.sentViaBrevo || 0} Brevo · {result.sentViaGmail || 0} Gmail
                     </p>
@@ -711,6 +770,13 @@ const AdminBroadcastPage = () => {
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-theme-muted mt-1">Failed</p>
                 </div>
               </div>
+
+              {!result.inAppOnly && (result.inAppSent ?? 0) > 0 && (
+                <div className="mt-3 flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300 font-semibold">
+                  <Bell className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  Also delivered as in-app notifications to {result.inAppSent} student(s).
+                </div>
+              )}
 
               {result.errors && result.errors.length > 0 && (
                 <div className="mt-4 bg-red-500/5 border border-red-500/10 rounded-xl p-3">

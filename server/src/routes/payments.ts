@@ -173,8 +173,8 @@ router.get('/verify/:reference', protect, async (req: AuthRequest, res: Response
         await supabase.from('upsa_notifications').insert({
           user_id,
           title: 'Subscription Upgraded',
-          message: `Congratulations! Your account has been upgraded to the ${plan} plan.`,
-          type: 'success'
+          description: `Congratulations! Your account has been upgraded to the ${plan} plan.`,
+          type: 'payment'
         });
 
         // Notify Telegram
@@ -258,8 +258,8 @@ router.post('/webhook', async (req: Request, res: Response) => {
         await supabase.from('upsa_notifications').insert({
           user_id,
           title: 'Subscription Upgraded',
-          message: `Congratulations! Your account has been upgraded to the ${plan} plan.`,
-          type: 'success'
+          description: `Congratulations! Your account has been upgraded to the ${plan} plan.`,
+          type: 'payment'
         });
 
         // Notify Telegram (webhook path)

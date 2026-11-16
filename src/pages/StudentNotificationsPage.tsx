@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, BookOpen, AlertCircle, CheckCircle2, Loader2, BellOff, CreditCard } from 'lucide-react';
+import { ArrowLeft, Sparkles, BookOpen, AlertCircle, CheckCircle2, Loader2, BellOff, CreditCard, Bell } from 'lucide-react';
 const timeAgo = (date: Date) => {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
   let interval = seconds / 31536000;
@@ -65,6 +65,7 @@ const StudentNotificationsPage = () => {
       case 'paper': return BookOpen;
       case 'success': return CheckCircle2;
       case 'payment': return CreditCard;
+      case 'system': return Bell;
       default: return AlertCircle;
     }
   };
@@ -74,6 +75,8 @@ const StudentNotificationsPage = () => {
       case 'ai': return 'text-purple-400';
       case 'paper': return 'text-indigo-400';
       case 'success': return 'text-emerald-400';
+      case 'payment': return 'text-emerald-400';
+      case 'system': return 'text-blue-400';
       default: return 'text-amber-400';
     }
   };
@@ -83,6 +86,8 @@ const StudentNotificationsPage = () => {
       case 'ai': return 'bg-purple-500/10';
       case 'paper': return 'bg-indigo-500/10';
       case 'success': return 'bg-emerald-500/10';
+      case 'payment': return 'bg-emerald-500/10';
+      case 'system': return 'bg-blue-500/10';
       default: return 'bg-amber-500/10';
     }
   };
@@ -146,7 +151,7 @@ const StudentNotificationsPage = () => {
                       {timeAgo(new Date(notif.created_at))}
                     </span>
                   </div>
-                  <p className="text-sm text-theme-muted">{notif.message}</p>
+                  <p className="text-sm text-theme-muted whitespace-pre-line leading-relaxed">{notif.description || notif.message}</p>
                 </div>
                 {!notif.is_read && (
                   <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0 mt-2 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
