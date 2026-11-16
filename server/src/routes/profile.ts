@@ -355,4 +355,22 @@ router.patch('/notifications/read-all', async (req: AuthRequest, res: Response) 
   }
 });
 
+// --- DELETE NOTIFICATION ---
+router.delete('/notifications/:id', async (req: AuthRequest, res: Response) => {
+  const userId = req.user!.id;
+  const { id } = req.params;
+  try {
+    const { error } = await supabase
+      .from('upsa_notifications')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    res.status(200).json({ message: 'Notification deleted.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete notification.' });
+  }
+});
+
 export default router;

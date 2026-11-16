@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type MouseEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, BookOpen, AlertCircle, CheckCircle2, Loader2, BellOff, CreditCard, Bell } from 'lucide-react';
+import { ArrowLeft, Sparkles, BookOpen, AlertCircle, CheckCircle2, Loader2, BellOff, CreditCard, Bell, CheckCheck, Trash2 } from 'lucide-react';
 const timeAgo = (date: Date) => {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
   let interval = seconds / 31536000;
@@ -22,6 +22,8 @@ const StudentNotificationsPage = () => {
   const { token } = useAuth();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [markingAll, setMarkingAll] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchNotifications = async () => {
     try {
@@ -40,22 +42,41 @@ const StudentNotificationsPage = () => {
   }, [token]);
 
   const markAllAsRead = async () => {
+    if (markingAll) return;
+    setMarkingAll(true);
     try {
       await apiFetch('/profile/notifications/read-all', { method: 'PATCH', token: token! });
-      setNotifications(notifications.map(n => ({ ...n, is_read: true })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       window.dispatchEvent(new CustomEvent('notifications_updated'));
     } catch (err) {
 
+    } finally {
+      setMarkingAll(false);
     }
   };
 
   const markAsRead = async (id: string) => {
     try {
       await apiFetch(`/profile/notifications/${id}/read`, { method: 'PATCH', token: token! });
-      setNotifications(notifications.map(n => n.id === id ? { ...n, is_read: true } : n));
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
       window.dispatchEvent(new CustomEvent('notifications_updated'));
     } catch (err) {
 
+    }
+  };
+
+  const deleteNotification = async (e: MouseEvent<HTMLButtonElement>, id: string) => {
+    e.stopPropagation();
+    if (deletingId === id) return;
+    setDeletingId(id);
+    try {
+      await apiFetch(`/profile/notifications/${id}`, { method: 'DELETE', token: token! });
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      window.dispatchEvent(new CustomEvent('notifications_updated'));
+    } catch (err) {
+
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -99,14 +120,20 @@ const StudentNotificationsPage = () => {
           <ArrowLeft className="w-4 h-4" />
           Back to Profile
         </Link>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-theme-primary mb-2">Notifications</h1>
             <p className="text-theme-muted">Stay updated with your account and new features.</p>
           </div>
           {notifications.some(n => !n.is_read) && (
-            <button onClick={markAllAsRead} className="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors">
-              Mark all as read
+            <button
+              type="button"
+              onClick={markAllAsRead}
+              disabled={markingAll}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/35 text-indigo-400 text-xs sm:text-sm font-bold shadow-sm transition-all active:scale-95 cursor-pointer shrink-0 disabled:opacity-50"
+            >
+              {markingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+              <span>{markingAll ? 'Marking...' : 'Mark all as read'}</span>
             </button>
           )}
         </div>
@@ -142,20 +169,32 @@ const StudentNotificationsPage = () => {
                 <div className={`p-3 rounded-xl ${getBg(notif.type)} ${getColor(notif.type)} shrink-0`}>
                   <Icon className="w-6 h-6" />
                 </div>
-                <div className="flex-grow">
-                  <div className="flex justify-between items-start mb-1">
+                <div className="flex-grow min-w-0">
+                  <div className="flex justify-between items-start gap-3 mb-1">
                     <h3 className={`font-semibold ${!notif.is_read ? 'text-theme-primary' : 'text-theme-secondary'}`}>
                       {notif.title}
                     </h3>
-                    <span className="text-xs text-theme-muted whitespace-nowrap ml-4">
+                    <span className="text-xs text-theme-muted whitespace-nowrap shrink-0">
                       {timeAgo(new Date(notif.created_at))}
                     </span>
                   </div>
                   <p className="text-sm text-theme-muted whitespace-pre-line leading-relaxed">{notif.description || notif.message}</p>
                 </div>
-                {!notif.is_read && (
-                  <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0 mt-2 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
-                )}
+                <div className="flex items-center gap-2 shrink-0 self-start">
+                  {!notif.is_read && (
+                    <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.5)]" title="Unread" />
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => deleteNotification(e, notif.id)}
+                    disabled={deletingId === notif.id}
+                    title="Delete notification"
+                    aria-label="Delete notification"
+                    className="p-2 rounded-xl bg-theme-surface hover:bg-red-500/15 border border-theme-border hover:border-red-500/30 text-theme-muted hover:text-red-400 transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    {deletingId === notif.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             );
           })
