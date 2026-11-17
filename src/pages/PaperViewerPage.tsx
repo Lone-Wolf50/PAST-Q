@@ -357,7 +357,7 @@ const PaperViewerPage = () => {
       <div className="flex-1 flex flex-col lg:flex-row gap-6 lg:min-h-0 pb-6 lg:pb-0">
 
         {/* ── Document Viewer ─────────────────────────────────────────────── */}
-        <div className="flex-[1.5] flex flex-col h-[75svh] min-h-[480px] lg:h-auto lg:min-h-0 bg-theme-surface border border-theme-border rounded-[2rem] overflow-hidden shadow-xl relative group">
+        <div className="flex-[1.5] flex flex-col h-[75svh] min-h-[480px] lg:h-auto lg:min-h-0 bg-theme-surface border border-theme-border rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-xl relative group">
           {viewUrl ? (
             <PdfPaperViewer
               paperId={id!}

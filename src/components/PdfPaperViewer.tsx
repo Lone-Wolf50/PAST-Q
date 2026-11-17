@@ -296,14 +296,15 @@ const PdfPaperViewer: React.FC<PdfPaperViewerProps> = ({
       )}
     >
       {/* ── Viewer Top Control Bar ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-2 px-3 md:px-4 py-2.5 bg-theme-surface border-b border-theme-border shrink-0 z-10">
+      <div className="flex items-center justify-between gap-1 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-theme-surface border-b border-theme-border shrink-0 z-10">
         {/* Left: Page Counter & Navigation */}
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-theme-surface-2 border border-theme-border text-xs font-bold text-theme-primary">
-            <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg sm:rounded-xl bg-theme-surface-2 border border-theme-border text-[11px] sm:text-xs font-bold text-theme-primary whitespace-nowrap shrink-0">
+            <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-400 shrink-0" />
             {numPages > 0 ? (
-              <span>
-                Page <span className="text-indigo-400">{currentPage}</span> / {numPages}
+              <span className="whitespace-nowrap">
+                <span className="hidden min-[340px]:inline">Page </span>
+                <span className="text-indigo-400">{currentPage}</span> / {numPages}
               </span>
             ) : (
               <span className="truncate max-w-[120px] sm:max-w-[200px]">{title}</span>
@@ -311,13 +312,13 @@ const PdfPaperViewer: React.FC<PdfPaperViewerProps> = ({
           </div>
 
           {numPages > 1 && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
               <button
                 type="button"
                 onClick={() => scrollToPage(currentPage - 1)}
                 disabled={currentPage <= 1}
                 title="Previous Page"
-                className="p-1.5 rounded-lg bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-theme-primary disabled:opacity-35 transition-colors"
+                className="p-1 sm:p-1.5 rounded-lg bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-theme-primary disabled:opacity-35 transition-colors"
               >
                 <ChevronUp className="w-3.5 h-3.5" />
               </button>
@@ -326,7 +327,7 @@ const PdfPaperViewer: React.FC<PdfPaperViewerProps> = ({
                 onClick={() => scrollToPage(currentPage + 1)}
                 disabled={currentPage >= numPages}
                 title="Next Page"
-                className="p-1.5 rounded-lg bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-theme-primary disabled:opacity-35 transition-colors"
+                className="p-1 sm:p-1.5 rounded-lg bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-theme-primary disabled:opacity-35 transition-colors"
               >
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
@@ -335,15 +336,15 @@ const PdfPaperViewer: React.FC<PdfPaperViewerProps> = ({
         </div>
 
         {/* Right: Zoom Controls + Fullscreen + External Open */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {!fallbackMode && numPages > 0 && (
-            <div className="flex items-center gap-1 bg-theme-surface-2 border border-theme-border rounded-xl p-0.5">
+            <div className="flex items-center gap-0.5 sm:gap-1 bg-theme-surface-2 border border-theme-border rounded-lg sm:rounded-xl p-0.5">
               <button
                 type="button"
                 onClick={handleZoomOut}
                 disabled={zoom <= 0.75}
                 title="Zoom Out"
-                className="p-1.5 rounded-lg text-theme-secondary hover:text-theme-primary hover:bg-theme-surface disabled:opacity-35 transition-colors"
+                className="p-1 sm:p-1.5 rounded-md sm:rounded-lg text-theme-secondary hover:text-theme-primary hover:bg-theme-surface disabled:opacity-35 transition-colors"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
@@ -351,7 +352,7 @@ const PdfPaperViewer: React.FC<PdfPaperViewerProps> = ({
                 type="button"
                 onClick={handleResetZoom}
                 title="Reset Zoom to Fit Width"
-                className="px-2 py-1 text-[11px] font-black text-theme-primary hover:text-indigo-400 transition-colors min-w-[44px] text-center"
+                className="px-1 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-black text-theme-primary hover:text-indigo-400 transition-colors min-w-[34px] sm:min-w-[44px] text-center whitespace-nowrap"
               >
                 {Math.round(zoom * 100)}%
               </button>
@@ -360,7 +361,7 @@ const PdfPaperViewer: React.FC<PdfPaperViewerProps> = ({
                 onClick={handleZoomIn}
                 disabled={zoom >= 2.5}
                 title="Zoom In"
-                className="p-1.5 rounded-lg text-theme-secondary hover:text-theme-primary hover:bg-theme-surface disabled:opacity-35 transition-colors"
+                className="p-1 sm:p-1.5 rounded-md sm:rounded-lg text-theme-secondary hover:text-theme-primary hover:bg-theme-surface disabled:opacity-35 transition-colors"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
@@ -382,7 +383,7 @@ const PdfPaperViewer: React.FC<PdfPaperViewerProps> = ({
             target="_blank"
             rel="noreferrer"
             title="Open PDF in full browser tab"
-            className="p-2 rounded-xl bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-indigo-400 hover:border-indigo-500/30 transition-all"
+            className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-theme-surface-2 border border-theme-border text-theme-secondary hover:text-indigo-400 hover:border-indigo-500/30 transition-all shrink-0"
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
@@ -391,7 +392,7 @@ const PdfPaperViewer: React.FC<PdfPaperViewerProps> = ({
             type="button"
             onClick={() => setIsFullscreen((f) => !f)}
             title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen View'}
-            className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-white text-xs font-bold transition-all"
+            className="flex items-center justify-center gap-1.5 p-1.5 sm:px-2.5 sm:py-2 rounded-lg sm:rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500 hover:text-white text-xs font-bold transition-all shrink-0"
           >
             {isFullscreen ? (
               <>
