@@ -114,7 +114,7 @@ router.post('/me/avatar', async (req: AuthRequest, res: Response) => {
     const fileExtension = mimeType.split('/')[1]?.split('+')[0] || 'png';
     const filePath = `${userId}/avatar.${fileExtension}`;
 
-    const { error: uploadError } = await supabase.storage
+    let { error: uploadError } = await supabase.storage
       .from('avatars')
       .upload(filePath, buffer, {
         contentType: mimeType,
@@ -122,14 +122,28 @@ router.post('/me/avatar', async (req: AuthRequest, res: Response) => {
       });
 
     if (uploadError) {
+      await supabase.storage.createBucket('avatars', { public: true }).catch(() => {});
+      const retry = await supabase.storage
+        .from('avatars')
+        .upload(filePath, buffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+      uploadError = retry.error;
+    }
 
+    let publicUrl: string;
+    if (!uploadError) {
+      const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      // Bust the CDN cache by appending a timestamp query param
+      publicUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
+    } else if (avatar_base64.length <= 500_000) {
+      // Fallback: persist compressed data URI directly if storage bucket upload fails
+      publicUrl = avatar_base64;
+    } else {
       res.status(500).json({ error: `Storage error: ${uploadError.message}` });
       return;
     }
-
-    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    // Bust the CDN cache by appending a timestamp query param
-    const publicUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
 
     const { error: dbError } = await supabase
       .from('upsa_users')
@@ -137,7 +151,6 @@ router.post('/me/avatar', async (req: AuthRequest, res: Response) => {
       .eq('id', userId);
 
     if (dbError) {
-
       res.status(500).json({ error: `DB error: ${dbError.message}` });
       return;
     }

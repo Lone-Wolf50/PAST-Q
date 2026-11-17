@@ -209,28 +209,69 @@ const ProfilePage = () => {
   };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setAvatarUrl(base64);
-        setAvatarBase64(base64);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = event.target?.result as string;
+      if (!rawDataUrl) return;
+
+      const applyAvatar = (dataUrl: string) => {
+        setAvatarUrl(dataUrl);
+        setAvatarBase64(dataUrl);
         setAvatarError(false);
         setIsAvatarDeleted(false);
+        setMessage('');
       };
-      reader.readAsDataURL(e.target.files[0]);
-    }
+
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const MAX_DIM = 400;
+          let { width, height } = img;
+          if (width > MAX_DIM || height > MAX_DIM) {
+            const scale = Math.min(MAX_DIM / width, MAX_DIM / height);
+            width = Math.max(1, Math.round(width * scale));
+            height = Math.max(1, Math.round(height * scale));
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            applyAvatar(rawDataUrl);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          applyAvatar(compressedBase64);
+        } catch {
+          applyAvatar(rawDataUrl);
+        }
+      };
+      img.onerror = () => applyAvatar(rawDataUrl);
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
     setMessage('');
     try {
-      await apiFetch('/profile/me', {
-        method: 'PATCH',
-        token: token || undefined,
-        body: { full_name: name }
-      });
+      const trimmedName = name.trim();
+      const shouldUpdateName =
+        trimmedName.length >= 2 &&
+        (isEditingName || trimmedName !== (user?.full_name || '').trim());
+
+      if (shouldUpdateName) {
+        await apiFetch('/profile/me', {
+          method: 'PATCH',
+          token: token || undefined,
+          body: { full_name: trimmedName }
+        });
+      }
 
       let finalAvatarUrl = avatarUrl;
       if (isAvatarDeleted) {
@@ -242,14 +283,20 @@ const ProfilePage = () => {
           token: token || undefined,
           body: { avatar_base64: avatarBase64 }
         });
-        if (res.avatar_url) finalAvatarUrl = res.avatar_url;
+        finalAvatarUrl = res.avatar_url || avatarBase64;
       }
 
-      updateUser({ full_name: name, avatar_url: finalAvatarUrl });
+      setAvatarUrl(finalAvatarUrl);
+      setAvatarError(false);
+      updateUser({
+        ...(trimmedName.length >= 2 ? { full_name: trimmedName } : {}),
+        avatar_url: finalAvatarUrl
+      });
       setMessage('Changes saved.');
       setAvatarBase64(null);
       setIsAvatarDeleted(false);
       setIsEditingName(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err: any) {
       setMessage(err.message || 'Failed to save.');
     } finally {
@@ -332,6 +379,21 @@ const ProfilePage = () => {
             Remove photo
           </button>
         ) : null}
+
+        {/* Immediate save/error feedback near avatar */}
+        {message && (
+          <div className={clsx(
+            "flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold border",
+            message.includes('saved') || message.includes('Changes')
+              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+              : "bg-red-500/10 text-red-400 border-red-500/20"
+          )}>
+            {message.includes('saved') || message.includes('Changes')
+              ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              : <ShieldAlert className="w-3.5 h-3.5 shrink-0" />}
+            {message}
+          </div>
+        )}
 
         {/* Name & Plan Badge */}
         <div className="text-center">

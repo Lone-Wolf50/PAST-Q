@@ -91,8 +91,13 @@ app.use('/api/ai/chat', express.urlencoded({ limit: '15mb', extended: true }));
 app.use('/api/exam-submissions', express.json({ limit: '15mb' }));
 app.use('/api/exam-submissions', express.urlencoded({ limit: '15mb', extended: true }));
 
+// Allow larger payloads for profile avatar base64 uploads
+app.use('/api/profile', express.json({ limit: '10mb' }));
+app.use('/api/profile', express.urlencoded({ limit: '10mb', extended: true }));
+
 // Limit global JSON payloads to 1MB. Admin file uploads use multer (memory storage)
 // on specific routes and bypass this limit — they are not affected.
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
